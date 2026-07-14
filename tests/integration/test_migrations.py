@@ -47,10 +47,18 @@ def test_upgrade_empty_database_matches_metadata_and_postgresql_17(
     assert readiness.current_revision == expected_schema_revision()
     assert set(inspect(postgres_engine).get_table_names(schema=AYO_SCHEMA)) == {
         "audit_events",
+        "authentication_challenges",
+        "credential_verifiers",
+        "identities",
+        "identity_authentication_methods",
+        "identity_devices",
         "legacy_wallets",
         "rate_limit_buckets",
+        "recovery_cases",
+        "refresh_token_rotations",
         "rides",
         "sessions",
+        "token_families",
     }
     with postgres_engine.connect() as connection:
         extensions_after = set(
@@ -110,6 +118,24 @@ def test_runtime_role_has_append_read_but_not_mutation_privileges(
                     text(
                         "SELECT has_table_privilege("
                         "'ayo_runtime', 'ayo.rate_limit_buckets', 'UPDATE')"
+                    )
+                ).scalar_one()
+                is True
+            )
+            assert (
+                connection.execute(
+                    text(
+                        "SELECT has_table_privilege("
+                        "'ayo_runtime', 'ayo.identities', 'DELETE')"
+                    )
+                ).scalar_one()
+                is False
+            )
+            assert (
+                connection.execute(
+                    text(
+                        "SELECT has_table_privilege("
+                        "'ayo_runtime', 'ayo.token_families', 'UPDATE')"
                     )
                 ).scalar_one()
                 is True

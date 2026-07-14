@@ -306,3 +306,37 @@ Supersedes / superseded by:
 - **Revisit when:** Measured limiter latency, database write load, pool saturation or
   hot-key contention breaches approved SLOs; then add a provider-neutral Redis
   accelerator with PostgreSQL-backed revocation and tested outage behavior.
+
+### ED-007 — Authentication and identity security architecture
+
+- **Date:** 2026-07-15
+- **Status:** CEO and CTO approved direction; implementation verification pending.
+- **Problem:** AYO needs accessible customer authentication and stronger workforce
+  authentication without making SMS, a device label, token claims or an external
+  provider the authority for identity and privilege.
+- **Decision:** Use a hybrid method architecture with PostgreSQL-authoritative
+  identity and rotating refresh sessions, short-lived access-token contracts,
+  durable replay/family revocation, multiple privacy-safe device sessions and
+  provider-neutral OTP/email/password/passkey/service interfaces. Require
+  phishing-resistant authentication for staff/administrators and step-up for
+  sensitive actions. No production provider or signing/KMS key is selected.
+- **Why:** Phone OTP may be accessible in Ethiopia but is phishable and exposed to
+  SIM/delivery risk; passkeys are phishing-resistant but Android passkey support
+  begins at Android 9 and cannot be the only customer path. Passwords add recovery
+  and credential-stuffing burden. The hybrid contract permits progressive adoption
+  without provider lock-in while preserving a simple rider/driver journey.
+- **Alternatives considered:** Managed identity reduces implementation operations
+  but adds provider/data/availability lock-in and still needs AYO domain sessions.
+  Fully self-managed delivery is not approved. Opaque access tokens simplify
+  immediate revocation but add a database/cache lookup to every request. Short-lived
+  signed access claims plus durable refresh/session checks scale horizontally while
+  limiting exposure; sensitive operations still require authoritative status and
+  step-up checks. Redis is unnecessary until measured.
+- **Risks:** No production token codec, KMS, OTP/SMS/email/passkey provider or
+  compromised-password service exists; Ethiopian contact/retention and recovery
+  policy needs professional verification; access claims can be stale until expiry;
+  support recovery is a high-risk fraud path; and low-end/older devices require
+  fallback methods without weakening staff security.
+- **Revisit when:** Provider research, Ethiopian delivery measurements, Android
+  device distribution, fraud evidence, AYO Pay regulation or latency/load results
+  justify a different customer method, managed identity or opaque access tokens.

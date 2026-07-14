@@ -103,3 +103,8 @@ extension, cut over application traffic, or change legacy wallet authority.
 Revision `20260715_0003` adds durable `ayo.sessions` and
 `ayo.rate_limit_buckets` storage with runtime DML but no deletion grants. It adds no
 Redis service, authentication behavior, provider, extension or public route.
+
+Revision `20260715_0004` adds bounded identity, method, credential, challenge,
+device, refresh-family/history and recovery tables, and extends sessions with
+privacy-safe device/assurance/family references. It adds no route, provider, token
+key, automatic startup migration or traffic cutover.

@@ -1,0 +1,24 @@
+AUTHENTICATION_AUDIT_ACTIONS = frozenset(
+    {
+        "authentication.challenge.created",
+        "authentication.succeeded",
+        "authentication.failed",
+        "authentication.denied",
+        "authentication.session.created",
+        "authentication.session.refreshed",
+        "authentication.refresh_token.replay_detected",
+        "authentication.session.revoked",
+        "authentication.sessions.all_revoked",
+        "authentication.account.locked",
+        "authentication.account.suspended",
+        "authentication.recovery.started",
+        "authentication.recovery.completed",
+        "authentication.recovery.denied",
+        "authentication.method.added",
+        "authentication.method.removed",
+        "authentication.staff_mfa.challenge",
+        "authentication.step_up.required",
+        "authentication.step_up.succeeded",
+        "authentication.step_up.failed",
+    }
+)

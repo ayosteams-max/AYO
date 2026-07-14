@@ -147,3 +147,31 @@ No public production release may proceed until:
 - Secrets, encryption, backups, restore and incident procedures are verified.
 - Monitoring and on-call ownership are operational.
 - Ethiopian legal/operational verification items in the decision log are resolved or formally accepted by authorized leadership.
+# Authentication and session security baseline
+
+- Rotate refresh tokens after every successful use and atomically invalidate the
+  predecessor. Consumed-token reuse is treated as replay, audited and followed by
+  token-family revocation.
+- Store no raw access/refresh token, password, OTP, authorization header, private
+  key or low-entropy contact hash. Validation and logs must not echo credentials.
+- Protect against hijacking with short access lifetimes, durable server revocation,
+  bounded idle/absolute expiry, rotation, replay detection, step-up and suspicious
+  activity controls. Device trust never relies only on client assertions.
+- Support multiple devices, one-device logout, logout-all, suspension/security
+  reset revocation and controlled administrator revocation. Administrative action
+  requires reason, authority, audit and later authorization enforcement.
+- Use constant-shape customer failures where practical to prevent enumeration.
+  Preserve useful internal safe categories in audit records without exposing
+  account existence, lock state or verification details.
+- Treat raw IP addresses, phone/email values and device identifiers as classified
+  personal data. Generic authentication/audit metadata may use only approved,
+  privacy-safe risk references with verified purpose and retention.
+- Detect suspicious login using versioned, explainable signals such as new-device
+  state, authentication strength, replay, bounded network-risk reference and recent
+  recovery—not precise location histories or invasive fingerprinting.
+- Require phishing-resistant authentication for staff/administrators and step-up
+  for administration, finance, payout, recovery and security changes.
+- Bound clock-skew tolerance and never allow skew to extend refresh-session absolute
+  expiry. Server/database time is authoritative for security state.
+- Production cryptographic keys, pepper/HMAC keys and provider credentials require
+  approved managed key ownership, rotation, access and recovery design.

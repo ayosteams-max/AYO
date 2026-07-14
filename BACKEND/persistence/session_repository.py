@@ -99,3 +99,22 @@ class PostgresSessionRepository:
                 "Session was already revoked for a different reason"
             )
         return existing
+
+    def revoke_all_for_identity(
+        self, identity_id: UUID, *, revoked_at: datetime, reason: str
+    ) -> int:
+        if re.fullmatch(r"[a-z][a-z0-9_.-]{0,63}", reason) is None:
+            raise ValueError("Session revocation reason must be a safe category")
+        result = self._connection.execute(
+            update(sessions)
+            .where(
+                sessions.c.identity_id == identity_id,
+                sessions.c.revoked_at.is_(None),
+            )
+            .values(
+                revoked_at=revoked_at,
+                revocation_reason=reason,
+                version=sessions.c.version + 1,
+            )
+        )
+        return result.rowcount

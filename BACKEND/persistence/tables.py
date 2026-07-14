@@ -4,6 +4,7 @@ from sqlalchemy import (
     Column,
     DateTime,
     Float,
+    ForeignKey,
     Index,
     Integer,
     LargeBinary,
@@ -29,11 +30,209 @@ metadata = MetaData(naming_convention=NAMING_CONVENTION)
 AYO_SCHEMA = "ayo"
 VERSION_TABLE = "ayo_schema_version"
 
+identities = Table(
+    "identities",
+    metadata,
+    Column("identity_id", UUID(as_uuid=True), primary_key=True),
+    Column("public_id", UUID(as_uuid=True), nullable=False),
+    Column("identity_type", String(32), nullable=False),
+    Column("status", String(32), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+    Column("version", Integer, nullable=False, server_default=text("1")),
+    UniqueConstraint("public_id"),
+    CheckConstraint("version > 0", name="positive_version"),
+    CheckConstraint(
+        "identity_type IN ('anonymous','rider','driver','staff','administrator',"
+        "'service','merchant','service_provider')",
+        name="valid_identity_type",
+    ),
+    CheckConstraint(
+        "status IN ('pending','active','suspended','locked','disabled',"
+        "'recovery_pending','deletion_pending')",
+        name="valid_status",
+    ),
+    schema=AYO_SCHEMA,
+)
+Index("ix_identities_type_status", identities.c.identity_type, identities.c.status)
+
+identity_authentication_methods = Table(
+    "identity_authentication_methods",
+    metadata,
+    Column("method_id", UUID(as_uuid=True), primary_key=True),
+    Column(
+        "identity_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.identities.identity_id"),
+        nullable=False,
+    ),
+    Column("method_type", String(32), nullable=False),
+    Column("status", String(24), nullable=False),
+    Column("lookup_reference", LargeBinary(32)),
+    Column("assurance_level", String(32), nullable=False),
+    Column("verified_at", DateTime(timezone=True)),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    UniqueConstraint("identity_id", "method_type", "lookup_reference"),
+    CheckConstraint(
+        "method_type IN ('phone_otp','email_verification','password','passkey',"
+        "'recovery_code','staff_mfa','service_credential')",
+        name="valid_method_type",
+    ),
+    CheckConstraint(
+        "assurance_level IN ('basic','multi_factor','phishing_resistant')",
+        name="valid_assurance_level",
+    ),
+    schema=AYO_SCHEMA,
+)
+Index(
+    "ix_identity_auth_methods_identity",
+    identity_authentication_methods.c.identity_id,
+)
+
+credential_verifiers = Table(
+    "credential_verifiers",
+    metadata,
+    Column("credential_id", UUID(as_uuid=True), primary_key=True),
+    Column(
+        "method_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.identity_authentication_methods.method_id"),
+        nullable=False,
+    ),
+    Column("scheme", String(32), nullable=False),
+    Column("verifier", String(512), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+    UniqueConstraint("method_id"),
+    schema=AYO_SCHEMA,
+)
+
+authentication_challenges = Table(
+    "authentication_challenges",
+    metadata,
+    Column("challenge_id", UUID(as_uuid=True), primary_key=True),
+    Column("method_id", UUID(as_uuid=True)),
+    Column("purpose", String(32), nullable=False),
+    Column("verifier", LargeBinary(64), nullable=False),
+    Column("expires_at", DateTime(timezone=True), nullable=False),
+    Column("consumed_at", DateTime(timezone=True)),
+    Column("attempt_count", Integer, nullable=False, server_default=text("0")),
+    Column("max_attempts", Integer, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    CheckConstraint("attempt_count >= 0", name="nonnegative_attempts"),
+    CheckConstraint("max_attempts BETWEEN 1 AND 10", name="bounded_max_attempts"),
+    CheckConstraint("attempt_count <= max_attempts", name="attempts_within_limit"),
+    schema=AYO_SCHEMA,
+)
+Index("ix_auth_challenges_expires_at", authentication_challenges.c.expires_at)
+
+identity_devices = Table(
+    "identity_devices",
+    metadata,
+    Column("device_id", UUID(as_uuid=True), primary_key=True),
+    Column(
+        "identity_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.identities.identity_id"),
+        nullable=False,
+    ),
+    Column("fingerprint_reference", LargeBinary(32), nullable=False),
+    Column("device_category", String(32), nullable=False),
+    Column("operating_system_family", String(32), nullable=False),
+    Column("trust_state", String(24), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("last_seen_at", DateTime(timezone=True), nullable=False),
+    UniqueConstraint("identity_id", "fingerprint_reference"),
+    CheckConstraint(
+        "trust_state IN ('unknown','recognized','trusted','restricted')",
+        name="valid_trust_state",
+    ),
+    schema=AYO_SCHEMA,
+)
+Index("ix_identity_devices_identity", identity_devices.c.identity_id)
+
+token_families = Table(
+    "token_families",
+    metadata,
+    Column("family_id", UUID(as_uuid=True), primary_key=True),
+    Column("identity_id", UUID(as_uuid=True), nullable=False),
+    Column("session_id", UUID(as_uuid=True), nullable=False),
+    Column("current_token_hash", LargeBinary(32), nullable=False),
+    Column("rotation_counter", Integer, nullable=False, server_default=text("0")),
+    Column("status", String(24), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("expires_at", DateTime(timezone=True), nullable=False),
+    Column("revoked_at", DateTime(timezone=True)),
+    Column("replay_detected_at", DateTime(timezone=True)),
+    UniqueConstraint("current_token_hash"),
+    CheckConstraint("rotation_counter >= 0", name="nonnegative_rotation_counter"),
+    CheckConstraint("status IN ('active','revoked','expired')", name="valid_status"),
+    CheckConstraint("expires_at > created_at", name="valid_lifetime"),
+    schema=AYO_SCHEMA,
+)
+Index(
+    "ix_token_families_identity_status",
+    token_families.c.identity_id,
+    token_families.c.status,
+)
+Index("ix_token_families_session", token_families.c.session_id)
+
+refresh_token_rotations = Table(
+    "refresh_token_rotations",
+    metadata,
+    Column("rotation_id", UUID(as_uuid=True), primary_key=True),
+    Column(
+        "family_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.token_families.family_id"),
+        nullable=False,
+    ),
+    Column("token_hash", LargeBinary(32), nullable=False),
+    Column("rotation_counter", Integer, nullable=False),
+    Column("consumed_at", DateTime(timezone=True), nullable=False),
+    UniqueConstraint("token_hash"),
+    UniqueConstraint("family_id", "rotation_counter"),
+    schema=AYO_SCHEMA,
+)
+
+recovery_cases = Table(
+    "recovery_cases",
+    metadata,
+    Column("recovery_id", UUID(as_uuid=True), primary_key=True),
+    Column("identity_id", UUID(as_uuid=True), nullable=False),
+    Column("status", String(24), nullable=False),
+    Column("risk_level", String(24), nullable=False),
+    Column("reason", String(64), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+    Column("completed_at", DateTime(timezone=True)),
+    schema=AYO_SCHEMA,
+)
+Index(
+    "ix_recovery_cases_identity_status",
+    recovery_cases.c.identity_id,
+    recovery_cases.c.status,
+)
+
 sessions = Table(
     "sessions",
     metadata,
     Column("session_id", UUID(as_uuid=True), primary_key=True),
     Column("subject_id", String(128), nullable=False),
+    Column("identity_id", UUID(as_uuid=True)),
+    Column("device_id", UUID(as_uuid=True)),
+    Column("device_fingerprint_ref", LargeBinary(32)),
+    Column("device_category", String(32)),
+    Column("application_version", String(32)),
+    Column("operating_system_family", String(32)),
+    Column("authentication_method", String(32)),
+    Column("assurance_level", String(32)),
+    Column("risk_state", String(32)),
+    Column("ip_risk_ref", LargeBinary(32)),
+    Column("token_family_id", UUID(as_uuid=True)),
+    Column(
+        "refresh_rotation_counter", Integer, nullable=False, server_default=text("0")
+    ),
     Column("token_hash", LargeBinary(32), nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("expires_at", DateTime(timezone=True), nullable=False),
@@ -43,6 +242,9 @@ sessions = Table(
     Column("version", Integer, nullable=False, server_default=text("1")),
     CheckConstraint("expires_at > created_at", name="valid_lifetime"),
     CheckConstraint("version > 0", name="positive_version"),
+    CheckConstraint(
+        "refresh_rotation_counter >= 0", name="nonnegative_rotation_counter"
+    ),
     CheckConstraint(
         "(revoked_at IS NULL) = (revocation_reason IS NULL)",
         name="consistent_revocation",

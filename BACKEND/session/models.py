@@ -14,6 +14,26 @@ class SessionRecord(BaseModel):
 
     session_id: UUID = Field(default_factory=uuid4)
     subject_id: BoundedId
+    identity_id: UUID | None = None
+    device_id: UUID | None = None
+    device_fingerprint_ref: (
+        Annotated[bytes, Field(min_length=32, max_length=32)] | None
+    ) = None
+    device_category: Annotated[str, Field(min_length=1, max_length=32)] | None = None
+    application_version: Annotated[str, Field(min_length=1, max_length=32)] | None = (
+        None
+    )
+    operating_system_family: (
+        Annotated[str, Field(min_length=1, max_length=32)] | None
+    ) = None
+    authentication_method: Annotated[str, Field(min_length=1, max_length=32)] | None = (
+        None
+    )
+    assurance_level: Annotated[str, Field(min_length=1, max_length=32)] | None = None
+    risk_state: Annotated[str, Field(min_length=1, max_length=32)] | None = None
+    ip_risk_ref: Annotated[bytes, Field(min_length=32, max_length=32)] | None = None
+    token_family_id: UUID | None = None
+    refresh_rotation_counter: Annotated[int, Field(ge=0)] = 0
     token_hash: Annotated[bytes, Field(min_length=32, max_length=32)]
     created_at: datetime
     expires_at: datetime

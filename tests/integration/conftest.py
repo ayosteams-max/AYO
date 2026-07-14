@@ -10,11 +10,19 @@ from BACKEND.persistence.engine import create_postgres_engine
 from BACKEND.persistence.tables import (
     AYO_SCHEMA,
     audit_events,
+    authentication_challenges,
+    credential_verifiers,
+    identities,
+    identity_authentication_methods,
+    identity_devices,
     legacy_wallets,
     metadata,
     rate_limit_buckets,
+    recovery_cases,
+    refresh_token_rotations,
     rides,
     sessions,
+    token_families,
 )
 
 
@@ -59,6 +67,14 @@ def postgres_engine():
 @pytest.fixture(autouse=True)
 def clean_postgres_tables(postgres_engine):
     with postgres_engine.begin() as connection:
+        connection.execute(delete(refresh_token_rotations))
+        connection.execute(delete(token_families))
+        connection.execute(delete(recovery_cases))
+        connection.execute(delete(credential_verifiers))
+        connection.execute(delete(authentication_challenges))
+        connection.execute(delete(identity_devices))
+        connection.execute(delete(identity_authentication_methods))
+        connection.execute(delete(identities))
         connection.execute(delete(rate_limit_buckets))
         connection.execute(delete(sessions))
         connection.execute(delete(audit_events))

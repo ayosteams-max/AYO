@@ -262,4 +262,14 @@ Continue only with reversible, approved work that does not depend on the unresol
 | 9 | Decision and operational documentation | No |
 | 10 | Completion report and next-mission approval request | No |
 
+## Authentication change gate
+
+Every authentication-related mission or change must explicitly review device trust,
+multi-device sessions, refresh rotation/replay, hijacking, suspicious login,
+one-device/all-device/admin revocation, remember-me, bounded clock skew, high-risk
+step-up, anti-enumeration failures, audit taxonomy, privacy-safe IP/device signals
+and future versioned risk-scoring compatibility. Tests must cover applicable
+lifecycles, concurrency, rollback, outage and prohibited-data behavior. A missing
+answer is an unresolved design decision, not permission to choose a shortcut.
+
 Copy this checklist into each mission plan and link every artifact. A mission cannot be marked complete with a required row missing.

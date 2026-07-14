@@ -17,3 +17,7 @@ class SessionRepository(Protocol):
     def revoke(
         self, session_id: UUID, *, revoked_at: datetime, reason: str
     ) -> SessionRecord | None: ...
+
+    def revoke_all_for_identity(
+        self, identity_id: UUID, *, revoked_at: datetime, reason: str
+    ) -> int: ...

@@ -1,6 +1,11 @@
 from sqlalchemy import Engine
 
 from BACKEND.persistence.audit_repository import PostgresAuditEventRepository
+from BACKEND.persistence.identity_repository import (
+    PostgresAuthenticationChallengeRepository,
+    PostgresIdentityRepository,
+    PostgresRefreshTokenRepository,
+)
 from BACKEND.persistence.rate_limit_repository import PostgresTokenBucketRateLimiter
 from BACKEND.persistence.repositories import (
     PostgresLegacyWalletRepository,
@@ -33,6 +38,20 @@ class AyoPostgresUnitOfWork(SqlAlchemyUnitOfWork):
     def rate_limits(self) -> PostgresTokenBucketRateLimiter:
         return self.repository("rate_limits", PostgresTokenBucketRateLimiter)
 
+    @property
+    def identities(self) -> PostgresIdentityRepository:
+        return self.repository("identities", PostgresIdentityRepository)
+
+    @property
+    def authentication_challenges(self) -> PostgresAuthenticationChallengeRepository:
+        return self.repository(
+            "authentication_challenges", PostgresAuthenticationChallengeRepository
+        )
+
+    @property
+    def refresh_tokens(self) -> PostgresRefreshTokenRepository:
+        return self.repository("refresh_tokens", PostgresRefreshTokenRepository)
+
 
 class PostgresRepositoryComposition:
     """Process-scoped factory for transaction-scoped repository sets."""
@@ -45,6 +64,9 @@ class PostgresRepositoryComposition:
             "audit_events": PostgresAuditEventRepository,
             "sessions": PostgresSessionRepository,
             "rate_limits": PostgresTokenBucketRateLimiter,
+            "identities": PostgresIdentityRepository,
+            "authentication_challenges": PostgresAuthenticationChallengeRepository,
+            "refresh_tokens": PostgresRefreshTokenRepository,
         }
 
     def unit_of_work(self) -> AyoPostgresUnitOfWork:

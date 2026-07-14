@@ -241,3 +241,37 @@ Express, Eat, Marketplace and Home may share identity, payment-provider adapters
 AYO Pay is a regulatory and architectural boundary. Future stored-value or payment services require explicit leadership strategy and Ethiopian legal/licensing verification. The ride driver's internal ledger must not be presented as independently issued electronic money.
 
 Extraction is an evidence-based migration, not an architectural milestone by itself. A module may become an independently deployed service only after CTO review and CEO approval confirms at least one justified trigger: materially different scaling, a stronger security/isolation boundary, clear independent team ownership, or operational/reliability evidence that deployment separation improves customer outcomes.
+# Authentication architecture requirements
+
+Authentication uses PostgreSQL as durable identity/session authority and the
+approved Audit, Session, Rate-Limit, Migration and Unit-of-Work foundations.
+Identity, credentials, authentication methods, roles/permissions, sessions,
+devices, verification, recovery and product profiles remain separate modules and
+tables. Rider, driver, staff, administrator and service identities cannot be
+selected or elevated by client-controlled claims.
+
+AYO supports multiple device sessions per identity. Every session has an opaque
+device-session reference, token family, assurance level and risk state. One-device
+logout revokes only that session; logout-all, suspension, security reset and
+approved administrator action revoke the applicable session set durably. Device
+trust combines server-observed history, authentication strength and privacy-safe
+risk references; a client device name alone is never trust evidence.
+
+Access tokens are short-lived. High-entropy refresh tokens rotate on every use;
+only fingerprints are stored. Reuse of consumed refresh material is a replay signal
+that revokes its token family and requires a safe reauthentication path. Absolute
+and idle expiration are server enforced, with bounded clock skew. Signing and
+verification contracts must support key rotation, but production keys require an
+approved key-management design.
+
+Staff and administrator access requires phishing-resistant authentication before
+production. Sensitive administration, finance, payout, recovery and security
+changes require recent step-up authentication. Remember-me may extend only the
+refresh session within approved absolute limits; it never creates a long-lived
+access token or bypasses risk, revocation or step-up controls.
+
+Suspicious-login evaluation accepts minimized, privacy-safe IP/device risk
+references and versioned signals, not raw invasive fingerprints. The deterministic
+rules foundation must remain compatible with a future reviewed risk-scoring system;
+no AI or score may silently authenticate, authorize or block a person without
+approved policy and human/appeal safeguards.

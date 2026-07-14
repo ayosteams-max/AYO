@@ -5,6 +5,7 @@ description = "AYO FastAPI backend"
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
 dependencies = [
+    "argon2-cffi>=25.1,<26",
     "fastapi>=0.139,<0.140",
     "pydantic>=2.13,<3",
     "pydantic-settings>=2.14,<3",
@@ -55,6 +56,7 @@ markers = [
     "known_defect: characterization of a confirmed defect intentionally left unfixed",
     "migration: requires an empty disposable PostgreSQL 17 migration database",
     "session_persistence: requires PostgreSQL 17 session and rate-limit storage",
+    "authentication: requires PostgreSQL 17 identity and authentication storage",
 ]
 
 [tool.coverage.run]
