@@ -113,3 +113,7 @@ Revision `20260715_0005` adds the policy-shaped PostgreSQL RBAC tables, reviewed
 authorization-infrastructure permission registry, indexed active assignments and
 least-privilege runtime grants. It adds no external policy engine or business role
 matrix and does not attach authorization to the 12 compatibility routes.
+
+Revision `20260715_0006` registers the authorization-ready, non-privileged
+`support.*` permission set for future AI-first chat and voice support. It creates no
+service identity, role, assignment, support workflow, AI model or provider.

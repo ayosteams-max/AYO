@@ -187,3 +187,20 @@ No public production release may proceed until:
   expiry. Server/database time is authoritative for security state.
 - Production cryptographic keys, pepper/HMAC keys and provider credentials require
   approved managed key ownership, rotation, access and recovery design.
+
+### AI support authorization
+
+- Future AI support uses a dedicated service identity and the explicit
+  `support.*` permission set; it never receives staff or administrator roles.
+- Limited and assigned reads require resource-level ownership and field filtering
+  in addition to RBAC permission checks.
+- AI support cannot mutate payments, payouts or identity state, perform permanent
+  account actions, override security/safety/fraud controls or read unrestricted
+  audit evidence.
+- Safety, fraud, finance, identity, legal and takeover cases escalate to trained
+  humans; high-risk action requires approved step-up and human authorization.
+- Correlation IDs and privacy-safe audit events are mandatory. Redact credentials,
+  OTPs, tokens, payment details and unnecessary personal information.
+- Voice recording/transcript collection and retention remain prohibited until a
+  verified purpose, consent, security classification and retention period are
+  separately approved.

@@ -110,6 +110,15 @@ Before rider or driver UI implementation, present user journeys, wireframes, the
 The dashboard supports operations without becoming an unrestricted database browser:
 
 - Role-specific queues for driver verification, live ride assistance, safety, support, disputes, finance reconciliation and provider operations.
+
+Customer support is planned as AI-first across chat and voice, with human
+escalation. The AI operates only as a dedicated, least-privileged service identity:
+routine guidance, limited approved ride/account/payment-status reads, structured
+case work and low-risk workflows. Safety, fraud, finance, identity, legal and
+account-takeover concerns escalate to trained humans. AI cannot receive staff/admin
+authority, mutate payments or identity, override controls, access other customers'
+data or retain voice/transcript content without separately approved purpose and
+retention. Mission 8 establishes authorization names only; it does not build AI.
 - Search and case views with data minimization and reason-based access.
 - Ride timeline, offer timeline, pricing version and immutable ledger references.
 - Controlled interventions using explicit commands, reasons, approvals and audit logs.

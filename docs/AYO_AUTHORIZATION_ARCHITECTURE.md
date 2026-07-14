@@ -63,3 +63,25 @@ an internal AuthZEN-compatible endpoint if extraction is approved by evidence.
 - Workforce monitoring, audit retention and staff privacy require Ethiopian legal
   and operational verification.
 - Future AYO Pay needs separate regulated authorization and dual-control design.
+
+## Future AI-first customer support boundary
+
+Future chat and voice support must authenticate as a dedicated `service` identity,
+never as a customer, staff member or administrator. The reviewed permission set is
+limited to assigned-case creation/read/update/escalation, limited trip/account
+views, payment-status reads and approved guidance. Permission presence does not
+itself bypass resource scoping: `read_assigned` and every limited view still require
+authoritative support-domain ownership and field filtering when that module exists.
+
+The service cannot mutate identity, payment or payout state; suspend/delete an
+account; override safety, fraud, Authentication or Authorization; read unrestricted
+audit evidence; or access another customer's data. Safety, fraud, finance, identity,
+legal and takeover concerns must escalate to trained humans. High-risk workflows
+require separately approved step-up and human authorization.
+
+Every future AI support operation must carry a correlation ID and safe audit event.
+Credentials, OTPs, tokens, payment details and unnecessary personal data are
+prohibited from prompts, metadata and logs. Voice recordings and transcripts have
+no approved retention period and must not be retained by default. Mission 8 creates
+permission identifiers only: no service identity, role assignment, support case,
+model, voice, provider or workflow implementation.

@@ -16,7 +16,10 @@ from BACKEND.authorization.enforcement import (
     permission_required,
 )
 from BACKEND.authorization.models import Permission, Role, RoleAssignment
-from BACKEND.authorization.registry import PERMISSION_REGISTRY
+from BACKEND.authorization.registry import (
+    AI_SUPPORT_PERMISSION_SET,
+    PERMISSION_REGISTRY,
+)
 from BACKEND.identity.models import IdentityType
 
 
@@ -105,3 +108,34 @@ def test_permission_decorator_records_policy_without_enforcing_it_early() -> Non
     assert requirement.permission == "rides.read"
     assert requirement.resource_type == "ride"
     assert asyncio.run(AnonymousSubjectResolver().resolve(object())) is None  # type: ignore[arg-type]
+
+
+def test_ai_support_permission_set_is_explicit_and_non_privileged() -> None:
+    assert set(PERMISSION_REGISTRY) >= AI_SUPPORT_PERMISSION_SET
+    assert {
+        "support.case.create",
+        "support.case.read_assigned",
+        "support.case.update",
+        "support.case.escalate",
+        "support.trip.read_limited",
+        "support.payment.read_status",
+        "support.account.read_limited",
+        "support.guidance.provide",
+    } == AI_SUPPORT_PERMISSION_SET
+    prohibited_fragments = {
+        "admin",
+        "audit",
+        "payment.release",
+        "payment.reverse",
+        "payout",
+        "identity.update",
+        "account.delete",
+        "account.suspend",
+        "safety.override",
+        "fraud.override",
+    }
+    assert not any(
+        fragment in permission
+        for permission in AI_SUPPORT_PERMISSION_SET
+        for fragment in prohibited_fragments
+    )

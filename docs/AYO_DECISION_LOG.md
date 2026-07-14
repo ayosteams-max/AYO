@@ -371,3 +371,29 @@ Supersedes / superseded by:
 - **Revisit when:** Measured latency breaches an approved SLO, relationships become
   graph-shaped, independent services need a network PDP, or policy complexity can
   no longer remain safely testable in the core evaluator.
+
+### ED-009 — Least-privileged future AI support authorization boundary
+
+- **Date:** 2026-07-15
+- **Status:** Approved product requirement; permission registration implemented.
+  Production identity/role provisioning and AI implementation remain unapproved.
+- **Problem:** Future AI-first chat and voice support needs useful customer-service
+  access without turning an AI system into unrestricted staff or an escalation path.
+- **Decision:** Reserve eight bounded `support.*` permissions for assigned cases,
+  limited trip/account views, payment-status reads, escalation and safe guidance.
+  Future AI support must use a dedicated service identity, deny by default, audit
+  every action with correlation, minimize data and escalate high-risk categories.
+- **Explicit exclusions:** No administrator/staff role, identity mutation, payment
+  or payout mutation, permanent account action, control override, unrestricted
+  audit access, cross-customer disclosure, AI/chat/voice/provider implementation or
+  voice/transcript retention approval.
+- **Why:** Explicit capabilities are understandable, testable and revocable. A
+  broad `support.agent` permission or staff impersonation would violate least
+  privilege and make resource-level data isolation harder to prove.
+- **Risks:** Permission names alone do not implement assigned-case ownership or
+  field filtering; prompt injection and model/provider data handling need separate
+  threat models; voice privacy and Ethiopian retention obligations need professional
+  verification; escalation operations require trained human capacity.
+- **Revisit when:** The Support domain contracts and customer journeys are approved,
+  provider/data-flow research is complete, or measured operations justify narrower
+  permissions. Expansion requires CEO/CTO approval and a forward migration.
