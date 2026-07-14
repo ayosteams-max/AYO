@@ -99,3 +99,7 @@ PostGIS, deploy infrastructure, or make the legacy wallet authoritative.
 The next immutable revision, `20260715_0002`, adds `ayo.audit_events` and its
 append-only runtime grants. It does not modify either applied revision, install an
 extension, cut over application traffic, or change legacy wallet authority.
+
+Revision `20260715_0003` adds durable `ayo.sessions` and
+`ayo.rate_limit_buckets` storage with runtime DML but no deletion grants. It adds no
+Redis service, authentication behavior, provider, extension or public route.

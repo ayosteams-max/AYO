@@ -110,6 +110,8 @@ class SchemaVersionReadinessChecker:
                         "SELECT to_regclass('ayo.rides') IS NOT NULL "
                         "AND to_regclass('ayo.legacy_wallets') IS NOT NULL "
                         "AND to_regclass('ayo.audit_events') IS NOT NULL"
+                        " AND to_regclass('ayo.sessions') IS NOT NULL"
+                        " AND to_regclass('ayo.rate_limit_buckets') IS NOT NULL"
                     )
                 ).scalar_one()
             ready = current == expected and bool(required_tables)

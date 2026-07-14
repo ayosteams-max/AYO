@@ -12,3 +12,7 @@ class RepositoryConfigurationError(PersistenceError):
 
 class AuditIdempotencyConflict(PersistenceError):
     """An audit idempotency key was reused for different event content."""
+
+
+class SessionPersistenceConflict(PersistenceError):
+    """Session state conflicted with an existing durable record."""

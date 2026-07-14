@@ -12,7 +12,9 @@ from BACKEND.persistence.tables import (
     audit_events,
     legacy_wallets,
     metadata,
+    rate_limit_buckets,
     rides,
+    sessions,
 )
 
 
@@ -57,6 +59,8 @@ def postgres_engine():
 @pytest.fixture(autouse=True)
 def clean_postgres_tables(postgres_engine):
     with postgres_engine.begin() as connection:
+        connection.execute(delete(rate_limit_buckets))
+        connection.execute(delete(sessions))
         connection.execute(delete(audit_events))
         connection.execute(delete(legacy_wallets))
         connection.execute(delete(rides))

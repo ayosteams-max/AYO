@@ -6,7 +6,9 @@ from sqlalchemy import (
     Float,
     Index,
     Integer,
+    LargeBinary,
     MetaData,
+    Numeric,
     String,
     Table,
     UniqueConstraint,
@@ -26,6 +28,53 @@ NAMING_CONVENTION = {
 metadata = MetaData(naming_convention=NAMING_CONVENTION)
 AYO_SCHEMA = "ayo"
 VERSION_TABLE = "ayo_schema_version"
+
+sessions = Table(
+    "sessions",
+    metadata,
+    Column("session_id", UUID(as_uuid=True), primary_key=True),
+    Column("subject_id", String(128), nullable=False),
+    Column("token_hash", LargeBinary(32), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("expires_at", DateTime(timezone=True), nullable=False),
+    Column("last_seen_at", DateTime(timezone=True)),
+    Column("revoked_at", DateTime(timezone=True)),
+    Column("revocation_reason", String(64)),
+    Column("version", Integer, nullable=False, server_default=text("1")),
+    CheckConstraint("expires_at > created_at", name="valid_lifetime"),
+    CheckConstraint("version > 0", name="positive_version"),
+    CheckConstraint(
+        "(revoked_at IS NULL) = (revocation_reason IS NULL)",
+        name="consistent_revocation",
+    ),
+    CheckConstraint(
+        "revocation_reason IS NULL OR revocation_reason ~ '^[a-z][a-z0-9_.-]{0,63}$'",
+        name="safe_revocation_reason",
+    ),
+    UniqueConstraint("token_hash"),
+    schema=AYO_SCHEMA,
+)
+Index("ix_sessions_subject_id", sessions.c.subject_id)
+Index("ix_sessions_expires_at", sessions.c.expires_at)
+Index(
+    "ix_sessions_active_subject",
+    sessions.c.subject_id,
+    sessions.c.expires_at,
+    postgresql_where=sessions.c.revoked_at.is_(None),
+)
+
+rate_limit_buckets = Table(
+    "rate_limit_buckets",
+    metadata,
+    Column("key_hash", LargeBinary(32), primary_key=True),
+    Column("policy_name", String(63), primary_key=True),
+    Column("tokens", Numeric(20, 6), nullable=False),
+    Column("last_refill_at", DateTime(timezone=True), nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+    CheckConstraint("tokens >= 0", name="nonnegative_tokens"),
+    schema=AYO_SCHEMA,
+)
+Index("ix_rate_limit_buckets_updated_at", rate_limit_buckets.c.updated_at)
 
 audit_events = Table(
     "audit_events",

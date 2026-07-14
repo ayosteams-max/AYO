@@ -48,7 +48,9 @@ def test_upgrade_empty_database_matches_metadata_and_postgresql_17(
     assert set(inspect(postgres_engine).get_table_names(schema=AYO_SCHEMA)) == {
         "audit_events",
         "legacy_wallets",
+        "rate_limit_buckets",
         "rides",
+        "sessions",
     }
     with postgres_engine.connect() as connection:
         extensions_after = set(
@@ -93,6 +95,25 @@ def test_runtime_role_has_append_read_but_not_mutation_privileges(
             "DELETE": False,
             "TRUNCATE": False,
         }
+        with postgres_engine.connect() as connection:
+            assert (
+                connection.execute(
+                    text(
+                        "SELECT has_table_privilege("
+                        "'ayo_runtime', 'ayo.sessions', 'DELETE')"
+                    )
+                ).scalar_one()
+                is False
+            )
+            assert (
+                connection.execute(
+                    text(
+                        "SELECT has_table_privilege("
+                        "'ayo_runtime', 'ayo.rate_limit_buckets', 'UPDATE')"
+                    )
+                ).scalar_one()
+                is True
+            )
     finally:
         with postgres_engine.begin() as connection:
             connection.execute(text("DROP OWNED BY ayo_runtime"))

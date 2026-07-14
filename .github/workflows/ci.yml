@@ -69,6 +69,9 @@ jobs:
       - name: Verify audit suite against PostgreSQL 17 without skips
         run: uv run --locked pytest -m audit --no-cov -q
 
+      - name: Verify session persistence suite without skips
+        run: uv run --locked pytest -m session_persistence --no-cov -q
+
       - name: Scan Python source
         run: uv run --locked bandit -c pyproject.toml -r BACKEND ayo.py
 

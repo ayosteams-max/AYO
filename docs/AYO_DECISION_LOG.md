@@ -275,3 +275,34 @@ Supersedes / superseded by:
 - **Revisit when:** External regulatory evidence, a SIEM/export consumer, owner-level
   tamper threats, or measured audit volume justifies signed checkpoints, CDC,
   partitioning, archival or a separately controlled evidence store.
+
+### ED-006 — Durable sessions and distributed rate-limit foundation
+
+- **Date:** 2026-07-15
+- **Status:** CEO and CTO direction approved; implementation verification pending.
+- **Problem:** Future authentication needs revocation that survives process/cache
+  failure and rate limits shared across horizontally scaled API workers without
+  introducing authentication behavior early.
+- **Decision:** Keep PostgreSQL 17 authoritative for server-side session records and
+  revocation. Store only SHA-256 fingerprints of high-entropy session identifiers.
+  Implement a provider-neutral transactional token bucket using PostgreSQL row
+  locking and decimal arithmetic. Surface storage failures; never silently allow a
+  request when a required limiter is unavailable. Defer Redis until measured load
+  justifies an ephemeral accelerator, never the sole revocation source.
+- **Why:** PostgreSQL is already operated and provides atomic `ON CONFLICT` plus row
+  updates across all workers. Token bucket permits bounded bursts and smooth refill,
+  avoiding fixed-window boundary spikes with less storage than exact sliding logs.
+  This is the smallest durable design and adds no provider or dependency.
+- **Alternatives considered:** PostgreSQL-only sessions are selected; Redis-only
+  sessions make revocation vulnerable to cache loss/outage. Hybrid sessions can
+  reduce read latency later but add invalidation and failover complexity. Fixed
+  windows are simplest but allow boundary bursts; exact sliding windows cost more
+  storage/work; database request logs are too write-heavy; Redis atomic counters or
+  Lua token buckets are the likely scale accelerator but require another service.
+- **Risks:** Hot rate-limit keys serialize on one PostgreSQL row; database outage
+  blocks required protected operations; SHA-256 is safe only because source tokens
+  must be high entropy; lifecycle/timeout policy remains for Authentication approval;
+  and stale-bucket/session retention needs a separately controlled cleanup job.
+- **Revisit when:** Measured limiter latency, database write load, pool saturation or
+  hot-key contention breaches approved SLOs; then add a provider-neutral Redis
+  accelerator with PostgreSQL-backed revocation and tested outage behavior.
