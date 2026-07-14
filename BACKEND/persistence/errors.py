@@ -8,3 +8,7 @@ class OptimisticConcurrencyError(PersistenceError):
 
 class RepositoryConfigurationError(PersistenceError):
     """Repository composition is missing or invalid."""
+
+
+class AuditIdempotencyConflict(PersistenceError):
+    """An audit idempotency key was reused for different event content."""

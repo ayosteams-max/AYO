@@ -95,3 +95,7 @@ safe concurrent deployment, failure lock release and recovery. No skipped databa
 test counts as success. API route/behavior tests, Ruff, Bandit and pip-audit remain
 mandatory. This mission does not cut over traffic, add authentication, configure
 PostGIS, deploy infrastructure, or make the legacy wallet authoritative.
+
+The next immutable revision, `20260715_0002`, adds `ayo.audit_events` and its
+append-only runtime grants. It does not modify either applied revision, install an
+extension, cut over application traffic, or change legacy wallet authority.

@@ -7,7 +7,13 @@ from sqlalchemy import delete, text
 from BACKEND.persistence.composition import PostgresRepositoryComposition
 from BACKEND.persistence.config import DatabaseSettings
 from BACKEND.persistence.engine import create_postgres_engine
-from BACKEND.persistence.tables import AYO_SCHEMA, legacy_wallets, metadata, rides
+from BACKEND.persistence.tables import (
+    AYO_SCHEMA,
+    audit_events,
+    legacy_wallets,
+    metadata,
+    rides,
+)
 
 
 @pytest.fixture(scope="session")
@@ -51,6 +57,7 @@ def postgres_engine():
 @pytest.fixture(autouse=True)
 def clean_postgres_tables(postgres_engine):
     with postgres_engine.begin() as connection:
+        connection.execute(delete(audit_events))
         connection.execute(delete(legacy_wallets))
         connection.execute(delete(rides))
 

@@ -1,5 +1,6 @@
 from sqlalchemy import Engine
 
+from BACKEND.persistence.audit_repository import PostgresAuditEventRepository
 from BACKEND.persistence.repositories import (
     PostgresLegacyWalletRepository,
     PostgresRideRepository,
@@ -18,6 +19,10 @@ class AyoPostgresUnitOfWork(SqlAlchemyUnitOfWork):
     def legacy_wallets(self) -> PostgresLegacyWalletRepository:
         return self.repository("legacy_wallets", PostgresLegacyWalletRepository)
 
+    @property
+    def audit_events(self) -> PostgresAuditEventRepository:
+        return self.repository("audit_events", PostgresAuditEventRepository)
+
 
 class PostgresRepositoryComposition:
     """Process-scoped factory for transaction-scoped repository sets."""
@@ -27,6 +32,7 @@ class PostgresRepositoryComposition:
         self._factories = {
             "rides": PostgresRideRepository,
             "legacy_wallets": PostgresLegacyWalletRepository,
+            "audit_events": PostgresAuditEventRepository,
         }
 
     def unit_of_work(self) -> AyoPostgresUnitOfWork:

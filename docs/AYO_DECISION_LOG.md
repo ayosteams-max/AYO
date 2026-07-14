@@ -238,3 +238,40 @@ Supersedes / superseded by:
 - **Revisit when:** Multiple independently owned database schemas need separate
   release trains, Alembic no longer supports the approved stack, or measured
   deployment needs justify a centralized migration platform.
+
+### ED-005 — Transactional append-only audit events
+
+- **Date:** 2026-07-15
+- **Status:** CEO and CTO direction approved; implementation verification pending.
+- **Problem:** Security, safety, financial and administrative actions need durable,
+  attributable evidence that shares the business transaction without turning
+  operational logs into an unbounded sensitive-data store.
+- **Decision:** Use typed application-generated events appended to PostgreSQL in
+  the same Unit of Work as successful business changes. Provide a bounded separate
+  transaction only for denied/failed activity before a business transaction. The
+  runtime role receives `SELECT` and `INSERT`, never `UPDATE`, `DELETE` or
+  `TRUNCATE`. Metadata is allowlisted and validated before persistence. Keep the
+  record shape compatible with later CDC/outbox export, but add no exporter now.
+- **Why:** This is the smallest design that captures business meaning and atomicity
+  while remaining understandable across AYO modules. Database triggers cannot
+  reliably supply request/actor intent, and full event sourcing would make audit
+  history the business source of truth without a demonstrated need.
+- **Tamper-evidence decision:** Do not add an in-database hash chain. A global chain
+  would serialize writes, scoped chains add gap/concurrency ambiguity, and hashes
+  controlled by the same database owner provide limited protection against an
+  owner-level attacker. Append-only privileges and monitored access are the first
+  control. Externally anchored signing/export requires later key/provider approval.
+  AYO must not call this storage tamper-proof.
+- **Alternatives considered:** Trigger/database-native audit captures direct SQL
+  but lacks safe application context and adds privileged database code. A separate
+  audit transaction can survive business rollback but creates false success
+  records, so it is limited to pre-transaction denied/failed outcomes. A
+  transactional outbox is valuable when an approved external consumer exists but
+  premature today. Full event sourcing has the highest rebuild and governance cost.
+- **Risks:** A database owner can still alter history; retention periods require
+  Ethiopian professional review; runtime privileges must be provisioned and tested
+  per environment; append volume needs capacity monitoring; and allowlists require
+  reviewed evolution as modules are added.
+- **Revisit when:** External regulatory evidence, a SIEM/export consumer, owner-level
+  tamper threats, or measured audit volume justifies signed checkpoints, CDC,
+  partitioning, archival or a separately controlled evidence store.

@@ -108,7 +108,8 @@ class SchemaVersionReadinessChecker:
                 required_tables = connection.execute(
                     text(
                         "SELECT to_regclass('ayo.rides') IS NOT NULL "
-                        "AND to_regclass('ayo.legacy_wallets') IS NOT NULL"
+                        "AND to_regclass('ayo.legacy_wallets') IS NOT NULL "
+                        "AND to_regclass('ayo.audit_events') IS NOT NULL"
                     )
                 ).scalar_one()
             ready = current == expected and bool(required_tables)

@@ -51,6 +51,7 @@ testpaths = ["tests"]
 pythonpath = ["."]
 markers = [
     "integration: requires an external PostgreSQL 17 test database",
+    "audit: requires an external PostgreSQL 17 audit test database",
     "known_defect: characterization of a confirmed defect intentionally left unfixed",
     "migration: requires an empty disposable PostgreSQL 17 migration database",
 ]

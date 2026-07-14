@@ -46,6 +46,7 @@ def test_upgrade_empty_database_matches_metadata_and_postgresql_17(
     assert readiness.ready
     assert readiness.current_revision == expected_schema_revision()
     assert set(inspect(postgres_engine).get_table_names(schema=AYO_SCHEMA)) == {
+        "audit_events",
         "legacy_wallets",
         "rides",
     }
@@ -64,6 +65,38 @@ def test_upgrade_empty_database_matches_metadata_and_postgresql_17(
         )
         assert compare_metadata(context, metadata) == []
     assert extensions_after == extensions_before
+
+
+def test_runtime_role_has_append_read_but_not_mutation_privileges(
+    postgres_engine, empty_database
+) -> None:
+    with postgres_engine.begin() as connection:
+        connection.execute(text("DROP ROLE IF EXISTS ayo_runtime"))
+        connection.execute(text("CREATE ROLE ayo_runtime NOLOGIN"))
+    try:
+        MigrationRunner(postgres_engine).upgrade()
+        with postgres_engine.connect() as connection:
+            privileges = {
+                privilege: connection.execute(
+                    text(
+                        "SELECT has_table_privilege("
+                        "'ayo_runtime', 'ayo.audit_events', :privilege)"
+                    ),
+                    {"privilege": privilege},
+                ).scalar_one()
+                for privilege in ("SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE")
+            }
+        assert privileges == {
+            "SELECT": True,
+            "INSERT": True,
+            "UPDATE": False,
+            "DELETE": False,
+            "TRUNCATE": False,
+        }
+    finally:
+        with postgres_engine.begin() as connection:
+            connection.execute(text("DROP OWNED BY ayo_runtime"))
+            connection.execute(text("DROP ROLE ayo_runtime"))
 
 
 def test_repeated_upgrade_preserves_data(postgres_engine, empty_database) -> None:
