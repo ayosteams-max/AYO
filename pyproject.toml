@@ -22,6 +22,9 @@ dev = [
     "pytest-cov>=7,<8",
     "ruff>=0.14,<1",
 ]
+migration = [
+    "alembic>=1.18.5,<1.19",
+]
 
 [tool.uv]
 package = false
@@ -49,6 +52,7 @@ pythonpath = ["."]
 markers = [
     "integration: requires an external PostgreSQL 17 test database",
     "known_defect: characterization of a confirmed defect intentionally left unfixed",
+    "migration: requires an empty disposable PostgreSQL 17 migration database",
 ]
 
 [tool.coverage.run]

@@ -209,3 +209,32 @@ Supersedes / superseded by:
 - **Revisit when:** Measured pool or thread saturation supports async conversion,
   transaction boundaries require new domain contracts, database topology changes,
   or a product module demonstrates a missing shared persistence primitive.
+
+### ED-004 — Versioned PostgreSQL schema migrations
+
+- **Date:** 2026-07-15
+- **Status:** Approved implementation direction; Mission 4 verification pending.
+- **Problem:** AYO needs repeatable, auditable schema evolution without granting
+  DDL to application traffic or allowing concurrent deployments to race.
+- **Decision:** Use Alembic with reviewed SQLAlchemy Core metadata and immutable
+  revision files. Execute it only through a deployment entry point that holds a
+  PostgreSQL session advisory lock. Keep one linear migration head, a dedicated
+  `ayo` schema, a public Alembic version table controlled by the migration role,
+  and a read-only internal readiness check. Prefer forward fixes; destructive
+  changes require backup, restore planning and approval.
+- **Why:** Alembic is the smallest mature fit for AYO's existing Python and
+  SQLAlchemy Core stack. It provides transactional PostgreSQL migrations and
+  metadata comparison while keeping generated changes reviewable. AYO adds the
+  bounded advisory lock Alembic does not provide itself.
+- **Alternatives considered:** Flyway has strong SQL-first history and PostgreSQL
+  locking but adds a separate Java/tool licensing surface and duplicates schema
+  knowledge. Sqitch provides dependency-oriented SQL and verification but requires
+  more bespoke integration. Atlas offers declarative planning but adds another
+  schema system and less direct alignment with the existing metadata.
+- **Risks:** Advisory-lock identity must remain stable across deployment tooling;
+  roles still require environment-specific provisioning; autogeneration can miss
+  intent and is never authoritative without review; and transactional DDL cannot
+  make destructive data changes inherently reversible.
+- **Revisit when:** Multiple independently owned database schemas need separate
+  release trains, Alembic no longer supports the approved stack, or measured
+  deployment needs justify a centralized migration platform.

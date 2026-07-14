@@ -23,6 +23,8 @@ NAMING_CONVENTION = {
 }
 
 metadata = MetaData(naming_convention=NAMING_CONVENTION)
+AYO_SCHEMA = "ayo"
+VERSION_TABLE = "ayo_schema_version"
 
 rides = Table(
     "rides",
@@ -61,6 +63,7 @@ rides = Table(
     ),
     CheckConstraint("version > 0", name="positive_version"),
     UniqueConstraint("public_ride_id"),
+    schema=AYO_SCHEMA,
 )
 
 legacy_wallets = Table(
@@ -90,4 +93,5 @@ legacy_wallets = Table(
         "Non-authoritative prototype state. Never treat as a financial ledger or "
         "migrate as trusted balances."
     ),
+    schema=AYO_SCHEMA,
 )

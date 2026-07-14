@@ -1,0 +1,3 @@
+AYO database migrations are applied only by the explicit, advisory-locked
+deployment command. Application startup must never invoke Alembic.
+

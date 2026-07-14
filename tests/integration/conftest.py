@@ -7,7 +7,7 @@ from sqlalchemy import delete, text
 from BACKEND.persistence.composition import PostgresRepositoryComposition
 from BACKEND.persistence.config import DatabaseSettings
 from BACKEND.persistence.engine import create_postgres_engine
-from BACKEND.persistence.tables import legacy_wallets, metadata, rides
+from BACKEND.persistence.tables import AYO_SCHEMA, legacy_wallets, metadata, rides
 
 
 @pytest.fixture(scope="session")
@@ -38,9 +38,13 @@ def postgres_engine():
         assert 170_000 <= int(server_version) < 180_000
 
     # Test-only schema setup. Production startup must never call create_all().
+    with engine.begin() as connection:
+        connection.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{AYO_SCHEMA}"'))
     metadata.create_all(engine)
     yield engine
     metadata.drop_all(engine)
+    with engine.begin() as connection:
+        connection.execute(text(f'DROP SCHEMA IF EXISTS "{AYO_SCHEMA}" CASCADE'))
     engine.dispose()
 
 

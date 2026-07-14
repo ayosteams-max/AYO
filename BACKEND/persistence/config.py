@@ -25,6 +25,7 @@ class DatabaseSettings(BaseSettings):
         "disable", "allow", "prefer", "require", "verify-ca", "verify-full"
     ] = "verify-full"
     application_name: str = Field(default="ayo-api", min_length=1, max_length=63)
+    migration_lock_timeout_seconds: float = Field(default=30.0, gt=0, le=600)
 
     def require_url(self) -> str:
         if self.url is None:

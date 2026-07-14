@@ -63,6 +63,9 @@ jobs:
       - name: Verify PostgreSQL 17 integration tests without skips
         run: uv run --locked pytest -m integration --no-cov -q
 
+      - name: Verify migration suite against PostgreSQL 17 without skips
+        run: uv run --locked pytest -m migration --no-cov -q
+
       - name: Scan Python source
         run: uv run --locked bandit -c pyproject.toml -r BACKEND ayo.py
 
