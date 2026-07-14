@@ -58,7 +58,18 @@ jobs:
         run: uv run --locked ruff check .
 
       - name: Test
-        run: uv run --locked pytest
+        run: uv run --locked pytest --junitxml=pytest-results.xml
+
+      - name: Report test failures
+        if: failure() && hashFiles('pytest-results.xml') != ''
+        run: >-
+          python -c "import xml.etree.ElementTree as E;
+          root=E.parse('pytest-results.xml').getroot();
+          failures=root.findall('.//failure') + root.findall('.//error');
+          [print('::error title=Pytest failure::' +
+          ((item.text or item.get('message') or 'test failed')
+          .replace('%','%25').replace('\r','%0D').replace('\n','%0A')))
+          for item in failures]"
 
       - name: Verify PostgreSQL 17 integration tests without skips
         run: uv run --locked pytest -m integration --no-cov -q
