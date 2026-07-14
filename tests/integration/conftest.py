@@ -14,6 +14,11 @@ from BACKEND.persistence.tables import legacy_wallets, metadata, rides
 def postgres_engine():
     database_url = os.getenv("AYO_TEST_DATABASE_URL")
     if not database_url:
+        if os.getenv("CI", "").lower() == "true":
+            pytest.fail(
+                "AYO_TEST_DATABASE_URL is mandatory in CI; integration tests "
+                "must not be skipped."
+            )
         pytest.skip(
             "AYO_TEST_DATABASE_URL is required for PostgreSQL integration tests"
         )

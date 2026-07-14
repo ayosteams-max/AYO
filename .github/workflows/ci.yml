@@ -60,6 +60,9 @@ jobs:
       - name: Test
         run: uv run --locked pytest
 
+      - name: Verify PostgreSQL 17 integration tests without skips
+        run: uv run --locked pytest -m integration --no-cov -q
+
       - name: Scan Python source
         run: uv run --locked bandit -c pyproject.toml -r BACKEND ayo.py
 
