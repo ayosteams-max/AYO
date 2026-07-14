@@ -279,7 +279,7 @@ Supersedes / superseded by:
 ### ED-006 — Durable sessions and distributed rate-limit foundation
 
 - **Date:** 2026-07-15
-- **Status:** CEO and CTO direction approved; implementation verification pending.
+- **Status:** Implemented and verified; awaiting CEO and CTO final approval.
 - **Problem:** Future authentication needs revocation that survives process/cache
   failure and rate limits shared across horizontally scaled API workers without
   introducing authentication behavior early.
