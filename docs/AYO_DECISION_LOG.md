@@ -242,7 +242,7 @@ Supersedes / superseded by:
 ### ED-005 — Transactional append-only audit events
 
 - **Date:** 2026-07-15
-- **Status:** CEO and CTO direction approved; implementation verification pending.
+- **Status:** Implemented and verified; awaiting CEO and CTO final approval.
 - **Problem:** Security, safety, financial and administrative actions need durable,
   attributable evidence that shares the business transaction without turning
   operational logs into an unbounded sensitive-data store.
