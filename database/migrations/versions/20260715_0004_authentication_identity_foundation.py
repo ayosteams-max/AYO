@@ -101,7 +101,9 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(
             ["method_id"],
             ["ayo.identity_authentication_methods.method_id"],
-            name="fk_credential_verifiers_method_id_identity_authentication_methods",
+            # Matches SQLAlchemy's deterministic PostgreSQL truncation of the
+            # metadata naming-convention value to the 63-byte identifier limit.
+            name="fk_credential_verifiers_method_id_identity_authenticati_caa0",
         ),
         sa.PrimaryKeyConstraint("credential_id", name="pk_credential_verifiers"),
         sa.UniqueConstraint("method_id", name="uq_credential_verifiers_method_id"),
