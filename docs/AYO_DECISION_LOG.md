@@ -344,7 +344,8 @@ Supersedes / superseded by:
 ### ED-008 — Policy-shaped PostgreSQL RBAC authorization
 
 - **Date:** 2026-07-15
-- **Status:** CEO and CTO approved for Mission 8; implementation verification pending.
+- **Status:** CEO and CTO approved; implemented and verified in Mission 8 against
+  PostgreSQL 17 with all required CI gates passing.
 - **Problem:** AYO needs least-privilege access control without coupling
   Authentication to privilege or prematurely adding a distributed policy system.
 - **Decision:** Implement core RBAC in PostgreSQL with permission codes, roles,
