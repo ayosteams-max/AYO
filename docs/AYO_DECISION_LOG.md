@@ -213,7 +213,7 @@ Supersedes / superseded by:
 ### ED-004 — Versioned PostgreSQL schema migrations
 
 - **Date:** 2026-07-15
-- **Status:** Approved implementation direction; Mission 4 verification pending.
+- **Status:** Implemented and verified; awaiting CEO and CTO final approval.
 - **Problem:** AYO needs repeatable, auditable schema evolution without granting
   DDL to application traffic or allowing concurrent deployments to race.
 - **Decision:** Use Alembic with reviewed SQLAlchemy Core metadata and immutable
