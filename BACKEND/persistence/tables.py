@@ -1,5 +1,6 @@
 from sqlalchemy import (
     JSON,
+    Boolean,
     CheckConstraint,
     Column,
     DateTime,
@@ -55,6 +56,99 @@ identities = Table(
     schema=AYO_SCHEMA,
 )
 Index("ix_identities_type_status", identities.c.identity_type, identities.c.status)
+
+permissions = Table(
+    "permissions",
+    metadata,
+    Column("permission_id", UUID(as_uuid=True), primary_key=True),
+    Column("code", String(63), nullable=False),
+    Column("description", String(256), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    UniqueConstraint("code"),
+    CheckConstraint("code ~ '^[a-z][a-z0-9_.-]{2,62}$'", name="valid_code"),
+    schema=AYO_SCHEMA,
+)
+
+roles = Table(
+    "roles",
+    metadata,
+    Column("role_id", UUID(as_uuid=True), primary_key=True),
+    Column("code", String(63), nullable=False),
+    Column("description", String(256), nullable=False),
+    Column("system_managed", Boolean, nullable=False, server_default=text("false")),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("version", Integer, nullable=False, server_default=text("1")),
+    UniqueConstraint("code"),
+    CheckConstraint("code ~ '^[a-z][a-z0-9_.-]{2,62}$'", name="valid_code"),
+    CheckConstraint("version > 0", name="positive_version"),
+    schema=AYO_SCHEMA,
+)
+
+role_permissions = Table(
+    "role_permissions",
+    metadata,
+    Column(
+        "role_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.roles.role_id"),
+        primary_key=True,
+    ),
+    Column(
+        "permission_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.permissions.permission_id"),
+        primary_key=True,
+    ),
+    Column("granted_at", DateTime(timezone=True), nullable=False),
+    schema=AYO_SCHEMA,
+)
+Index("ix_role_permissions_permission", role_permissions.c.permission_id)
+
+identity_role_assignments = Table(
+    "identity_role_assignments",
+    metadata,
+    Column("assignment_id", UUID(as_uuid=True), primary_key=True),
+    Column(
+        "identity_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.identities.identity_id"),
+        nullable=False,
+    ),
+    Column(
+        "role_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.roles.role_id"),
+        nullable=False,
+    ),
+    Column("assigned_by_identity_id", UUID(as_uuid=True), nullable=False),
+    Column("assigned_at", DateTime(timezone=True), nullable=False),
+    Column("expires_at", DateTime(timezone=True)),
+    Column("revoked_at", DateTime(timezone=True)),
+    Column("revoked_by_identity_id", UUID(as_uuid=True)),
+    Column("revocation_reason", String(63)),
+    CheckConstraint(
+        "expires_at IS NULL OR expires_at > assigned_at", name="valid_lifetime"
+    ),
+    CheckConstraint(
+        "(revoked_at IS NULL AND revoked_by_identity_id IS NULL AND "
+        "revocation_reason IS NULL) OR (revoked_at IS NOT NULL AND "
+        "revoked_by_identity_id IS NOT NULL AND revocation_reason IS NOT NULL)",
+        name="consistent_revocation",
+    ),
+    CheckConstraint(
+        "revocation_reason IS NULL OR revocation_reason ~ '^[a-z][a-z0-9_.-]{2,62}$'",
+        name="safe_revocation_reason",
+    ),
+    schema=AYO_SCHEMA,
+)
+Index(
+    "ix_identity_role_assignments_identity_active",
+    identity_role_assignments.c.identity_id,
+    identity_role_assignments.c.role_id,
+    unique=True,
+    postgresql_where=identity_role_assignments.c.revoked_at.is_(None),
+)
+Index("ix_identity_role_assignments_role", identity_role_assignments.c.role_id)
 
 identity_authentication_methods = Table(
     "identity_authentication_methods",

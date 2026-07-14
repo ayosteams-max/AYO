@@ -310,7 +310,7 @@ Supersedes / superseded by:
 ### ED-007 — Authentication and identity security architecture
 
 - **Date:** 2026-07-15
-- **Status:** CEO and CTO approved direction; implementation verification pending.
+- **Status:** CEO and CTO approved; implemented and verified in Mission 7.
 - **Problem:** AYO needs accessible customer authentication and stronger workforce
   authentication without making SMS, a device label, token claims or an external
   provider the authority for identity and privilege.
@@ -340,3 +340,33 @@ Supersedes / superseded by:
 - **Revisit when:** Provider research, Ethiopian delivery measurements, Android
   device distribution, fraud evidence, AYO Pay regulation or latency/load results
   justify a different customer method, managed identity or opaque access tokens.
+
+### ED-008 — Policy-shaped PostgreSQL RBAC authorization
+
+- **Date:** 2026-07-15
+- **Status:** CEO and CTO approved for Mission 8; implementation verification pending.
+- **Problem:** AYO needs least-privilege access control without coupling
+  Authentication to privilege or prematurely adding a distributed policy system.
+- **Decision:** Implement core RBAC in PostgreSQL with permission codes, roles,
+  role-permission grants and expiring/revocable identity-role assignments. Use a
+  subject/action/resource decision contract, trusted-context middleware, FastAPI
+  decorator/dependency enforcement and mandatory service checks. Deny by default,
+  audit decisions and administration, and add no hierarchy, OPA, Cedar, managed
+  provider or ABAC engine.
+- **Why:** RBAC is understandable and auditable for current AYO boundaries. The
+  policy-shaped contract prevents route coupling and preserves later extraction or
+  an AuthZEN-compatible transport without another critical dependency today.
+- **Alternatives considered:** ABAC adds attribute-policy complexity; OPA and Cedar
+  add languages and operations; Zanzibar-style ReBAC solves relationship graphs
+  AYO does not have; token-only permissions become stale; route-only checks are
+  bypassable by workers and internal callers.
+- **Compatibility decision:** Preserve all 12 prototype routes until approved
+  Authentication transport supplies trusted request identity. Test production
+  enforcement in isolated applications using real PostgreSQL. This does not approve
+  the compatibility routes for launch.
+- **Risks:** Database checks and decision auditing add load; business role matrices
+  and separation of duties remain leadership policy; future ownership and risk
+  constraints may need narrowly reviewed contextual rules.
+- **Revisit when:** Measured latency breaches an approved SLO, relationships become
+  graph-shaped, independent services need a network PDP, or policy complexity can
+  no longer remain safely testable in the core evaluator.

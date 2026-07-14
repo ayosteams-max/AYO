@@ -97,6 +97,20 @@ The modular monolith reduces distributed-system failure modes, duplicated operat
 
 Accounts, OTP challenges, sessions, device records, roles, permissions, account state and security events. Authenticated identity is injected into commands; clients never choose their authoritative identity.
 
+Authorization is a separate internal module. PostgreSQL is authoritative for
+roles, permissions, grants and identity-role assignments. Its policy decision
+contract accepts a trusted subject, action/permission and resource so enforcement
+can later move behind an internal standard interface without changing semantics.
+Mission 8 uses core RBAC only: no hierarchy, ABAC engine, external policy service
+or client/token-authoritative privilege.
+
+Middleware accepts only trusted Authentication output. Route decorators and
+dependencies are HTTP enforcement points; sensitive services repeat checks at
+their own boundary. Missing identity requires authentication, unmatched permission
+denies by default and persistence failure never grants access. The 12 prototype
+routes remain unchanged until an approved Authentication transport establishes
+their caller; this is not production-launch approval.
+
 ### Drivers and vehicles
 
 Driver profile, verification cases, documents, vehicles, eligibility, service types and availability. Sensitive documents belong in encrypted object storage, not general application logs or API responses.

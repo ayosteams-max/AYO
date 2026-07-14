@@ -116,6 +116,10 @@ class SchemaVersionReadinessChecker:
                         " AND to_regclass('ayo.identity_authentication_methods') IS NOT NULL"
                         " AND to_regclass('ayo.authentication_challenges') IS NOT NULL"
                         " AND to_regclass('ayo.token_families') IS NOT NULL"
+                        " AND to_regclass('ayo.permissions') IS NOT NULL"
+                        " AND to_regclass('ayo.roles') IS NOT NULL"
+                        " AND to_regclass('ayo.role_permissions') IS NOT NULL"
+                        " AND to_regclass('ayo.identity_role_assignments') IS NOT NULL"
                     )
                 ).scalar_one()
             ready = current == expected and bool(required_tables)

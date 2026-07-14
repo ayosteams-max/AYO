@@ -57,6 +57,7 @@ markers = [
     "migration: requires an empty disposable PostgreSQL 17 migration database",
     "session_persistence: requires PostgreSQL 17 session and rate-limit storage",
     "authentication: requires PostgreSQL 17 identity and authentication storage",
+    "authorization: requires PostgreSQL 17 RBAC authorization storage",
 ]
 
 [tool.coverage.run]

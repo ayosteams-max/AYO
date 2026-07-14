@@ -1,6 +1,9 @@
 from sqlalchemy import Engine
 
 from BACKEND.persistence.audit_repository import PostgresAuditEventRepository
+from BACKEND.persistence.authorization_repository import (
+    PostgresAuthorizationRepository,
+)
 from BACKEND.persistence.identity_repository import (
     PostgresAuthenticationChallengeRepository,
     PostgresIdentityRepository,
@@ -52,6 +55,10 @@ class AyoPostgresUnitOfWork(SqlAlchemyUnitOfWork):
     def refresh_tokens(self) -> PostgresRefreshTokenRepository:
         return self.repository("refresh_tokens", PostgresRefreshTokenRepository)
 
+    @property
+    def authorization(self) -> PostgresAuthorizationRepository:
+        return self.repository("authorization", PostgresAuthorizationRepository)
+
 
 class PostgresRepositoryComposition:
     """Process-scoped factory for transaction-scoped repository sets."""
@@ -67,6 +74,7 @@ class PostgresRepositoryComposition:
             "identities": PostgresIdentityRepository,
             "authentication_challenges": PostgresAuthenticationChallengeRepository,
             "refresh_tokens": PostgresRefreshTokenRepository,
+            "authorization": PostgresAuthorizationRepository,
         }
 
     def unit_of_work(self) -> AyoPostgresUnitOfWork:

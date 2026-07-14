@@ -15,12 +15,16 @@ from BACKEND.persistence.tables import (
     identities,
     identity_authentication_methods,
     identity_devices,
+    identity_role_assignments,
     legacy_wallets,
     metadata,
+    permissions,
     rate_limit_buckets,
     recovery_cases,
     refresh_token_rotations,
     rides,
+    role_permissions,
+    roles,
     sessions,
     token_families,
 )
@@ -67,6 +71,10 @@ def postgres_engine():
 @pytest.fixture(autouse=True)
 def clean_postgres_tables(postgres_engine):
     with postgres_engine.begin() as connection:
+        connection.execute(delete(identity_role_assignments))
+        connection.execute(delete(role_permissions))
+        connection.execute(delete(roles))
+        connection.execute(delete(permissions))
         connection.execute(delete(refresh_token_rotations))
         connection.execute(delete(token_families))
         connection.execute(delete(recovery_cases))

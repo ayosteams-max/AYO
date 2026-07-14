@@ -5,6 +5,7 @@ from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
 from sqlalchemy import inspect, text
 
+from BACKEND.authorization.registry import PERMISSION_REGISTRY
 from BACKEND.persistence.migrations import (
     MIGRATION_LOCK_ID,
     MigrationLockTimeout,
@@ -52,13 +53,17 @@ def test_upgrade_empty_database_matches_metadata_and_postgresql_17(
         "identities",
         "identity_authentication_methods",
         "identity_devices",
+        "identity_role_assignments",
         "legacy_wallets",
         "rate_limit_buckets",
         "recovery_cases",
         "refresh_token_rotations",
         "rides",
+        "role_permissions",
+        "roles",
         "sessions",
         "token_families",
+        "permissions",
     }
     with postgres_engine.connect() as connection:
         extensions_after = set(
@@ -74,6 +79,10 @@ def test_upgrade_empty_database_matches_metadata_and_postgresql_17(
             },
         )
         assert compare_metadata(context, metadata) == []
+        registered_permissions = set(
+            connection.execute(text("SELECT code FROM ayo.permissions")).scalars()
+        )
+        assert registered_permissions == set(PERMISSION_REGISTRY)
     assert extensions_after == extensions_before
 
 
@@ -121,6 +130,33 @@ def test_runtime_role_has_append_read_but_not_mutation_privileges(
                     )
                 ).scalar_one()
                 is True
+            )
+            assert (
+                connection.execute(
+                    text(
+                        "SELECT has_table_privilege("
+                        "'ayo_runtime', 'ayo.permissions', 'INSERT')"
+                    )
+                ).scalar_one()
+                is False
+            )
+            assert (
+                connection.execute(
+                    text(
+                        "SELECT has_table_privilege("
+                        "'ayo_runtime', 'ayo.identity_role_assignments', 'UPDATE')"
+                    )
+                ).scalar_one()
+                is True
+            )
+            assert (
+                connection.execute(
+                    text(
+                        "SELECT has_table_privilege("
+                        "'ayo_runtime', 'ayo.identity_role_assignments', 'DELETE')"
+                    )
+                ).scalar_one()
+                is False
             )
             assert (
                 connection.execute(

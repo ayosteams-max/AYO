@@ -108,3 +108,8 @@ Revision `20260715_0004` adds bounded identity, method, credential, challenge,
 device, refresh-family/history and recovery tables, and extends sessions with
 privacy-safe device/assurance/family references. It adds no route, provider, token
 key, automatic startup migration or traffic cutover.
+
+Revision `20260715_0005` adds the policy-shaped PostgreSQL RBAC tables, reviewed
+authorization-infrastructure permission registry, indexed active assignments and
+least-privilege runtime grants. It adds no external policy engine or business role
+matrix and does not attach authorization to the 12 compatibility routes.

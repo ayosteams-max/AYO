@@ -86,6 +86,9 @@ jobs:
       - name: Verify authentication foundation without skips
         run: uv run --locked pytest -m authentication --no-cov -q
 
+      - name: Verify authorization foundation without skips
+        run: uv run --locked pytest -m authorization --no-cov -q
+
       - name: Scan Python source
         run: uv run --locked bandit -c pyproject.toml -r BACKEND ayo.py
 

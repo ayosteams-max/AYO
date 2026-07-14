@@ -26,6 +26,18 @@ This baseline implements the security obligations of `AYO_CONSTITUTION.md`. Wher
 
 ## 3. Permissions
 
+- Authentication establishes identity; Authorization independently decides access.
+- PostgreSQL roles, permissions and assignments are authoritative. Client input and
+  token role claims cannot grant privilege by themselves.
+- Deny by default and validate every protected HTTP and service operation.
+- Permission codes use a bounded reviewed registry. Business role matrices require
+  explicit leadership approval.
+- Role changes and authorization decisions produce privacy-safe audit events.
+- Inactive identities receive no role permissions; store outage denies protected
+  operations.
+- Workforce role administration requires phishing-resistant authentication,
+  step-up and approved separation of duties before production.
+
 - Derive rider, driver and staff identity from the authenticated session, never a body/path ID alone.
 - Enforce resource-level authorization for every ride, wallet, document, incident and support case.
 - Use explicit roles and fine-grained permissions; separate support, safety, driver-verification, finance and system-administration duties.
