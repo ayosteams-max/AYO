@@ -95,12 +95,20 @@ def test_repeated_upgrade_preserves_data(postgres_engine, empty_database) -> Non
 
 def test_migration_lock_has_bounded_wait(postgres_engine, empty_database) -> None:
     with postgres_engine.connect() as lock_connection:
-        lock_connection.execute(
-            text("SELECT pg_advisory_lock(:lock_id)"), {"lock_id": MIGRATION_LOCK_ID}
-        )
-        lock_connection.commit()
-        with pytest.raises(MigrationLockTimeout):
-            MigrationRunner(postgres_engine, lock_timeout_seconds=0.2).upgrade()
+        try:
+            lock_connection.execute(
+                text("SELECT pg_advisory_lock(:lock_id)"),
+                {"lock_id": MIGRATION_LOCK_ID},
+            )
+            lock_connection.commit()
+            with pytest.raises(MigrationLockTimeout):
+                MigrationRunner(postgres_engine, lock_timeout_seconds=0.2).upgrade()
+        finally:
+            lock_connection.execute(
+                text("SELECT pg_advisory_unlock(:lock_id)"),
+                {"lock_id": MIGRATION_LOCK_ID},
+            )
+            lock_connection.commit()
 
 
 def test_concurrent_deployments_serialize_safely(
