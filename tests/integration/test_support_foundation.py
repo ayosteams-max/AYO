@@ -9,7 +9,7 @@ from BACKEND.authorization.contracts import AuthorizationSubject
 from BACKEND.authorization.models import Permission, Role, RoleAssignment
 from BACKEND.identity.models import AccountStatus, Identity, IdentityType
 from BACKEND.persistence.errors import OptimisticConcurrencyError
-from BACKEND.persistence.tables import audit_events, support_case_events
+from BACKEND.persistence.tables import audit_events, permissions, support_case_events
 from BACKEND.support.models import (
     MessageVisibility,
     RequesterType,
@@ -74,10 +74,15 @@ def grant(composition, person: Identity, code: str) -> None:
     permission = Permission(code=code, description="Test permission.", created_at=now)
     role = Role(code=f"test.{uuid4().hex}", description="Test role.", created_at=now)
     with composition.unit_of_work() as unit_of_work:
-        unit_of_work.authorization.create_permission(permission)
+        permission_id = unit_of_work.connection.execute(
+            select(permissions.c.permission_id).where(permissions.c.code == code)
+        ).scalar_one_or_none()
+        if permission_id is None:
+            unit_of_work.authorization.create_permission(permission)
+            permission_id = permission.permission_id
         unit_of_work.authorization.create_role(role)
         unit_of_work.authorization.grant_permission(
-            role.role_id, permission.permission_id, granted_at=now
+            role.role_id, permission_id, granted_at=now
         )
         unit_of_work.authorization.assign_role(
             RoleAssignment(
