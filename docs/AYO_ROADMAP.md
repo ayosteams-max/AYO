@@ -297,13 +297,27 @@ The former Mission 14 production-resilience and controlled-launch scope is defer
 
 ## Mission 17 — Scheduled Dispatch Production Validation and Controlled Integration
 
-**Status:** Implementation and PostgreSQL 17.10 validation completed locally; awaiting CTO/CEO review before commit. No public activation or deployment is authorized.
+**Status:** Implementation and PostgreSQL 17.10 validation approved and committed locally as `9494cb3bcf89a05b56c930b4c0873475fa76030a`. No public activation or deployment is authorized.
 
 **Delivered scope:** Executed the complete PostgreSQL suite without skips; added a disabled-by-default authenticated scheduled API boundary, purpose-specific ownership and step-up controls, bounded rate limits, local notification contracts, transactional reservation audit/outbox behavior, pickup verification, controlled worker composition, advisory locks, checkpoint recovery, health state, privacy-safe observability and synthetic end-to-end validation.
 
 **Exclusions preserved:** Payments, AI ranking, automatic pricing, external flight/maps/messaging providers, production secrets/data, deployment, public route activation and remote push.
 
 **Activation dependency:** CTO/CEO review, Ethiopian legal/airport/operations validation, production provider reviews, secrets ceremony and a separately approved controlled environment activation.
+
+## Mission 18 — Rider and driver real-time experience
+
+**Status:** Architecture proposed for CTO/CEO review; implementation is not authorized.
+
+**Objective:** Give riders and drivers a clear, safe and weak-network-resilient experience from request through assignment, pickup verification, trip completion, cancellation, recovery and rating while preserving server authority.
+
+**Scope:** Canonical active-ride lifecycle and ownership; rider/driver journeys and presentation states; provider-neutral snapshot/event/command synchronization; adaptive polling and future foreground-stream boundaries; pickup verification; cancellation/no-show evidence; a deterministic non-blocking Active Ride Confidence Engine; Dynamic Pickup Intelligence with explicit confidence and material-change confirmation; airport/premium and third-party experience; maps, notification, support and safety boundaries; accessibility, privacy, metrics and simulation. See `MISSION_18_RIDER_DRIVER_REALTIME_EXPERIENCE_ARCHITECTURE.md`.
+
+**Exclusions:** No code, migration, dependency, provider, payment/wallet mutation, fee/refund policy, AI/recovery engine, deployment, production activation or real personal data during the architecture mission.
+
+**Dependencies:** Missions 12–17. Implementation must remain staged and separately approved.
+
+**Amendment boundary:** Ride confidence may classify evidence and recommend approved action but cannot assign blame, change price, cancel, conclude safety or execute reassignment. Pickup Intelligence recommends versioned primary/fallback guidance but cannot silently move pickup or override Active Ride, Dispatch or Scheduled Dispatch authority. Both fail safely when stale or unavailable and remain provider-neutral.
 
 ## Deferred future engines — sequencing not yet approved
 

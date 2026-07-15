@@ -58,3 +58,11 @@ The CTO/CEO Mission 17 amendment records two non-runtime future architecture dir
 - an AI Customer Support Engine that acknowledges immediately, uses minimum approved context and tools for routine cases, falls back deterministically, and hands serious or uncertain matters to humans with complete evidence.
 
 Neither engine is implemented or authorized for activation. This Mission 9 support-case foundation remains the case authority. Financial execution, automated refunds, providers, models, new data access and policy values require separate missions and approvals.
+
+Mission 18's approved architecture amendment may prepare a minimum-data support context
+when deterministic Active Ride Confidence rules detect developing operational trouble.
+That context contains opaque ride/decision/reason references and freshness, not raw
+location trails or an accusation. Confidence recommendations cannot create a final
+support conclusion, safety finding, blame decision or recovery action; the support case
+authority and mandatory human escalation rules remain unchanged. Future AI support may
+explain an authorized Dynamic Pickup recommendation but cannot change the pickup.

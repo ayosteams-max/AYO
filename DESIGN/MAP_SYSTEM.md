@@ -57,7 +57,9 @@ Passenger always sees the driver's live location.
 
 # Pickup Accuracy
 
-AYO AI helps passengers choose accurate pickup points.
+AYO Dynamic Pickup Intelligence recommends accurate pickup points through deterministic,
+versioned rules and provider-neutral confidence-bearing inputs. AI is not required and
+cannot become pickup authority without separate approval.
 
 Avoid:
 
@@ -65,6 +67,12 @@ Avoid:
 - Unsafe pickup
 - Private roads
 - Closed streets
+
+Recommendations include a primary and fallback point, accessibility-aware walking and
+driver-approach guidance, entrance/terminal/zone, reason, confidence and expiry. AYO
+never silently moves a confirmed pickup; material changes are explained to rider and
+driver and require the approved confirmation. Cached guidance is labelled with its
+freshness, and airport/venue rules are never presented as live unless verified.
 
 ---
 

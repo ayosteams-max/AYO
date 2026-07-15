@@ -71,6 +71,12 @@ class-specific and requires legal approval. Missing/stale/conflicting evidence p
 `insufficient_evidence` or human review, never an invented conclusion. Engine outage
 leaves support available and cannot block rides, reservations or safety escalation.
 
+Mission 18's future Active Ride Confidence decisions and confirmed Dynamic Pickup
+outcomes are eligible evidence references only when their rule/source version,
+freshness and later operational outcome are preserved. A health level is not fault, and
+a pickup recommendation is not proof that a person followed it. Recovery must obtain
+corroborating domain evidence and retain the existing responsibility/human-review rules.
+
 ## AI Customer Support Engine
 
 ### Purpose and operating model
@@ -109,6 +115,11 @@ authorization. Prompt/input content is untrusted. Policy and tool authorizationâ
 model confidenceâ€”control actions. Unavailable, uncertain or contradictory AI falls back
 to deterministic support policy and human service. It cannot weaken emergency, fraud,
 identity, financial or privacy controls.
+
+Future AI may explain a public Active Ride Confidence reason or Dynamic Pickup guidance
+from an authorized projection, but cannot infer blame, expose raw signals, execute a
+recommendation or silently relocate pickup. Any shadow comparison with deterministic
+confidence production authority remains non-executing until separately approved.
 
 Provider-neutral channel contracts must support app chat, SMS, voice and call-centre
 workflows under weak connectivity, with Amharic and English as first-class evaluation

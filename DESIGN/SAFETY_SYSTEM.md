@@ -59,6 +59,12 @@ Every trip includes:
 - ETA Updates
 - Trip Timeline
 
+Mission 18's deterministic Active Ride Confidence Engine may identify developing
+operational anomalies and request human safety review at approved thresholds. A
+confidence level is not a safety conclusion, blame decision or permission to cancel;
+missing/stale data lowers confidence, and the established safety authority decides any
+intervention.
+
 ---
 
 # 5. Emergency SOS

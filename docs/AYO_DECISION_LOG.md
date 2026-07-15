@@ -485,7 +485,7 @@ Supersedes / superseded by:
 ### PA-030 — Mission 17 controlled scheduled-dispatch integration
 
 - **Date:** 2026-07-16
-- **Status:** CTO and CEO implementation scope approved; implementation in progress; activation and commit remain gated.
+- **Status:** CTO and CEO approved; implementation and PostgreSQL validation completed and committed locally as `9494cb3bcf89a05b56c930b4c0873475fa76030a`; activation remains gated.
 - **Problem:** Mission 16 requires PostgreSQL 17 concurrency proof and a secure, disabled-by-default authenticated integration boundary before controlled use.
 - **Decision:** Reuse the modular-monolith authentication, RBAC, PostgreSQL unit-of-work, audit/outbox and advisory-lock foundations through an isolated scheduled composition described in `docs/MISSION_17_SCHEDULED_DISPATCH_CONTROLLED_INTEGRATION.md`.
 - **Alternatives:** Process memory cannot validate authority; a microservice/broker is premature; provider-specific notification/maps/flight connections exceed scope.
@@ -511,3 +511,17 @@ Supersedes / superseded by:
 - **Mandatory escalation:** Safety, harassment/assault, legal, identity, account takeover, fraud/collusion, payment disputes/payouts, high-value compensation, ambiguous evidence, repeated unresolved cases, vulnerable passengers and emergencies.
 - **Explicit exclusions:** No runtime, dependency, route, provider/model selection, payment/wallet action, automated refund, learning pipeline or production activation.
 - **Approval gate:** A separate research/architecture mission must approve evaluations, language quality, privacy/retention, human operations, tool authority, model/provider and Ethiopian legal/operational requirements.
+
+### PA-033 — Mission 18 rider and driver real-time experience
+
+- **Date:** 2026-07-16
+- **Status:** Architecture proposal prepared for CTO/CEO review; no implementation, migration, dependency, provider selection, commit or activation authorized.
+- **Problem:** The dispatch foundations need a single clear rider/driver experience and canonical post-assignment lifecycle that converges after retries, network loss, reassignment and app restart without allowing clients or notifications to become authority.
+- **Proposal:** Add an Active Ride Orchestrator boundary and role-specific presentation projections described in `docs/MISSION_18_RIDER_DRIVER_REALTIME_EXPERIENCE_ARCHITECTURE.md`. Use authoritative snapshots, ride-scoped ordered events, idempotent HTTPS commands, bounded replay and staged transport adapters. Begin with adaptive polling, add a foreground stream only after measurement, and use future push solely to wake clients for a snapshot refresh.
+- **Alternatives:** Raw status polling is simpler but cannot safely express ordered recovery and two-device convergence. A provider-specific SDK creates premature lock-in. A new real-time microservice adds unmeasured operational and security cost.
+- **Product/safety direction requested:** Layer driver/vehicle matching with a short-lived assignment-bound pickup PIN; keep safety/help visible; distinguish pending from confirmed actions; separate cancellation evidence from responsibility; protect ordinary offer declines and verified external delays from hidden punishment; treat airport, assisted and third-party flows as first-class.
+- **Explicit exclusions:** No fare/fee/refund policy, financial mutation, AI/support/recovery implementation, external maps/communications/flight/real-time provider, deployment, public activation or real data.
+- **Approval/verification needed:** CTO approval is required for lifecycle/ownership, synchronization, compatibility and threat controls. CEO/leadership and Ethiopian legal/operations approval are required for driver disclosure, waiting/cancellation policy, airport/premium promise, emergency/support operations, retention and launch targets.
+- **Revisit trigger:** Consider provider selection, broker or service extraction only when measured connection scale, event lag, reconnect failure, latency, provider resilience or operating cost breaches an approved threshold.
+- **Approved architecture amendment:** Add a deterministic Active Ride Confidence Engine that owns only versioned health classifications and non-executing operational recommendations, plus Dynamic Pickup Intelligence that owns only confidence-bearing primary/fallback pickup recommendations. Missing/stale evidence reduces confidence; verified external/platform causes protect drivers; alert hysteresis and cooldown prevent churn/fatigue; material pickup changes require authorized communication and confirmation. Neither component may alter ride state, assignment, price, blame, safety outcome or financial recovery.
+- **Amendment events:** Propose auditable confidence evaluation/level/recommendation/suppression/recovery events and pickup recommendation/proposal/confirmation/fallback/degradation events. Exact schemas, thresholds, retention and activation remain implementation-stage CTO/CEO gates.
