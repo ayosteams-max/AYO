@@ -460,3 +460,13 @@ Supersedes / superseded by:
 - **Explicit exclusions/gates:** No external identity or messaging connection, production secrets, public activation, deployment, real personal data, payments, scheduled/pre-dispatch, AI ranking or irreversible change.
 - **Rationale:** Controlled staging requires cryptographic identity and durable delivery/recovery boundaries, but provider connections and production trust configuration would materially expand security authority.
 - **Alternatives and risks:** Handwritten JWT verification is rejected; use a removable standards-based library behind an interface. Token roles remain non-authoritative. PostgreSQL outbox/locks are simpler than a broker before measured need. Bearer replay, key freshness, rate-limit availability and operational thresholds remain production risks.
+
+### PA-028 — Mission 15 deterministic marketplace intelligence architecture
+
+- **Date:** 2026-07-16
+- **Status:** CTO and CEO architecture/implementation approval recorded; deterministic advisory implementation complete and awaiting final review.
+- **Problem:** AYO needs measurable marketplace health, driver-opportunity protection and transparent operational recommendations without weakening fastest-pickup dispatch, silently manipulating livelihoods or allowing analytics to become pricing authority.
+- **Proposal:** Add an advisory deterministic module described in `docs/MISSION_15_MARKETPLACE_INTELLIGENCE_ARCHITECTURE.md`. It evaluates privacy-minimized versioned snapshots with fixed-point rules, explicit guardrails and reason codes; predicts demand through capped rule-based factors; recommends but never activates surge; protects externally caused driver delays; and provides offline replay/simulation behind stable future-strategy contracts.
+- **Explicit exclusions:** No implementation, executable migration, automatic pricing, payment, AI/ML ranking, production data/provider, deployment, individual churn targeting or direct authority over ride assignment, eligibility, safety/fraud action or incentives.
+- **Rationale:** A single blended optimizer hides rider/driver/business trade-offs and is hard to contest. Separate advisory components preserve Mission 12 immediate-pickup authority, neutral new-driver standing, auditability, deterministic fallback and an extraction/AI path without premature infrastructure.
+- **Risks and decisions required:** Leadership must approve fairness and material-equivalence policy, airport/event/weather ownership, emergency suppression and any future human-approved commercial response. Ethiopian legal/operational review is required for earnings analytics, location aggregation, retention and airport/event practice.

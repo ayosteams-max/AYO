@@ -900,6 +900,83 @@ Index(
     & (dispatch_outbox.c.dead_lettered_at.is_(None)),
 )
 
+marketplace_rule_sets = Table(
+    "marketplace_rule_sets",
+    metadata,
+    Column("rule_set_id", UUID(as_uuid=True), primary_key=True),
+    Column("version", String(63), nullable=False, unique=True),
+    Column("configuration", JSONB().with_variant(JSON(), "sqlite"), nullable=False),
+    Column("configuration_checksum", String(64), nullable=False),
+    Column("effective_at", DateTime(timezone=True), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    CheckConstraint(
+        "version ~ '^[a-z][a-z0-9_.-]{1,62}$'", name="marketplace_rule_valid_version"
+    ),
+    CheckConstraint(
+        "configuration_checksum ~ '^[a-f0-9]{64}$'",
+        name="marketplace_rule_valid_checksum",
+    ),
+    schema=AYO_SCHEMA,
+)
+
+marketplace_decisions = Table(
+    "marketplace_decisions",
+    metadata,
+    Column("decision_id", UUID(as_uuid=True), primary_key=True),
+    Column("snapshot_id", UUID(as_uuid=True), nullable=False),
+    Column(
+        "rule_set_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.marketplace_rule_sets.rule_set_id"),
+        nullable=False,
+    ),
+    Column("market_code", String(63), nullable=False),
+    Column("zone_code", String(63), nullable=False),
+    Column("service_type", String(63), nullable=False),
+    Column("window_ended_at", DateTime(timezone=True), nullable=False),
+    Column("recommendation", String(32), nullable=False),
+    Column("health_score_bps", Integer, nullable=False),
+    Column("explanation", JSONB().with_variant(JSON(), "sqlite"), nullable=False),
+    Column("generated_at", DateTime(timezone=True), nullable=False),
+    Column("expires_at", DateTime(timezone=True), nullable=False),
+    UniqueConstraint(
+        "snapshot_id", "rule_set_id", name="uq_marketplace_decision_snapshot_rule"
+    ),
+    CheckConstraint(
+        "health_score_bps BETWEEN 0 AND 10000",
+        name="marketplace_decision_valid_health",
+    ),
+    CheckConstraint(
+        "recommendation IN ('no_change','supply_guidance','incentive_review',"
+        "'price_review','suppress','insufficient_data')",
+        name="marketplace_decision_valid_recommendation",
+    ),
+    CheckConstraint("expires_at > generated_at", name="marketplace_decision_lifetime"),
+    schema=AYO_SCHEMA,
+)
+Index(
+    "ix_marketplace_decisions_market_window",
+    marketplace_decisions.c.market_code,
+    marketplace_decisions.c.zone_code,
+    marketplace_decisions.c.window_ended_at,
+)
+
+marketplace_simulation_runs = Table(
+    "marketplace_simulation_runs",
+    metadata,
+    Column("run_id", UUID(as_uuid=True), primary_key=True),
+    Column("baseline_rule_version", String(63), nullable=False),
+    Column("candidate_rule_version", String(63), nullable=False),
+    Column("dataset_checksum", String(64), nullable=False),
+    Column("result", JSONB().with_variant(JSON(), "sqlite"), nullable=False),
+    Column("completed_at", DateTime(timezone=True), nullable=False),
+    CheckConstraint(
+        "dataset_checksum ~ '^[a-f0-9]{64}$'",
+        name="marketplace_simulation_valid_checksum",
+    ),
+    schema=AYO_SCHEMA,
+)
+
 legacy_wallets = Table(
     "legacy_wallets",
     metadata,

@@ -271,6 +271,18 @@ The former Mission 14 production-resilience and controlled-launch scope is defer
 
 **Dependencies:** Approved Missions 12 and 13 plus controlled PostgreSQL test/staging infrastructure. Production activation remains separately gated.
 
+## Mission 15 — Deterministic marketplace intelligence
+
+**Status:** Architecture and implementation approved; deterministic advisory implementation complete and awaiting final review. Runtime activation remains separately gated.
+
+**Objective:** Measure rider, driver and marketplace outcomes and produce transparent operational recommendations without becoming dispatch, pricing, payment or safety authority.
+
+**Proposed scope:** Versioned deterministic health/fairness/opportunity components, neutral new-driver treatment, external-delay protection, rule-based demand ranges, airport/event/weather contexts, surge recommendation only, immutable explanations and an offline simulation framework.
+
+**Exclusions:** AI/ML ranking, automatic fare or incentive changes, payments, deployment, real customer data, external production providers and direct modification of immediate dispatch.
+
+**Activation dependency:** Leadership-approved Ethiopian operating thresholds, local legal/operational review and a controlled shadow-data activation mission. No recommendation currently affects dispatch or pricing.
+
 ## Post-launch expansion gate
 
 Express, Eat, Marketplace, Home or Pay planning may begin only after leadership confirms that the ride flow meets sustained reliability, safety, driver-earnings, support, security, financial-reconciliation and operational targets. Each expansion requires its own blueprint, state model, legal review and roadmap; shared platform capability does not erase product boundaries.

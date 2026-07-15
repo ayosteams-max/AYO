@@ -121,3 +121,20 @@ matrix and does not attach authorization to the 12 compatibility routes.
 Revision `20260715_0006` registers the authorization-ready, non-privileged
 `support.*` permission set for future AI-first chat and voice support. It creates no
 service identity, role, assignment, support workflow, AI model or provider.
+# Mission 15 marketplace intelligence migration
+
+Revision `20260716_0010` adds only advisory marketplace tables: immutable rule versions, replayable decision explanations and simulation results. It is additive, contains no customer data conversion and does not alter dispatch or pricing tables.
+
+Upgrade in a disposable/approved environment:
+
+```powershell
+python database/migrate.py upgrade
+```
+
+Rollback before any future activation depends on retained advisory history:
+
+```powershell
+alembic downgrade 20260716_0009
+```
+
+The downgrade drops simulation, decision and rule tables in dependency order. Production application, deployment and real-data use remain unauthorized.

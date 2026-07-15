@@ -23,6 +23,9 @@ from BACKEND.persistence.tables import (
     identity_devices,
     identity_role_assignments,
     legacy_wallets,
+    marketplace_decisions,
+    marketplace_rule_sets,
+    marketplace_simulation_runs,
     metadata,
     permissions,
     rate_limit_buckets,
@@ -81,6 +84,9 @@ def postgres_engine():
 @pytest.fixture(autouse=True)
 def clean_postgres_tables(postgres_engine):
     with postgres_engine.begin() as connection:
+        connection.execute(delete(marketplace_simulation_runs))
+        connection.execute(delete(marketplace_decisions))
+        connection.execute(delete(marketplace_rule_sets))
         connection.execute(delete(dispatch_outbox))
         connection.execute(delete(dispatch_idempotency_records))
         connection.execute(delete(dispatch_assignments))
