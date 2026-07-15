@@ -19,6 +19,7 @@ from BACKEND.support.models import (
     SupportChannel,
     SupportMessage,
     SupportQueue,
+    SupportStatus,
 )
 from BACKEND.support.service import SupportAccessDenied, SupportService
 
@@ -177,3 +178,59 @@ def test_messages_separate_internal_notes_and_case_updates_are_optimistic(
         unit_of_work.support.save_case(changed, expected_version=1)
         with pytest.raises(OptimisticConcurrencyError):
             unit_of_work.support.save_case(changed, expected_version=1)
+
+
+def test_assignment_reassignment_escalation_resolution_and_closure(
+    postgres_composition,
+) -> None:
+    rider = identity(postgres_composition, IdentityType.RIDER)
+    first_staff = identity(postgres_composition, IdentityType.STAFF)
+    second_staff = identity(postgres_composition, IdentityType.STAFF)
+    grant(postgres_composition, first_staff, "support.queue.general.access")
+    grant(postgres_composition, second_staff, "support.queue.general.access")
+    grant(postgres_composition, second_staff, "support.queue.finance.access")
+    value = support_case(rider)
+    service = SupportService()
+    with postgres_composition.unit_of_work() as unit_of_work:
+        value = service.create_case(unit_of_work, value, actor=subject(rider))
+    with postgres_composition.unit_of_work() as unit_of_work:
+        value = service.assign(
+            unit_of_work,
+            value,
+            actor=subject(first_staff),
+            human_identity_id=first_staff.identity_id,
+        )
+        value = service.assign(
+            unit_of_work,
+            value,
+            actor=subject(second_staff),
+            human_identity_id=second_staff.identity_id,
+        )
+        value = service.escalate(
+            unit_of_work,
+            value,
+            actor=subject(second_staff),
+            queue=SupportQueue.FINANCE,
+            reason="financial_review",
+        )
+        value = service.transition_case(
+            unit_of_work,
+            value,
+            actor=subject(second_staff),
+            target=SupportStatus.IN_PROGRESS,
+        )
+        value = service.transition_case(
+            unit_of_work,
+            value,
+            actor=subject(second_staff),
+            target=SupportStatus.RESOLVED,
+            resolution_category="guidance_provided",
+        )
+        value = service.transition_case(
+            unit_of_work,
+            value,
+            actor=subject(second_staff),
+            target=SupportStatus.CLOSED,
+        )
+    assert value.assigned_human_identity_id == second_staff.identity_id
+    assert value.status is SupportStatus.CLOSED

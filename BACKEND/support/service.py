@@ -12,7 +12,9 @@ from BACKEND.support.models import (
     SupportCase,
     SupportCaseEvent,
     SupportEventType,
+    SupportMessage,
     SupportQueue,
+    SupportStatus,
 )
 
 
@@ -116,6 +118,69 @@ class SupportService:
         self._audit(unit_of_work, saved, "support.case.assigned", actor)
         return saved
 
+    def view_case(
+        self,
+        unit_of_work: AyoPostgresUnitOfWork,
+        case: SupportCase,
+        *,
+        actor: AuthorizationSubject,
+    ) -> SupportCase:
+        self.require_read(unit_of_work, case, actor)
+        self._event(unit_of_work, case, SupportEventType.VIEWED, actor)
+        self._audit(unit_of_work, case, "support.case.viewed", actor)
+        return case
+
+    def add_message(
+        self,
+        unit_of_work: AyoPostgresUnitOfWork,
+        case: SupportCase,
+        message: SupportMessage,
+        *,
+        actor: AuthorizationSubject,
+    ) -> None:
+        self.require_read(unit_of_work, case, actor)
+        if (
+            message.case_id != case.case_id
+            or message.author_identity_id != actor.identity_id
+        ):
+            raise SupportAccessDenied("Support access denied")
+        if message.visibility.value == "internal_note" and actor.identity_type not in {
+            IdentityType.STAFF,
+            IdentityType.ADMINISTRATOR,
+        }:
+            raise SupportAccessDenied("Support access denied")
+        unit_of_work.support.append_message(message)
+        event_type = (
+            SupportEventType.REDACTION_APPLIED
+            if message.redaction_applied
+            else SupportEventType.UPDATED
+        )
+        self._event(unit_of_work, case, event_type, actor)
+
+    def transition_case(
+        self,
+        unit_of_work: AyoPostgresUnitOfWork,
+        case: SupportCase,
+        *,
+        actor: AuthorizationSubject,
+        target: SupportStatus,
+        resolution_category: str | None = None,
+    ) -> SupportCase:
+        self._require_staff_queue(unit_of_work, case, actor)
+        changed = case.transition(
+            target,
+            at=datetime.now(UTC),
+            resolution_category=resolution_category,
+        )
+        saved = unit_of_work.support.save_case(changed, expected_version=case.version)
+        event_type = {
+            SupportStatus.RESOLVED: SupportEventType.RESOLVED,
+            SupportStatus.CLOSED: SupportEventType.CLOSED,
+        }.get(target, SupportEventType.UPDATED)
+        self._event(unit_of_work, saved, event_type, actor)
+        self._audit(unit_of_work, saved, f"support.case.{event_type.value}", actor)
+        return saved
+
     def escalate(
         self,
         unit_of_work: AyoPostgresUnitOfWork,
@@ -132,10 +197,14 @@ class SupportService:
                 )
                 and case.ai_service_identity_id == actor.identity_id
             )
-        else:
-            allowed = case.requester_identity_id == actor.identity_id or (
-                actor.identity_type in {IdentityType.STAFF, IdentityType.ADMINISTRATOR}
+        elif actor.identity_type in {IdentityType.STAFF, IdentityType.ADMINISTRATOR}:
+            allowed = unit_of_work.authorization.has_permission(
+                actor.identity_id,
+                QUEUE_PERMISSIONS[case.assigned_queue],
+                at=datetime.now(UTC),
             )
+        else:
+            allowed = case.requester_identity_id == actor.identity_id
         if not allowed:
             raise SupportAccessDenied("Support access denied")
         changed = case.transition(
