@@ -1057,6 +1057,28 @@ reservation_checkpoints = _reservation_child("reservation_checkpoints", "checkpo
 reservation_flight_context = _reservation_child(
     "reservation_flight_context", "flight_context_id"
 )
+reservation_pickup_verifications = Table(
+    "reservation_pickup_verifications",
+    metadata,
+    Column("verification_id", UUID(as_uuid=True), primary_key=True),
+    Column(
+        "reservation_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.ride_reservations.reservation_id"),
+        nullable=False,
+        unique=True,
+    ),
+    Column("code_hash", LargeBinary, nullable=False),
+    Column("expires_at", DateTime(timezone=True), nullable=False),
+    Column("attempt_count", Integer, nullable=False, server_default=text("0")),
+    Column("verified_at", DateTime(timezone=True)),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    CheckConstraint(
+        "attempt_count BETWEEN 0 AND 10", name="pickup_verification_attempts"
+    ),
+    CheckConstraint("expires_at > created_at", name="pickup_verification_lifetime"),
+    schema=AYO_SCHEMA,
+)
 
 reservation_driver_commitments = Table(
     "reservation_driver_commitments",

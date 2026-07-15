@@ -36,6 +36,24 @@ DISPATCH_RATE_POLICIES = {
         refill_tokens=Decimal(30),
         refill_period_seconds=60,
     ),
+    "scheduled_create": RateLimitPolicy(
+        name="scheduled.create",
+        capacity=5,
+        refill_tokens=Decimal(5),
+        refill_period_seconds=3600,
+    ),
+    "scheduled_manage": RateLimitPolicy(
+        name="scheduled.manage",
+        capacity=30,
+        refill_tokens=Decimal(30),
+        refill_period_seconds=3600,
+    ),
+    "scheduled_confirmation": RateLimitPolicy(
+        name="scheduled.confirmation",
+        capacity=10,
+        refill_tokens=Decimal(10),
+        refill_period_seconds=3600,
+    ),
 }
 
 
@@ -76,7 +94,8 @@ class RequestSizeLimitMiddleware:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
-        if "/dispatch" not in scope.get("path", ""):
+        path = scope.get("path", "")
+        if "/dispatch" not in path and "/scheduled" not in path:
             await self.app(scope, receive, send)
             return
         headers = Headers(scope=scope)

@@ -12,6 +12,20 @@ APPROVED_OUTBOX_EVENTS = frozenset(
         "dispatch.driver_offer.declined",
         "dispatch.driver.assigned",
         "dispatch.ride.no_driver_available",
+        "reservation.requested",
+        "reservation.passenger_confirmation_requested",
+        "reservation.passenger_confirmed",
+        "reservation.passenger_declined",
+        "reservation.soft_planned",
+        "reservation.updated",
+        "reservation.cancelled",
+        "reservation.driver_committed",
+        "reservation.driver_commitment_declined",
+        "reservation.driver_en_route",
+        "reservation.ready_for_pickup",
+        "reservation.activated_as_ride",
+        "reservation.no_driver_available",
+        "reservation.support_handoff",
     }
 )
 

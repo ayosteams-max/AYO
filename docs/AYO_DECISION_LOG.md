@@ -481,3 +481,33 @@ Supersedes / superseded by:
 - **Explicit exclusions:** No pricing/fee/compensation/guarantee, payment, AI ranking, provider connection, deployment, public activation or real personal/flight data.
 - **Rationale:** Immediate rides and future reservations have different timing and truth. Assigning too early wastes driver capacity; dispatching only at pickup time provides little reliability. Staged commitment with revalidation and fallback is the simplest design that protects both sides.
 - **Risks/decisions required:** Leadership must define the reservation promise, booking/pickup window, material replacement thresholds/counts, driver commitment policy, scheduled-versus-immediate fairness, passenger consent/assisted-booking policy and airport scope. Bole rules and travel/location/contact privacy require qualified local verification.
+
+### PA-030 — Mission 17 controlled scheduled-dispatch integration
+
+- **Date:** 2026-07-16
+- **Status:** CTO and CEO implementation scope approved; implementation in progress; activation and commit remain gated.
+- **Problem:** Mission 16 requires PostgreSQL 17 concurrency proof and a secure, disabled-by-default authenticated integration boundary before controlled use.
+- **Decision:** Reuse the modular-monolith authentication, RBAC, PostgreSQL unit-of-work, audit/outbox and advisory-lock foundations through an isolated scheduled composition described in `docs/MISSION_17_SCHEDULED_DISPATCH_CONTROLLED_INTEGRATION.md`.
+- **Alternatives:** Process memory cannot validate authority; a microservice/broker is premature; provider-specific notification/maps/flight connections exceed scope.
+- **Exclusions:** Payments, AI ranking, automatic pricing, external providers, production secrets/data, deployment, public activation and remote push.
+- **Revisit trigger:** Measured scheduled workload, isolation failures or independent scaling needs justify extraction only after CTO/CEO review.
+
+### PA-031 — Deferred Customer Recovery and Trust Engine
+
+- **Date:** 2026-07-16
+- **Status:** CTO/CEO future architecture direction recorded; no implementation, mission sequencing, financial action or activation authorized.
+- **Problem:** Confirmed routine failures need faster, fairer recovery without automatically approving every complaint or unfairly blaming riders or drivers.
+- **Direction:** Design a future evidence-based advisory engine with responsibility classes, versioned reason codes, configurable limits, idempotency, duplicate/abuse controls, minimum-data evidence and mandatory human review for serious, ambiguous, high-value, fraudulent, financial or irreversible matters. See `docs/AYO_FUTURE_TRUST_AND_AI_SUPPORT_ENGINES.md`.
+- **Driver fairness:** Verified traffic, road closure, emergency, platform failure and other external causes cannot create hidden punishment or unjust driver liability.
+- **Explicit exclusions:** No runtime, migration, route, provider, payment/wallet action, automated refund/credit/payout or production activation.
+- **Approval gate:** Recovery policy, responsibility thresholds, financial limits, evidence retention and Ethiopian legal/operations review require a separately approved mission.
+
+### PA-032 — Deferred AI Customer Support Engine
+
+- **Date:** 2026-07-16
+- **Status:** CTO/CEO future architecture direction recorded; no model, provider, runtime or activation authorized.
+- **Problem:** Users need immediate acknowledgement and fast routine resolution without repeating known facts, while serious or uncertain cases require safe human ownership.
+- **Direction:** Design a future AI-first, policy-controlled support orchestrator using minimum approved context, structured cases, audited tools, low-risk pre-authorized workflows, deterministic fallback and evidence-rich human handoff. Support Amharic/English and provider-neutral app, SMS, voice and call-centre channels.
+- **Mandatory escalation:** Safety, harassment/assault, legal, identity, account takeover, fraud/collusion, payment disputes/payouts, high-value compensation, ambiguous evidence, repeated unresolved cases, vulnerable passengers and emergencies.
+- **Explicit exclusions:** No runtime, dependency, route, provider/model selection, payment/wallet action, automated refund, learning pipeline or production activation.
+- **Approval gate:** A separate research/architecture mission must approve evaluations, language quality, privacy/retention, human operations, tool authority, model/provider and Ethiopian legal/operational requirements.

@@ -20,6 +20,7 @@ from BACKEND.persistence.repositories import (
     PostgresLegacyWalletRepository,
     PostgresRideRepository,
 )
+from BACKEND.persistence.scheduled_repository import PostgresScheduledRepository
 from BACKEND.persistence.session_repository import PostgresSessionRepository
 from BACKEND.persistence.support_repository import PostgresSupportRepository
 from BACKEND.persistence.unit_of_work import SqlAlchemyUnitOfWork
@@ -82,6 +83,10 @@ class AyoPostgresUnitOfWork(SqlAlchemyUnitOfWork):
     def outbox(self) -> PostgresOutboxRepository:
         return self.repository("outbox", PostgresOutboxRepository)
 
+    @property
+    def scheduled(self) -> PostgresScheduledRepository:
+        return self.repository("scheduled", PostgresScheduledRepository)
+
 
 class PostgresRepositoryComposition:
     """Process-scoped factory for transaction-scoped repository sets."""
@@ -109,6 +114,7 @@ class PostgresRepositoryComposition:
                 connection, candidate_gateway
             ),
             "outbox": PostgresOutboxRepository,
+            "scheduled": PostgresScheduledRepository,
         }
 
     def unit_of_work(self) -> AyoPostgresUnitOfWork:

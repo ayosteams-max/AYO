@@ -295,6 +295,36 @@ The former Mission 14 production-resilience and controlled-launch scope is defer
 
 **Activation dependency:** Ethiopian airport/legal/operational verification, reviewed API and worker activation, provider adapters and explicit CTO/CEO activation approval.
 
+## Mission 17 — Scheduled Dispatch Production Validation and Controlled Integration
+
+**Status:** Implementation and PostgreSQL 17.10 validation completed locally; awaiting CTO/CEO review before commit. No public activation or deployment is authorized.
+
+**Delivered scope:** Executed the complete PostgreSQL suite without skips; added a disabled-by-default authenticated scheduled API boundary, purpose-specific ownership and step-up controls, bounded rate limits, local notification contracts, transactional reservation audit/outbox behavior, pickup verification, controlled worker composition, advisory locks, checkpoint recovery, health state, privacy-safe observability and synthetic end-to-end validation.
+
+**Exclusions preserved:** Payments, AI ranking, automatic pricing, external flight/maps/messaging providers, production secrets/data, deployment, public route activation and remote push.
+
+**Activation dependency:** CTO/CEO review, Ethiopian legal/airport/operations validation, production provider reviews, secrets ceremony and a separately approved controlled environment activation.
+
+## Deferred future engines — sequencing not yet approved
+
+### Customer Recovery and Trust Engine
+
+**Status:** Future architecture direction only; no mission number, implementation or financial authority assigned.
+
+**Objective:** Investigate confirmed operational failures using minimum approved evidence and recommend fair, versioned, idempotent recovery or typed human escalation. Preserve rider and driver fairness by separating rider, driver, AYO, external, shared and insufficient-evidence responsibility.
+
+**Potential future scope:** Priority rebooking, refund/credit/discount eligibility recommendations, apology/status communication, fault-free driver compensation recommendation, support/fraud/incident review and duplicate-claim protection. Actual refunds, credits, payouts and wallet/payment mutations remain separate approval-gated systems.
+
+### AI Customer Support Engine
+
+**Status:** Future architecture direction only; no implementation, model, provider or channel selected.
+
+**Objective:** Acknowledge immediately and resolve routine verified cases within seconds through approved structured evidence, tools and low-risk workflows, without making users repeat known information. Serious, ambiguous, financial, safety, legal, identity, fraud and vulnerable-person cases require seamless human escalation.
+
+**Potential future scope:** Multilingual Amharic/English support across provider-neutral app, SMS, voice and call-centre interfaces; deterministic fallback; minimum-data retrieval; auditable explanations; and later human-supervised learning from confirmed outcomes.
+
+**Shared gate:** Each engine requires a separately authorized research and architecture mission, Ethiopian legal/operational review, explicit policy and financial limits, privacy/retention approval, abuse controls, human-operations design and CTO/CEO approval. See `docs/AYO_FUTURE_TRUST_AND_AI_SUPPORT_ENGINES.md`.
+
 ## Post-launch expansion gate
 
 Express, Eat, Marketplace, Home or Pay planning may begin only after leadership confirms that the ride flow meets sustained reliability, safety, driver-earnings, support, security, financial-reconciliation and operational targets. Each expansion requires its own blueprint, state model, legal review and roadmap; shared platform capability does not erase product boundaries.

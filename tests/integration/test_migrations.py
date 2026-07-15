@@ -76,6 +76,7 @@ def test_upgrade_empty_database_matches_metadata_and_postgresql_17(
         "reservation_checkpoints",
         "reservation_flight_context",
         "reservation_idempotency_records",
+        "reservation_pickup_verifications",
         "rate_limit_buckets",
         "recovery_cases",
         "refresh_token_rotations",

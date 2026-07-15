@@ -31,6 +31,18 @@ from BACKEND.persistence.tables import (
     rate_limit_buckets,
     recovery_cases,
     refresh_token_rotations,
+    reservation_attempts,
+    reservation_checkpoints,
+    reservation_consents,
+    reservation_driver_commitments,
+    reservation_flight_context,
+    reservation_idempotency_records,
+    reservation_participants,
+    reservation_pickup_verifications,
+    reservation_planning_cycles,
+    reservation_soft_plans,
+    reservation_state_history,
+    ride_reservations,
     rides,
     role_permissions,
     roles,
@@ -72,6 +84,7 @@ def postgres_engine():
 
     # Test-only schema setup. Production startup must never call create_all().
     with engine.begin() as connection:
+        connection.execute(text("CREATE EXTENSION IF NOT EXISTS btree_gist"))
         connection.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{AYO_SCHEMA}"'))
     metadata.create_all(engine)
     yield engine
@@ -84,6 +97,18 @@ def postgres_engine():
 @pytest.fixture(autouse=True)
 def clean_postgres_tables(postgres_engine):
     with postgres_engine.begin() as connection:
+        connection.execute(delete(reservation_pickup_verifications))
+        connection.execute(delete(reservation_idempotency_records))
+        connection.execute(delete(reservation_checkpoints))
+        connection.execute(delete(reservation_attempts))
+        connection.execute(delete(reservation_soft_plans))
+        connection.execute(delete(reservation_driver_commitments))
+        connection.execute(delete(reservation_planning_cycles))
+        connection.execute(delete(reservation_state_history))
+        connection.execute(delete(reservation_consents))
+        connection.execute(delete(reservation_flight_context))
+        connection.execute(delete(reservation_participants))
+        connection.execute(delete(ride_reservations))
         connection.execute(delete(marketplace_simulation_runs))
         connection.execute(delete(marketplace_decisions))
         connection.execute(delete(marketplace_rule_sets))

@@ -98,10 +98,12 @@ class ScheduledRideApplication:
         payload_hash = request_hash(
             {
                 "booker": reservation.booker_id,
-                "passenger": reservation.passenger_participant_id,
+                "passenger_identity": passengers[0].identity_id,
+                "passenger_contact": passengers[0].contact_reference,
                 "pickup": reservation.pickup_place_id,
                 "destination": reservation.destination_place_id,
                 "pickup_at": reservation.requested_pickup_at,
+                "quote": reservation.quote_id,
             }
         )
         return self._repository.create(

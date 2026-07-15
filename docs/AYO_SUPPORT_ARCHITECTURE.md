@@ -49,3 +49,12 @@ Runtime may select/insert/update cases but not delete. It may select/insert—bu
 ## Unresolved launch decisions
 
 CEO/CTO and Ethiopian professional verification remain required for staffing/emergency procedures, anonymous recovery proof, recording/transcript consent, retention/legal hold, support disclosures, accessibility operations, and every provider/model selection.
+
+## Deferred future engines
+
+The CTO/CEO Mission 17 amendment records two non-runtime future architecture directions in `docs/AYO_FUTURE_TRUST_AND_AI_SUPPORT_ENGINES.md`:
+
+- a Customer Recovery and Trust Engine that classifies evidence and recommends idempotent, explainable service recovery while protecting drivers from verified external/platform causes; and
+- an AI Customer Support Engine that acknowledges immediately, uses minimum approved context and tools for routine cases, falls back deterministically, and hands serious or uncertain matters to humans with complete evidence.
+
+Neither engine is implemented or authorized for activation. This Mission 9 support-case foundation remains the case authority. Financial execution, automated refunds, providers, models, new data access and policy values require separate missions and approvals.

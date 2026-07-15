@@ -57,7 +57,14 @@ class InMemoryMetricsSink:
 
 
 def safe_event(logger: logging.Logger, *, event: str, outcome: str, **ids: str) -> None:
-    allowed = {"correlation_id", "ride_id", "event_id", "worker_id", "reason"}
+    allowed = {
+        "correlation_id",
+        "ride_id",
+        "reservation_id",
+        "event_id",
+        "worker_id",
+        "reason",
+    }
     if set(ids) - allowed:
         raise ValueError("Structured log field is not privacy approved")
     logger.info(event, extra={"event": event, "outcome": outcome, **ids})

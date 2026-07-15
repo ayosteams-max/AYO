@@ -23,7 +23,9 @@ from BACKEND.routes.dispatch_internal import create_dispatch_internal_router
 from BACKEND.routes.driver_offer import router as driver_offer_router
 from BACKEND.routes.ride import router as ride_router
 from BACKEND.routes.ride_status import router as ride_status_router
+from BACKEND.routes.scheduled import create_scheduled_router
 from BACKEND.routes.wallet import router as wallet_router
+from BACKEND.scheduled.integration import ScheduledIntegrationApplication
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,10 +41,20 @@ class DispatchActivation:
     metrics: MetricsSink
 
 
+@dataclass(frozen=True, slots=True)
+class ScheduledDispatchActivation:
+    application: ScheduledIntegrationApplication
+    subject_resolver: TrustedSubjectResolver
+    authorization_enforcer: AuthorizationEnforcer
+    rate_limiter: DispatchRateLimitBoundary
+    metrics: MetricsSink
+
+
 def create_app(
     configuration: Settings | None = None,
     *,
     dispatch: DispatchActivation | None = None,
+    scheduled_dispatch: ScheduledDispatchActivation | None = None,
 ) -> FastAPI:
     configured = configuration or settings
     application = FastAPI(
@@ -84,6 +96,32 @@ def create_app(
         )
     else:
         application.state.dispatch_metrics = NullMetricsSink()
+
+    if configured.SCHEDULED_DISPATCH_ENABLED:
+        if scheduled_dispatch is None:
+            raise RuntimeError(
+                "Enabled scheduled dispatch requires explicit secure dependencies"
+            )
+        application.state.authorization_enforcer = (
+            scheduled_dispatch.authorization_enforcer
+        )
+        application.state.dispatch_rate_limiter = scheduled_dispatch.rate_limiter
+        application.state.scheduled_dispatch_metrics = scheduled_dispatch.metrics
+        application.include_router(
+            create_scheduled_router(scheduled_dispatch.application),
+            prefix=configured.API_PREFIX,
+        )
+        if not configured.DISPATCH_ENABLED:
+            application.add_middleware(
+                AuthorizationContextMiddleware,
+                resolver=scheduled_dispatch.subject_resolver,
+            )
+            application.add_middleware(
+                RequestSizeLimitMiddleware,
+                maximum_bytes=configured.SCHEDULED_DISPATCH_MAX_REQUEST_BYTES,
+            )
+    else:
+        application.state.scheduled_dispatch_metrics = NullMetricsSink()
 
     @application.exception_handler(HTTPException)
     async def stable_http_error(request: Request, error: HTTPException) -> JSONResponse:

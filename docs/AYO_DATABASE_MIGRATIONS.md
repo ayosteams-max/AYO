@@ -1,5 +1,11 @@
 # AYO Database Migration Standard
 
+## Scheduled integration revision
+
+Revision `20260716_0012` adds only the hashed, expiring pickup-verification authority and scheduled RBAC permissions. It is additive and contains no personal test data. Mission 17 validated the full chain from an empty PostgreSQL 17.10 database, metadata parity, repeated upgrade and downgrade through `20260716_0010`.
+
+Rollback before activation: stop scheduled workers, confirm no reservation is in pickup verification, back up synthetic/test data if needed, then run `alembic downgrade 20260716_0011` to remove Mission 17. To remove all scheduled persistence, continue to `alembic downgrade 20260716_0010`. The shared `btree_gist` extension is deliberately retained. Production rollback requires a separately reviewed data-preservation plan.
+
 ## Support foundation revision
 
 Revision `20260715_0007` creates cases, append-only case events, separated messages and append-only AI interaction evidence plus scoped queue permissions. Runtime updates case state under optimistic concurrency, but cannot delete cases or mutate append-only evidence. Forward-fix, role separation, readiness locking and no-startup-migration rules remain unchanged.

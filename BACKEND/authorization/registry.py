@@ -27,6 +27,13 @@ PERMISSION_REGISTRY = MappingProxyType(
         "dispatch.driver.offer.respond": "Read and respond to the authenticated driver's offers.",
         "dispatch.worker.recover": "Run bounded server-side dispatch recovery.",
         "dispatch.admin.health.read": "Read internal dispatch worker health.",
+        "scheduled.rider.create": "Create a scheduled reservation as the authenticated booker.",
+        "scheduled.reservation.read": "Read an owned scheduled reservation.",
+        "scheduled.reservation.manage": "Update, confirm or cancel an owned reservation.",
+        "scheduled.driver.commitment.respond": "Respond to an authenticated driver's commitment.",
+        "scheduled.support.handoff": "Create an authorized assisted-booking support handoff.",
+        "scheduled.worker.run": "Run bounded scheduled-dispatch workers.",
+        "scheduled.worker.health.read": "Read scheduled worker health.",
     }
 )
 
