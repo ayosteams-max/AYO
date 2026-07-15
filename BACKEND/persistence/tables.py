@@ -640,6 +640,264 @@ rides = Table(
     schema=AYO_SCHEMA,
 )
 
+# Mission 13 authoritative dispatch storage. These tables intentionally do not
+# reuse the unsafe legacy rides table above.
+dispatch_ride_requests = Table(
+    "dispatch_ride_requests",
+    metadata,
+    Column("ride_id", UUID(as_uuid=True), primary_key=True),
+    Column(
+        "rider_identity_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.identities.identity_id"),
+        nullable=False,
+    ),
+    Column("pickup_place_id", String(128), nullable=False),
+    Column("pickup_display_name", String(200), nullable=False),
+    Column("destination_place_id", String(128), nullable=False),
+    Column("destination_display_name", String(200), nullable=False),
+    Column("service_type", String(40), nullable=False),
+    Column("quote_id", UUID(as_uuid=True), nullable=False),
+    Column("fare_amount_minor", Integer, nullable=False),
+    Column("currency", String(3), nullable=False),
+    Column("pricing_version", String(63), nullable=False),
+    Column("quote_expires_at", DateTime(timezone=True), nullable=False),
+    Column("state", String(32), nullable=False),
+    Column(
+        "assigned_driver_identity_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.identities.identity_id"),
+    ),
+    Column("active_offer_id", UUID(as_uuid=True)),
+    Column(
+        "attempted_driver_ids",
+        JSONB().with_variant(JSON(), "sqlite"),
+        nullable=False,
+        server_default=text("'[]'::jsonb"),
+    ),
+    Column("accepted_at", DateTime(timezone=True), nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+    Column("search_expires_at", DateTime(timezone=True), nullable=False),
+    Column("version", Integer, nullable=False, server_default=text("1")),
+    CheckConstraint("fare_amount_minor >= 0", name="dispatch_ride_nonnegative_fare"),
+    CheckConstraint("currency ~ '^[A-Z]{3}$'", name="dispatch_ride_valid_currency"),
+    CheckConstraint(
+        "service_type ~ '^[a-z][a-z0-9_.-]{1,39}$'",
+        name="dispatch_ride_valid_service_type",
+    ),
+    CheckConstraint("version > 0", name="dispatch_ride_positive_version"),
+    CheckConstraint(
+        "pickup_place_id <> destination_place_id", name="dispatch_ride_distinct_places"
+    ),
+    CheckConstraint(
+        "state IN ('searching','offering','assigned','no_driver_available','rider_cancelled')",
+        name="dispatch_ride_valid_state",
+    ),
+    schema=AYO_SCHEMA,
+)
+Index(
+    "ix_dispatch_rides_rider_state",
+    dispatch_ride_requests.c.rider_identity_id,
+    dispatch_ride_requests.c.state,
+)
+Index(
+    "ix_dispatch_rides_search_expiry",
+    dispatch_ride_requests.c.search_expires_at,
+    postgresql_where=dispatch_ride_requests.c.state.in_(["searching", "offering"]),
+)
+Index(
+    "uq_dispatch_active_ride_per_rider",
+    dispatch_ride_requests.c.rider_identity_id,
+    unique=True,
+    postgresql_where=dispatch_ride_requests.c.state.in_(
+        ["searching", "offering", "assigned"]
+    ),
+)
+
+dispatch_attempts = Table(
+    "dispatch_attempts",
+    metadata,
+    Column("attempt_id", UUID(as_uuid=True), primary_key=True),
+    Column(
+        "ride_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.dispatch_ride_requests.ride_id"),
+        nullable=False,
+    ),
+    Column(
+        "driver_identity_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.identities.identity_id"),
+        nullable=False,
+    ),
+    Column("sequence_number", Integer, nullable=False),
+    Column("pickup_eta_seconds", Integer, nullable=False),
+    Column("policy_version", String(63), nullable=False),
+    Column("reason_codes", JSONB().with_variant(JSON(), "sqlite"), nullable=False),
+    Column("outcome", String(24), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("resolved_at", DateTime(timezone=True)),
+    CheckConstraint("sequence_number > 0", name="dispatch_attempt_positive_sequence"),
+    CheckConstraint(
+        "pickup_eta_seconds BETWEEN 0 AND 14400", name="dispatch_attempt_valid_eta"
+    ),
+    CheckConstraint(
+        "outcome IN ('offered','accepted','declined','expired','revoked')",
+        name="dispatch_attempt_valid_outcome",
+    ),
+    UniqueConstraint("ride_id", "sequence_number", name="uq_dispatch_attempts_ride_id"),
+    UniqueConstraint(
+        "ride_id",
+        "driver_identity_id",
+        name="uq_dispatch_attempts_ride_id_driver_identity_id",
+    ),
+    schema=AYO_SCHEMA,
+)
+
+dispatch_driver_offers = Table(
+    "dispatch_driver_offers",
+    metadata,
+    Column("offer_id", UUID(as_uuid=True), primary_key=True),
+    Column(
+        "attempt_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.dispatch_attempts.attempt_id"),
+        nullable=False,
+        unique=True,
+    ),
+    Column(
+        "ride_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.dispatch_ride_requests.ride_id"),
+        nullable=False,
+    ),
+    Column(
+        "driver_identity_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.identities.identity_id"),
+        nullable=False,
+    ),
+    Column("state", String(16), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("expires_at", DateTime(timezone=True), nullable=False),
+    Column("resolved_at", DateTime(timezone=True)),
+    Column("policy_version", String(63), nullable=False),
+    Column("score_snapshot", JSONB().with_variant(JSON(), "sqlite"), nullable=False),
+    Column("version", Integer, nullable=False, server_default=text("1")),
+    CheckConstraint("expires_at > created_at", name="dispatch_offer_valid_lifetime"),
+    CheckConstraint(
+        "state IN ('created','accepted','declined','expired','revoked')",
+        name="dispatch_offer_valid_state",
+    ),
+    schema=AYO_SCHEMA,
+)
+Index(
+    "ix_dispatch_offers_expiry",
+    dispatch_driver_offers.c.expires_at,
+    postgresql_where=dispatch_driver_offers.c.state == "created",
+)
+Index(
+    "uq_dispatch_active_offer_per_ride",
+    dispatch_driver_offers.c.ride_id,
+    unique=True,
+    postgresql_where=dispatch_driver_offers.c.state == "created",
+)
+Index(
+    "uq_dispatch_active_offer_per_driver",
+    dispatch_driver_offers.c.driver_identity_id,
+    unique=True,
+    postgresql_where=dispatch_driver_offers.c.state == "created",
+)
+
+dispatch_assignments = Table(
+    "dispatch_assignments",
+    metadata,
+    Column("assignment_id", UUID(as_uuid=True), primary_key=True),
+    Column(
+        "ride_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.dispatch_ride_requests.ride_id"),
+        nullable=False,
+        unique=True,
+    ),
+    Column(
+        "offer_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.dispatch_driver_offers.offer_id"),
+        nullable=False,
+        unique=True,
+    ),
+    Column(
+        "driver_identity_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.identities.identity_id"),
+        nullable=False,
+    ),
+    Column("assigned_at", DateTime(timezone=True), nullable=False),
+    Column("released_at", DateTime(timezone=True)),
+    CheckConstraint(
+        "released_at IS NULL OR released_at >= assigned_at",
+        name="dispatch_assignment_valid_lifetime",
+    ),
+    schema=AYO_SCHEMA,
+)
+Index(
+    "uq_dispatch_active_assignment_per_driver",
+    dispatch_assignments.c.driver_identity_id,
+    unique=True,
+    postgresql_where=dispatch_assignments.c.released_at.is_(None),
+)
+
+dispatch_idempotency_records = Table(
+    "dispatch_idempotency_records",
+    metadata,
+    Column(
+        "rider_identity_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.identities.identity_id"),
+        primary_key=True,
+    ),
+    Column("key_fingerprint", String(64), primary_key=True),
+    Column("request_hash", String(64), nullable=False),
+    Column(
+        "ride_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.dispatch_ride_requests.ride_id"),
+        nullable=False,
+    ),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("expires_at", DateTime(timezone=True), nullable=False),
+    CheckConstraint(
+        "expires_at > created_at", name="dispatch_idempotency_valid_lifetime"
+    ),
+    schema=AYO_SCHEMA,
+)
+
+dispatch_outbox = Table(
+    "dispatch_outbox",
+    metadata,
+    Column("message_id", UUID(as_uuid=True), primary_key=True),
+    Column("aggregate_type", String(32), nullable=False),
+    Column("aggregate_id", UUID(as_uuid=True), nullable=False),
+    Column("event_type", String(63), nullable=False),
+    Column("payload", JSONB().with_variant(JSON(), "sqlite"), nullable=False),
+    Column("occurred_at", DateTime(timezone=True), nullable=False),
+    Column("available_at", DateTime(timezone=True), nullable=False),
+    Column("claimed_at", DateTime(timezone=True)),
+    Column("claimed_by", String(64)),
+    Column("published_at", DateTime(timezone=True)),
+    Column("attempt_count", Integer, nullable=False, server_default=text("0")),
+    Column("last_error_code", String(63)),
+    CheckConstraint("attempt_count >= 0", name="dispatch_outbox_nonnegative_attempts"),
+    schema=AYO_SCHEMA,
+)
+Index(
+    "ix_dispatch_outbox_pending",
+    dispatch_outbox.c.available_at,
+    dispatch_outbox.c.occurred_at,
+    postgresql_where=dispatch_outbox.c.published_at.is_(None),
+)
+
 legacy_wallets = Table(
     "legacy_wallets",
     metadata,

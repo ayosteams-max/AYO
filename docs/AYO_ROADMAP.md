@@ -209,41 +209,43 @@ This roadmap is subordinate to `AYO_CONSTITUTION.md`. No mission or acceptance c
 
 **Dependencies:** Missions 4–10.
 
-## Mission 12 — Safety, support, ratings and disputes
+## Mission 12 — Immediate dispatch implementation
 
-**Objective:** Give riders, drivers and operations safe, auditable help before public launch.
+**Objective:** Implement the approved server-authoritative immediate-dispatch architecture so one authenticated rider request is created once, matched transparently to the fastest suitable driver and recovered safely across retries, offer failures and weak networks.
 
-**Scope:** SOS/help, trip sharing, incident/support cases, privacy-preserving contact, ratings, disputes, compensating financial resolution and role-restricted operations queues.
+**Scope:** Server-authoritative ride creation, idempotent commands, deterministic immediate matching, neutral new-driver reputation, explainable decisions, exclusive time-bounded offers, rejection/expiry reassignment, privacy-safe audit and weak-network recovery.
 
-**Exclusions:** Unverified emergency-service promises and fully autonomous punitive decisions.
+**Exclusions:** Scheduled rides, pre-dispatch, opaque/ML ranking, payment implementation, irreversible database migration and security-sensitive production activation without a separate gate.
 
-**Technical work:** Case model, safety escalation, evidence controls, notification integration, rating integrity, support SLAs and approved resolution commands.
+**Technical work:** Canonical immediate-ride/offer/driver state, provider-neutral candidate/ETA contracts, bounded candidate funnel, configurable versioned scoring, idempotency outcomes, optimistic concurrency, automatic offer progression, audit evidence and recovery projections.
 
-**Tests:** SOS delivery/degradation, unauthorized case access, evidence retention, duplicate/retaliatory rating controls, dispute/adjustment audit and escalation exercises.
+**Tests:** Duplicate/conflicting retries, every transition, stale clients, no candidates, timeout/rejection, concurrent acceptance/reservation/cancellation, neutral reputation, prohibited inputs, audit privacy, worker replay and poor-network recovery.
 
-**Security checks:** Safety/privacy threat model, staff least privilege, access reasons, sensitive export controls, insider-risk monitoring and incident tabletop.
+**Security checks:** Trusted actor identity, ride/offer ownership, replay/race resistance, location minimization, fake-location boundaries, opaque identifiers, decision-policy integrity and no client-authoritative fare/ETA/state.
 
-**Acceptance criteria:** Safety events reach an owned queue and are acknowledged; access is audited; disputes never edit ledger history; operating procedures are trained and exercised.
+**Acceptance criteria:** One idempotent request creates one ride; one assignment wins; the fastest safe reliable candidate is offered under explainable policy; decline/expiry progresses automatically; new drivers are neutral; clients recover authoritative state; audit evidence is complete and privacy safe.
 
-**Dependencies:** Missions 6, 9–11; emergency, recording, support and appeal policies legally/operationally verified.
+**Dependencies:** Approved Mission 11 dispatch architecture and applicable identity, ride-lifecycle, map/ETA, driver-verification and quote authority. Production activation remains gated where prerequisites are not deployed.
 
-## Mission 13 — Scheduled rides and smart pre-dispatch
+## Mission 13 — Production dispatch persistence and secure API foundation
 
-**Objective:** Improve planned-ride reliability and driver utilization after immediate dispatch is stable.
+**Objective:** Make immediate dispatch durable, transactionally consistent, authenticated and recoverable across process restarts without activating production traffic.
 
-**Scope:** Scheduled booking/reconfirmation, advance candidate planning, shortage escalation and feature-flagged end-of-trip pre-dispatch.
+**Scope:** PostgreSQL ride/attempt/offer/assignment/idempotency/audit persistence, transactional outbox, authenticated rider/driver API boundaries, RBAC and ownership enforcement, offer expiry, automatic reassignment, abandoned-search handling and bounded restart recovery.
 
-**Exclusions:** Guarantees, penalties or ranking policy not approved by leadership.
+**Exclusions:** Scheduled rides, pre-dispatch, payments, AI ranking, deployment, secrets, external production services, real customer data, irreversible migration and public production activation.
 
-**Technical work:** Separate strategy modules, forecasting inputs, predicted completion confidence, reservation windows, communications and experiment controls.
+**Technical work:** Additive reversible PostgreSQL migration, constraints/partial indexes, transactional repository, outbox records, sanitized API projections, trusted-subject boundaries, dispatch permissions and scheduler-neutral worker.
 
-**Tests:** Early/late completion, cancellation, no supply, stale forecasts, overlap prevention, current-trip protection, driver interaction safety and rollback.
+**Tests:** Migration/schema parity and downgrade, transaction rollback, concurrent idempotency and acceptance, exclusive offers/assignments, timeout/reassignment, restart recovery, authorization/ownership, response minimization and audit/outbox consistency.
 
-**Security checks:** Location-purpose limitation, explainable decisions, no covert driver tracking, authorization and feature-flag audit.
+**Security checks:** Deny-by-default RBAC, server-derived rider/driver identity, resource ownership, least-privilege database grants, privacy-safe audit/outbox payloads, input bounds, dependency audit and static analysis.
 
-**Acceptance criteria:** Scheduled logic does not degrade immediate dispatch; pre-dispatch never double-books or harms the active trip; reliability/utilization improvement meets approved gates.
+**Acceptance criteria:** Durable state matches domain contracts; business state, audit and outbox commit atomically; retries create one ride; one active offer/assignment wins; worker recovery is bounded and retry safe; no internal score or other-driver data is public; downgrade works before activation.
 
-**Dependencies:** Stable Missions 8 and 11–12; leadership approves promises, lead times and rollout metrics.
+**Dependencies:** Approved Mission 12 immediate-dispatch foundation plus existing PostgreSQL, identity, authentication and authorization foundations. Production authentication resolver/key activation remains separately gated.
+
+Scheduled rides and smart pre-dispatch remain deferred and unnumbered until leadership authorizes a later roadmap position.
 
 ## Mission 14 — Production resilience and controlled launch
 

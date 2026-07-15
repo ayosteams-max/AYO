@@ -418,3 +418,36 @@ Supersedes / superseded by:
 - **Alternatives considered:** Provider calls in UI create lock-in and credential risk; a new state/search dependency is unnecessary; backend and provider selection exceed this mission.
 - **Risks:** The offline catalog is not a production source of truth; real provider attribution, localization, result ranking, durable personal places and precise-location handling remain unimplemented.
 - **Revisit when:** The map-provider/backend contract is approved, measured search quality or latency misses its target, or authenticated saved/recent storage is authorized.
+
+### PA-012 — Mission 11 rider-request and dispatch sequencing clarification
+
+- **Date:** 2026-07-15
+- **Status:** Proposal awaiting CTO review and CEO approval; no architecture or implementation authorized.
+- **Conflict identified:** The requested “Mission 11 — Driver Request & AI Dispatch Foundation” combines Roadmap Mission 11 launch-app UI with work governed by Mission 6 (canonical request/idempotency), Mission 8 (immediate dispatch) and Mission 9 (server-authoritative quote/fare). Roadmap Mission 11 depends on Missions 4–10.
+- **Proposed resolution:** Do not connect the mobile client to the unsafe prototype or create a client-authoritative ride object. Review `docs/MISSION_11_DRIVER_REQUEST_DISPATCH_RESEARCH.md` and decide whether to preserve roadmap order or explicitly authorize a bounded vertical-slice re-sequencing. The recommended direction is an authenticated, idempotent server request plus deterministic provider-neutral dispatch strategy; AI remains a future governed adapter.
+- **Authority needed:** CTO technical/dependency review followed by CEO product and sequencing approval. Exact ETA meaning, search/safety wording, cancellation/no-driver behavior and any ranking/livelihood tradeoff require leadership decisions; location/privacy obligations require qualified Ethiopian review before launch.
+
+### PA-013 — Mission 11 immediate-dispatch architecture package
+
+- **Date:** 2026-07-15
+- **Status:** Superseded by the approvals and bounded implementation authorization recorded in AP-025 on 2026-07-15.
+- **Proposal:** Adopt the server-authoritative modular-monolith design in `docs/AYO_DISPATCH_ARCHITECTURE_PROPOSAL.md`: authenticated idempotent request acceptance, atomic ride/history/idempotency/outbox transaction, bounded staged dispatch, deterministic explainable matching, atomic reservation/assignment, two-sided fairness guardrails, provider-neutral ETA, weak-network recovery and governed future AI strategy ports.
+- **Explicit exclusions:** No runtime code, executable migration, provider selection, policy value, production dependency, infrastructure, AI model or production integration. Do not connect the mobile app to the unsafe legacy ride endpoint.
+- **Approval sequence clarification:** The required CTO technical review and subsequent CEO confirmation were recorded in AP-025.
+
+### AP-025 — Mission 12 immediate-dispatch implementation authorization
+
+- **Date:** 2026-07-15
+- **Status:** CTO architecture approval and CEO final architecture, roadmap-resequencing and implementation approval recorded.
+- **Decision:** Mission 12 becomes Immediate Dispatch Implementation. Mission 13 remains Scheduled Ride Dispatch and Pre-Dispatch. Implement server-authoritative ride creation, request idempotency, deterministic immediate dispatch, driver-offer timeout and automatic reassignment, audit logging, weak-network retry/recovery, explainable decisions and neutral new-driver reputation until sufficient completed-trip history exists.
+- **Explicit exclusions/gates:** No scheduled rides or pre-dispatch in Mission 12. Stop before irreversible database migration, payment implementation or security-sensitive production activation.
+- **Rationale:** This preserves the approved deterministic-first, provider-neutral modular-monolith architecture and prevents client-authoritative state, opaque livelihood penalties and premature AI/dispatch complexity.
+
+### AP-026 — Mission 13 production dispatch persistence and secure API foundation
+
+- **Date:** 2026-07-16
+- **Status:** CTO and CEO implementation approval recorded.
+- **Decision:** Add reversible PostgreSQL dispatch persistence, transactional repositories and outbox, authenticated rider/driver API contracts with RBAC and ownership enforcement, and bounded server-controlled expiry/recovery. Preserve all Mission 12 deterministic, fairness, privacy and neutral-new-driver rules.
+- **Explicit exclusions/gates:** No scheduled rides, pre-dispatch, payments, AI ranking, deployment, secrets, external production services, real customer data or public production activation. Stop before an irreversible migration.
+- **Rationale:** Durable atomic state is required for safe retries, concurrent workers and Ethiopian-network recovery. Extending the modular monolith with PostgreSQL transactions is simpler and safer than process memory, legacy ride storage or premature distributed infrastructure.
+- **Alternatives and risks:** Do not promote the float/JSON-based legacy `rides` table. Event sourcing and a broker are unnecessary now. Candidate discovery remains a provider-neutral dependency; authentication resolver/key activation and Ethiopian privacy/operational review remain launch gates.

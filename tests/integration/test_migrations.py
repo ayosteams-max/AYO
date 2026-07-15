@@ -11,6 +11,7 @@ from BACKEND.persistence.migrations import (
     MigrationLockTimeout,
     MigrationRunner,
     SchemaVersionReadinessChecker,
+    alembic_config,
     expected_schema_revision,
 )
 from BACKEND.persistence.tables import AYO_SCHEMA, VERSION_TABLE, metadata
@@ -50,6 +51,12 @@ def test_upgrade_empty_database_matches_metadata_and_postgresql_17(
         "audit_events",
         "authentication_challenges",
         "credential_verifiers",
+        "dispatch_assignments",
+        "dispatch_attempts",
+        "dispatch_driver_offers",
+        "dispatch_idempotency_records",
+        "dispatch_outbox",
+        "dispatch_ride_requests",
         "identities",
         "identity_authentication_methods",
         "identity_devices",
@@ -126,6 +133,24 @@ def test_runtime_role_has_append_read_but_not_mutation_privileges(
                 ).scalar_one()
                 is False
             )
+            assert not connection.execute(
+                text(
+                    "SELECT has_table_privilege("
+                    "'ayo_runtime', 'ayo.dispatch_assignments', 'UPDATE')"
+                )
+            ).scalar_one()
+            assert not connection.execute(
+                text(
+                    "SELECT has_table_privilege("
+                    "'ayo_runtime', 'ayo.dispatch_idempotency_records', 'UPDATE')"
+                )
+            ).scalar_one()
+            assert connection.execute(
+                text(
+                    "SELECT has_table_privilege("
+                    "'ayo_runtime', 'ayo.dispatch_outbox', 'UPDATE')"
+                )
+            ).scalar_one()
             assert (
                 connection.execute(
                     text(
@@ -280,3 +305,20 @@ def test_failed_run_releases_lock_and_recovery_succeeds(
     monkeypatch.setattr(migrations.command, "upgrade", real_upgrade)
     MigrationRunner(postgres_engine, lock_timeout_seconds=1).upgrade()
     assert SchemaVersionReadinessChecker(postgres_engine).check().ready
+
+
+def test_dispatch_migration_is_reversible_before_activation(
+    postgres_engine, empty_database
+) -> None:
+    runner = MigrationRunner(postgres_engine)
+    runner.upgrade()
+    from alembic import command
+
+    config = alembic_config()
+    config.attributes["connection"] = postgres_engine.connect()
+    try:
+        command.downgrade(config, "20260715_0007")
+    finally:
+        config.attributes["connection"].close()
+    tables = set(inspect(postgres_engine).get_table_names(schema=AYO_SCHEMA))
+    assert not any(name.startswith("dispatch_") for name in tables)

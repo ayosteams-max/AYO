@@ -23,6 +23,9 @@ PERMISSION_REGISTRY = MappingProxyType(
         "support.queue.finance.access": "Access restricted finance support cases.",
         "support.queue.identity.access": "Access restricted identity support cases.",
         "support.queue.legal.access": "Access restricted legal support cases.",
+        "dispatch.rider.request": "Create and recover the authenticated rider's rides.",
+        "dispatch.driver.offer.respond": "Read and respond to the authenticated driver's offers.",
+        "dispatch.worker.recover": "Run bounded server-side dispatch recovery.",
     }
 )
 

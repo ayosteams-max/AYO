@@ -12,6 +12,12 @@ from BACKEND.persistence.tables import (
     audit_events,
     authentication_challenges,
     credential_verifiers,
+    dispatch_assignments,
+    dispatch_attempts,
+    dispatch_driver_offers,
+    dispatch_idempotency_records,
+    dispatch_outbox,
+    dispatch_ride_requests,
     identities,
     identity_authentication_methods,
     identity_devices,
@@ -75,6 +81,12 @@ def postgres_engine():
 @pytest.fixture(autouse=True)
 def clean_postgres_tables(postgres_engine):
     with postgres_engine.begin() as connection:
+        connection.execute(delete(dispatch_outbox))
+        connection.execute(delete(dispatch_idempotency_records))
+        connection.execute(delete(dispatch_assignments))
+        connection.execute(delete(dispatch_driver_offers))
+        connection.execute(delete(dispatch_attempts))
+        connection.execute(delete(dispatch_ride_requests))
         connection.execute(delete(support_ai_interactions))
         connection.execute(delete(support_case_messages))
         connection.execute(delete(support_case_events))

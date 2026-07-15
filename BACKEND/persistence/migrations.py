@@ -124,6 +124,12 @@ class SchemaVersionReadinessChecker:
                         " AND to_regclass('ayo.support_case_events') IS NOT NULL"
                         " AND to_regclass('ayo.support_case_messages') IS NOT NULL"
                         " AND to_regclass('ayo.support_ai_interactions') IS NOT NULL"
+                        " AND to_regclass('ayo.dispatch_ride_requests') IS NOT NULL"
+                        " AND to_regclass('ayo.dispatch_attempts') IS NOT NULL"
+                        " AND to_regclass('ayo.dispatch_driver_offers') IS NOT NULL"
+                        " AND to_regclass('ayo.dispatch_assignments') IS NOT NULL"
+                        " AND to_regclass('ayo.dispatch_idempotency_records') IS NOT NULL"
+                        " AND to_regclass('ayo.dispatch_outbox') IS NOT NULL"
                     )
                 ).scalar_one()
             ready = current == expected and bool(required_tables)

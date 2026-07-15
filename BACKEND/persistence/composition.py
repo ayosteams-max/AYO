@@ -4,6 +4,11 @@ from BACKEND.persistence.audit_repository import PostgresAuditEventRepository
 from BACKEND.persistence.authorization_repository import (
     PostgresAuthorizationRepository,
 )
+from BACKEND.persistence.dispatch_repository import (
+    DriverCandidateGateway,
+    NoDriverCandidateGateway,
+    PostgresDispatchRepository,
+)
 from BACKEND.persistence.identity_repository import (
     PostgresAuthenticationChallengeRepository,
     PostgresIdentityRepository,
@@ -21,6 +26,10 @@ from BACKEND.persistence.unit_of_work import SqlAlchemyUnitOfWork
 
 class AyoPostgresUnitOfWork(SqlAlchemyUnitOfWork):
     """Current typed composition; future domains add repositories here."""
+
+    def __enter__(self) -> "AyoPostgresUnitOfWork":
+        super().__enter__()
+        return self
 
     @property
     def rides(self) -> PostgresRideRepository:
@@ -64,12 +73,22 @@ class AyoPostgresUnitOfWork(SqlAlchemyUnitOfWork):
     def support(self) -> PostgresSupportRepository:
         return self.repository("support", PostgresSupportRepository)
 
+    @property
+    def dispatch(self) -> PostgresDispatchRepository:
+        return self.repository("dispatch", PostgresDispatchRepository)
+
 
 class PostgresRepositoryComposition:
     """Process-scoped factory for transaction-scoped repository sets."""
 
-    def __init__(self, engine: Engine) -> None:
+    def __init__(
+        self,
+        engine: Engine,
+        *,
+        dispatch_candidates: DriverCandidateGateway | None = None,
+    ) -> None:
         self._engine = engine
+        candidate_gateway = dispatch_candidates or NoDriverCandidateGateway()
         self._factories = {
             "rides": PostgresRideRepository,
             "legacy_wallets": PostgresLegacyWalletRepository,
@@ -81,6 +100,9 @@ class PostgresRepositoryComposition:
             "refresh_tokens": PostgresRefreshTokenRepository,
             "authorization": PostgresAuthorizationRepository,
             "support": PostgresSupportRepository,
+            "dispatch": lambda connection: PostgresDispatchRepository(
+                connection, candidate_gateway
+            ),
         }
 
     def unit_of_work(self) -> AyoPostgresUnitOfWork:
