@@ -407,3 +407,14 @@ Supersedes / superseded by:
 - **Revisit when:** The Support domain contracts and customer journeys are approved,
   provider/data-flow research is complete, or measured operations justify narrower
   permissions. Expansion requires CEO/CTO approval and a forward migration.
+
+### ED-010 — Provider-neutral rider destination search boundary
+
+- **Date:** 2026-07-15
+- **Status:** Founder/CEO and CTO implementation instruction approved; implemented and verified, awaiting final mission approval.
+- **Problem:** The rider home flow needs destination search without locking AYO to a map provider or presenting prototype data as durable production state.
+- **Decision:** Use a typed, abortable and bounded destination-search gateway behind a dedicated Expo Router stack screen. Keep the current catalog in an explicitly named offline adapter and defer remote provider selection, authenticated saved/recent persistence and maps to their approved missions.
+- **Why:** The boundary supports Google, OpenStreetMap or an AYO backend adapter without UI rewrites, adds no dependency and keeps weak-network behavior lightweight.
+- **Alternatives considered:** Provider calls in UI create lock-in and credential risk; a new state/search dependency is unnecessary; backend and provider selection exceed this mission.
+- **Risks:** The offline catalog is not a production source of truth; real provider attribution, localization, result ranking, durable personal places and precise-location handling remain unimplemented.
+- **Revisit when:** The map-provider/backend contract is approved, measured search quality or latency misses its target, or authenticated saved/recent storage is authorized.
