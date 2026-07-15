@@ -17,6 +17,12 @@ PERMISSION_REGISTRY = MappingProxyType(
         "support.payment.read_status": "Read payment status without credentials or mutation authority.",
         "support.account.read_limited": "Read the minimum approved account support view.",
         "support.guidance.provide": "Provide approved low-risk support guidance.",
+        "support.queue.general.access": "Access support cases assigned to the general queue.",
+        "support.queue.safety.access": "Access restricted safety support cases.",
+        "support.queue.fraud.access": "Access restricted fraud support cases.",
+        "support.queue.finance.access": "Access restricted finance support cases.",
+        "support.queue.identity.access": "Access restricted identity support cases.",
+        "support.queue.legal.access": "Access restricted legal support cases.",
     }
 )
 

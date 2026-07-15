@@ -1,5 +1,9 @@
 # AYO Authorization Architecture
 
+## Support resource policy
+
+Mission 9 adds resource policy around RBAC: customer ownership, assigned AI service identity plus permission, or permitted staff queue. Six `support.queue.<queue>.access` permissions separate human queues and are never included in the AI support permission set. Assignment is server-authoritative and deny-by-default; details are in `AYO_SUPPORT_ARCHITECTURE.md`.
+
 Status: Mission 8 approved architecture. This defines implementation boundaries,
 not the final operational role matrix.
 

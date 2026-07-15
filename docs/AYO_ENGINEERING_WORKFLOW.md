@@ -1,5 +1,9 @@
 # AYO Engineering Workflow
 
+## Support-provider gate
+
+AI, speech, telephony, messaging, email and external ticketing integrations require a separate evidence-based comparison and CEO/CTO approval. Measure queue outcomes, latency, escalation quality, language accuracy, privacy failures and cost before adding Redis, brokers, vector databases or provider-specific infrastructure.
+
 Version: 1.0  
 Adopted: 2026-07-14  
 Status: mandatory for every mission  

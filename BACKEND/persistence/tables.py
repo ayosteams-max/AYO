@@ -417,6 +417,177 @@ Index(
     audit_events.c.resource_type,
     audit_events.c.resource_id,
 )
+
+support_cases = Table(
+    "support_cases",
+    metadata,
+    Column("case_id", UUID(as_uuid=True), primary_key=True),
+    Column("public_reference", UUID(as_uuid=True), nullable=False, unique=True),
+    Column(
+        "requester_identity_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.identities.identity_id"),
+    ),
+    Column("requester_type", String(24), nullable=False),
+    Column("source_channel", String(32), nullable=False),
+    Column("category", String(40), nullable=False),
+    Column("priority", String(16), nullable=False),
+    Column("risk_classification", String(24), nullable=False),
+    Column("status", String(32), nullable=False),
+    Column("assigned_queue", String(24), nullable=False),
+    Column(
+        "assigned_human_identity_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.identities.identity_id"),
+    ),
+    Column(
+        "ai_service_identity_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.identities.identity_id"),
+    ),
+    Column("related_ride_reference", String(128)),
+    Column("related_payment_status_reference", String(128)),
+    Column("correlation_id", UUID(as_uuid=True), nullable=False),
+    Column("idempotency_key", String(128), nullable=False, unique=True),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+    Column("resolved_at", DateTime(timezone=True)),
+    Column("closed_at", DateTime(timezone=True)),
+    Column("escalation_reason", String(63)),
+    Column("resolution_category", String(63)),
+    Column("retention_classification", String(32), nullable=False),
+    Column("version", Integer, nullable=False, server_default=text("1")),
+    CheckConstraint("version > 0", name="positive_version"),
+    CheckConstraint(
+        "requester_type IN ('anonymous','rider','driver','merchant','staff','service')",
+        name="valid_requester_type",
+    ),
+    CheckConstraint(
+        "status IN ('new','gathering_information','in_progress',"
+        "'waiting_for_customer','waiting_for_internal_team','escalated',"
+        "'resolved','closed','cancelled')",
+        name="valid_status",
+    ),
+    CheckConstraint(
+        "assigned_queue IN ('general','safety','fraud','finance','identity','legal')",
+        name="valid_queue",
+    ),
+    CheckConstraint(
+        "priority IN ('low','normal','high','urgent','emergency')",
+        name="valid_priority",
+    ),
+    CheckConstraint(
+        "risk_classification IN ('routine','sensitive','safety','fraud','financial',"
+        "'identity','legal','account_takeover')",
+        name="valid_risk",
+    ),
+    schema=AYO_SCHEMA,
+)
+Index("ix_support_cases_requester", support_cases.c.requester_identity_id)
+Index(
+    "ix_support_cases_queue_status",
+    support_cases.c.assigned_queue,
+    support_cases.c.status,
+)
+Index("ix_support_cases_ai_assignment", support_cases.c.ai_service_identity_id)
+Index("ix_support_cases_human_assignment", support_cases.c.assigned_human_identity_id)
+
+support_case_events = Table(
+    "support_case_events",
+    metadata,
+    Column("event_id", UUID(as_uuid=True), primary_key=True),
+    Column(
+        "case_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.support_cases.case_id"),
+        nullable=False,
+    ),
+    Column("event_type", String(40), nullable=False),
+    Column("actor_identity_id", UUID(as_uuid=True)),
+    Column("actor_type", String(24), nullable=False),
+    Column("correlation_id", UUID(as_uuid=True), nullable=False),
+    Column("safe_metadata", JSONB().with_variant(JSON(), "sqlite"), nullable=False),
+    Column("occurred_at", DateTime(timezone=True), nullable=False),
+    CheckConstraint(
+        "actor_type IN ('anonymous','rider','driver','merchant','staff','service')",
+        name="valid_actor_type",
+    ),
+    schema=AYO_SCHEMA,
+)
+Index(
+    "ix_support_case_events_case_time",
+    support_case_events.c.case_id,
+    support_case_events.c.occurred_at,
+)
+Index("ix_support_case_events_correlation", support_case_events.c.correlation_id)
+
+support_case_messages = Table(
+    "support_case_messages",
+    metadata,
+    Column("message_id", UUID(as_uuid=True), primary_key=True),
+    Column(
+        "case_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.support_cases.case_id"),
+        nullable=False,
+    ),
+    Column(
+        "author_identity_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.identities.identity_id"),
+    ),
+    Column("visibility", String(24), nullable=False),
+    Column("language_tag", String(35), nullable=False),
+    Column("content", String(2000), nullable=False),
+    Column("redaction_applied", Boolean, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    CheckConstraint(
+        "visibility IN ('customer_visible','internal_note')", name="valid_visibility"
+    ),
+    CheckConstraint("char_length(content) BETWEEN 1 AND 2000", name="bounded_content"),
+    schema=AYO_SCHEMA,
+)
+Index(
+    "ix_support_case_messages_case_time",
+    support_case_messages.c.case_id,
+    support_case_messages.c.created_at,
+)
+
+support_ai_interactions = Table(
+    "support_ai_interactions",
+    metadata,
+    Column("interaction_id", UUID(as_uuid=True), primary_key=True),
+    Column("conversation_id", UUID(as_uuid=True), nullable=False),
+    Column(
+        "case_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.support_cases.case_id"),
+        nullable=False,
+    ),
+    Column(
+        "ai_service_identity_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.identities.identity_id"),
+        nullable=False,
+    ),
+    Column("model_reference", String(63)),
+    Column("model_version_reference", String(63)),
+    Column("confidence_band", String(16), nullable=False),
+    Column("action_category", String(63), nullable=False),
+    Column("escalation_reason", String(63)),
+    Column("human_takeover_at", DateTime(timezone=True)),
+    Column("correlation_id", UUID(as_uuid=True), nullable=False),
+    Column("safe_outcome_category", String(63), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    CheckConstraint(
+        "confidence_band IN ('unknown','low','medium','high')", name="valid_confidence"
+    ),
+    schema=AYO_SCHEMA,
+)
+Index("ix_support_ai_interactions_case", support_ai_interactions.c.case_id)
+Index(
+    "ix_support_ai_interactions_conversation", support_ai_interactions.c.conversation_id
+)
 Index("ix_audit_events_action", audit_events.c.action)
 Index("ix_audit_events_correlation_id", audit_events.c.correlation_id)
 Index("ix_audit_events_outcome", audit_events.c.outcome)

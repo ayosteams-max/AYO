@@ -120,6 +120,10 @@ class SchemaVersionReadinessChecker:
                         " AND to_regclass('ayo.roles') IS NOT NULL"
                         " AND to_regclass('ayo.role_permissions') IS NOT NULL"
                         " AND to_regclass('ayo.identity_role_assignments') IS NOT NULL"
+                        " AND to_regclass('ayo.support_cases') IS NOT NULL"
+                        " AND to_regclass('ayo.support_case_events') IS NOT NULL"
+                        " AND to_regclass('ayo.support_case_messages') IS NOT NULL"
+                        " AND to_regclass('ayo.support_ai_interactions') IS NOT NULL"
                     )
                 ).scalar_one()
             ready = current == expected and bool(required_tables)

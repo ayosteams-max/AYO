@@ -58,6 +58,7 @@ markers = [
     "session_persistence: requires PostgreSQL 17 session and rate-limit storage",
     "authentication: requires PostgreSQL 17 identity and authentication storage",
     "authorization: requires PostgreSQL 17 RBAC authorization storage",
+    "support: requires PostgreSQL 17 support foundation storage",
 ]
 
 [tool.coverage.run]

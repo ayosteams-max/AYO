@@ -1,5 +1,9 @@
 # AYO Master Blueprint
 
+## Support and internal operations (Mission 9 baseline)
+
+AYO support is a bounded PostgreSQL-backed case workflow in the modular monolith, ready for Amharic and English AI chat/voice and human operations without selecting a provider. AI uses a dedicated least-privilege service identity; safety, fraud, finance, identity, legal and account-takeover work escalates to separated human queues. The authoritative design is in `AYO_SUPPORT_ARCHITECTURE.md`.
+
 Version: 1.0  
 Status: product-system blueprint  
 Authority: the permanent principles below are approved for this repository. Detailed commercial and operating policies remain with the Founder and AYO leadership.

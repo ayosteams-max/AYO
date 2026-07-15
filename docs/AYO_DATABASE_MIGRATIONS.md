@@ -1,5 +1,9 @@
 # AYO Database Migration Standard
 
+## Support foundation revision
+
+Revision `20260715_0007` creates cases, append-only case events, separated messages and append-only AI interaction evidence plus scoped queue permissions. Runtime updates case state under optimistic concurrency, but cannot delete cases or mutate append-only evidence. Forward-fix, role separation, readiness locking and no-startup-migration rules remain unchanged.
+
 ## Decision and tool comparison
 
 AYO uses Alembic for reviewed, versioned PostgreSQL migrations. It fits the

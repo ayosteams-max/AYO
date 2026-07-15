@@ -1,5 +1,9 @@
 # AYO Security Baseline
 
+## Support data
+
+Support storage is minimum-necessary and rejects credentials, OTPs, tokens, payment security values and unrestricted source records. Customer messages and internal notes are separate. Restricted queues require resource-level authorization. Recordings/transcripts are not retained by default; purpose, consent, redaction, retention and Ethiopian legal review are prerequisites. Runtime cannot update/delete append-only support evidence.
+
 Status: mandatory engineering baseline. It does not replace Ethiopian legal review, provider requirements, threat modelling or independent security assessment.
 
 This baseline implements the security obligations of `AYO_CONSTITUTION.md`. Where controls differ, the stronger lawful protection applies and the decision must be recorded.

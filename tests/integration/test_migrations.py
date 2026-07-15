@@ -64,6 +64,10 @@ def test_upgrade_empty_database_matches_metadata_and_postgresql_17(
         "sessions",
         "token_families",
         "permissions",
+        "support_cases",
+        "support_case_events",
+        "support_case_messages",
+        "support_ai_interactions",
     }
     with postgres_engine.connect() as connection:
         extensions_after = set(
@@ -131,6 +135,24 @@ def test_runtime_role_has_append_read_but_not_mutation_privileges(
                 ).scalar_one()
                 is True
             )
+            assert connection.execute(
+                text(
+                    "SELECT has_table_privilege("
+                    "'ayo_runtime', 'ayo.support_case_events', 'INSERT')"
+                )
+            ).scalar_one()
+            assert not connection.execute(
+                text(
+                    "SELECT has_table_privilege("
+                    "'ayo_runtime', 'ayo.support_case_events', 'UPDATE')"
+                )
+            ).scalar_one()
+            assert not connection.execute(
+                text(
+                    "SELECT has_table_privilege("
+                    "'ayo_runtime', 'ayo.support_cases', 'DELETE')"
+                )
+            ).scalar_one()
             assert (
                 connection.execute(
                     text(

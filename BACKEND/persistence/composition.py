@@ -15,6 +15,7 @@ from BACKEND.persistence.repositories import (
     PostgresRideRepository,
 )
 from BACKEND.persistence.session_repository import PostgresSessionRepository
+from BACKEND.persistence.support_repository import PostgresSupportRepository
 from BACKEND.persistence.unit_of_work import SqlAlchemyUnitOfWork
 
 
@@ -59,6 +60,10 @@ class AyoPostgresUnitOfWork(SqlAlchemyUnitOfWork):
     def authorization(self) -> PostgresAuthorizationRepository:
         return self.repository("authorization", PostgresAuthorizationRepository)
 
+    @property
+    def support(self) -> PostgresSupportRepository:
+        return self.repository("support", PostgresSupportRepository)
+
 
 class PostgresRepositoryComposition:
     """Process-scoped factory for transaction-scoped repository sets."""
@@ -75,6 +80,7 @@ class PostgresRepositoryComposition:
             "authentication_challenges": PostgresAuthenticationChallengeRepository,
             "refresh_tokens": PostgresRefreshTokenRepository,
             "authorization": PostgresAuthorizationRepository,
+            "support": PostgresSupportRepository,
         }
 
     def unit_of_work(self) -> AyoPostgresUnitOfWork:

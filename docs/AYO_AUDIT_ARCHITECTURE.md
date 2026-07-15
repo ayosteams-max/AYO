@@ -1,5 +1,9 @@
 # AYO Audit Event Architecture
 
+## Support taxonomy
+
+Mission 9 audits case creation/view/update, information request, assignment, escalation, takeover, AI guidance, recommendations, resolution/closure, access denial and redaction. Audit metadata excludes messages, notes, recordings, transcripts, credentials, payment data, precise histories and hidden model reasoning. Domain case events complement but do not replace Mission 5 audit records.
+
 ## Purpose and boundaries
 
 The audit foundation answers who or what attempted an important action, on which

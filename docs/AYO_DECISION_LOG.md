@@ -1,5 +1,15 @@
 # AYO Decision Log
 
+## 2026-07-15 — Mission 9 support foundation (approved)
+
+Problem: provide safe, low-cost support that can later serve AI chat/voice and human agents without high-risk AI authority or provider lock-in.
+
+Decision: use a bounded PostgreSQL 17 workflow in the modular monolith, append-only case events/messages/AI evidence, hybrid orchestration, explicit green/yellow/red actions, ownership/assignment/queue authorization, optimistic concurrency and transactional audits. Add six human queue permissions; exclude them from the AI permission set. Add no provider, broker, Redis or vector database.
+
+Alternatives: a minimal case table lacks privacy/audit controls; full/event-driven or third-party ticketing adds premature complexity/lock-in; AI-only is unsafe; human-only raises cost and friction. Revisit on measured volume, queue latency, search quality or integration economics.
+
+Risks: anonymous recovery, queue policy, emergency procedures, language/voice accuracy, transcript consent and Ethiopian retention/legal-hold rules remain unapproved. Provider/model selection requires a separate decision.
+
 This log prevents proposals from becoming policy by accident. Dates use ISO format. Decision owners are the Founder and AYO leadership unless another accountable owner is explicitly assigned.
 
 `AYO_CONSTITUTION.md` is the highest project authority. Decisions recorded here are valid only when they comply with it.

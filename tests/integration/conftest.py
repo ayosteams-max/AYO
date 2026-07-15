@@ -26,6 +26,10 @@ from BACKEND.persistence.tables import (
     role_permissions,
     roles,
     sessions,
+    support_ai_interactions,
+    support_case_events,
+    support_case_messages,
+    support_cases,
     token_families,
 )
 
@@ -71,6 +75,10 @@ def postgres_engine():
 @pytest.fixture(autouse=True)
 def clean_postgres_tables(postgres_engine):
     with postgres_engine.begin() as connection:
+        connection.execute(delete(support_ai_interactions))
+        connection.execute(delete(support_case_messages))
+        connection.execute(delete(support_case_events))
+        connection.execute(delete(support_cases))
         connection.execute(delete(identity_role_assignments))
         connection.execute(delete(role_permissions))
         connection.execute(delete(roles))
