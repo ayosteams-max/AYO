@@ -37,3 +37,7 @@ The route is outside the tab navigator and returns the selected display name as 
 - Privacy/performance: no query, precise location or personal-place persistence/logging was added; result work is bounded to 20, requests are debounced and abortable, and the virtualized list exported successfully.
 
 Rollback is removal of the new route/gateway/hook and restoration of the home field navigation; there is no database, provider or API migration.
+
+## Runtime repair
+
+Android verification after commit `0755fb6` exposed that the committed home screen was a stale version: the root Stack and search route existed, but the complete Destination row and quick-place controls had no navigation action. The repair uses Expo Router `Link` with `asChild` so each complete `Pressable` is the navigation target, renders the returned destination parameter, marks decorative children as non-interactive, and adds source-level navigation contract tests for entry, Stack registration and return selection. There was no overlay, disabled state or pointer-events blocker.

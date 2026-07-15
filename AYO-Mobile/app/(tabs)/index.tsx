@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link, useLocalSearchParams } from "expo-router";
 import {
   Alert,
   Pressable,
@@ -36,6 +37,7 @@ const rideOptions = [
 ];
 
 export default function HomeScreen() {
+  const { destination } = useLocalSearchParams<{ destination?: string }>();
   const [selectedRide, setSelectedRide] = useState<RideType>("AYO Go");
 
   const selectedOption = rideOptions.find(
@@ -81,18 +83,28 @@ export default function HomeScreen() {
 
           <View style={styles.locationDivider} />
 
-          <Pressable style={styles.locationRow}>
-            <View style={styles.destinationDot} />
+          <Link href="/destination-search" asChild>
+            <Pressable
+              accessibilityHint="Opens destination search"
+              accessibilityLabel="Choose destination"
+              accessibilityRole="button"
+              style={({ pressed }) => [
+                styles.locationRow,
+                pressed && styles.locationRowPressed,
+              ]}
+            >
+              <View style={styles.destinationDot} />
 
-            <View style={styles.locationTextContainer}>
-              <Text style={styles.locationLabel}>Destination</Text>
-              <Text style={styles.destinationPlaceholder}>
-                Where do you want to go?
-              </Text>
-            </View>
+              <View pointerEvents="none" style={styles.locationTextContainer}>
+                <Text style={styles.locationLabel}>Destination</Text>
+                <Text numberOfLines={1} style={styles.destinationPlaceholder}>
+                  {destination ?? "Where do you want to go?"}
+                </Text>
+              </View>
 
-            <Text style={styles.chevron}>›</Text>
-          </Pressable>
+              <Text pointerEvents="none" style={styles.chevron}>›</Text>
+            </Pressable>
+          </Link>
         </View>
 
         <Text style={styles.sectionTitle}>Quick places</Text>
@@ -199,14 +211,18 @@ export default function HomeScreen() {
 }
 
 function QuickPlace({ icon, label }: { icon: string; label: string }) {
-  return (
-    <Pressable style={styles.quickPlaceButton}>
-      <View style={styles.quickPlaceIcon}>
-        <Text style={styles.quickPlaceEmoji}>{icon}</Text>
-      </View>
+  const category = label === "Airport" ? "airport" : label === "Recent" ? "recent" : "saved";
 
-      <Text style={styles.quickPlaceLabel}>{label}</Text>
-    </Pressable>
+  return (
+    <Link href={{ pathname: "/destination-search", params: { category } }} asChild>
+      <Pressable accessibilityLabel={`${label} destinations`} style={styles.quickPlaceButton}>
+        <View pointerEvents="none" style={styles.quickPlaceIcon}>
+          <Text style={styles.quickPlaceEmoji}>{icon}</Text>
+        </View>
+
+        <Text pointerEvents="none" style={styles.quickPlaceLabel}>{label}</Text>
+      </Pressable>
+    </Link>
   );
 }
 
@@ -267,6 +283,9 @@ const styles = StyleSheet.create({
     minHeight: 82,
     flexDirection: "row",
     alignItems: "center",
+  },
+  locationRowPressed: {
+    opacity: 0.72,
   },
   pickupDot: {
     width: 12,
