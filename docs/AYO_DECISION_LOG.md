@@ -525,3 +525,32 @@ Supersedes / superseded by:
 - **Revisit trigger:** Consider provider selection, broker or service extraction only when measured connection scale, event lag, reconnect failure, latency, provider resilience or operating cost breaches an approved threshold.
 - **Approved architecture amendment:** Add a deterministic Active Ride Confidence Engine that owns only versioned health classifications and non-executing operational recommendations, plus Dynamic Pickup Intelligence that owns only confidence-bearing primary/fallback pickup recommendations. Missing/stale evidence reduces confidence; verified external/platform causes protect drivers; alert hysteresis and cooldown prevent churn/fatigue; material pickup changes require authorized communication and confirmation. Neither component may alter ride state, assignment, price, blame, safety outcome or financial recovery.
 - **Amendment events:** Propose auditable confidence evaluation/level/recommendation/suppression/recovery events and pickup recommendation/proposal/confirmation/fallback/degradation events. Exact schemas, thresholds, retention and activation remain implementation-stage CTO/CEO gates.
+
+### AP-034 — Mission 19 Active Ride implementation
+
+- **Date:** 2026-07-16
+- **Status:** Mission 18 implementation authority recorded; implementation complete locally and awaiting CTO/CEO review before commit or activation.
+- **Decision:** Implement the post-assignment Active Ride Orchestrator inside the modular monolith with PostgreSQL authority, explicit compatibility translation, role projections, HTTPS snapshot/polling commands, assignment-bound PIN, evidence boundaries, deterministic confidence/pickup advisory components and controlled workers. See `docs/MISSION_19_ACTIVE_RIDE_IMPLEMENTATION.md`.
+- **Authority separation:** Dispatch owns matching/assignment; Scheduled Dispatch owns reservations/commitment/pre-dispatch; Active Ride owns only post-assignment lifecycle. Confidence and Pickup Intelligence are advisory and cannot execute assignment, cancellation, blame, safety, fare or financial changes.
+- **Alternatives:** External stream/broker/maps are deferred; raw prototype status mutation cannot provide ordering, ownership or recovery; a separate service is premature without measured isolation/scale need.
+- **Security/privacy:** Disabled by default and production-forbidden; trusted authentication plus RBAC and ownership; bounded inputs/rates/replay; no PIN, token, exact-location trail or evidence body in logs/outbox; runtime delete is prohibited.
+- **Revisit trigger:** Consider streaming/provider/service extraction only after controlled polling, connection, event-lag, recovery, battery/data and operating-cost measurements breach approved thresholds.
+
+### PA-035 — Deferred Smart Arrival, Waiting and Fair Cancellation Engine
+
+- **Date:** 2026-07-16
+- **Status:** CTO/CEO documentation direction recorded; no implementation, migration, dependency, fee, refund, wallet action, production activation or fixed waiting value authorized.
+- **Problem:** Drivers need protection for genuine waiting while riders need early guidance, accurate arrival evidence and a fair, visible opportunity to reach the pickup point.
+- **Direction:** Add a deterministic evidence boundary with typed unverified/verified arrival, active/ending/paused/invalid waiting and evidence-ready states. Start a timer only after stationary arrival inside the approved pickup zone with sufficient data confidence; invalidate or suppress consequence evidence for driver lateness/movement away, pickup mismatch, AYO/map/network failure, serious uncertainty or verified external disruption.
+- **Authority separation:** Active Ride owns lifecycle; Dynamic Pickup owns recommendations; Pricing alone may later evaluate approved financial policy; Recovery/Support consume minimum evidence; the future engine cannot cancel, blame, charge, refund, compensate or punish.
+- **Product principle:** AYO should prevent cancellations, not profit from them. No hidden punishment scores. Driver eligibility review is protected for verified traffic, roadblock, airport queue, weather, emergency and platform/provider failure.
+- **Open gate:** Waiting windows and consequence policies must be configurable by city/product/context. Ethiopian launch values require field measurement, qualified legal/operational review and separate CTO/CEO approval.
+
+### PA-036 — Deferred Landmark Intelligence Layer
+
+- **Date:** 2026-07-16
+- **Status:** CTO/CEO documentation direction recorded; no implementation, schema, dependency, map provider, production data collection or activation authorized.
+- **Problem:** Coordinates alone often fail to express the locally understood entrance, gate, side of road or named landmark needed for reliable Ethiopian pickup and destination guidance.
+- **Direction:** Model canonical versioned landmarks with English/Amharic names, aliases and phonetic forms, entrances/access direction, confidence/freshness, provenance and merge lineage. Treat rider/driver suggestions as untrusted until corroborated and operations-approved; use privacy-safe aggregation and fraud controls; fall back to coordinates when ambiguous.
+- **Authority separation:** Landmark Intelligence advises Dynamic Pickup; Dynamic Pickup rechecks safety, legal access, accessibility and road direction; Active Ride controls material-change confirmation. No landmark source silently changes a confirmed pickup or becomes authoritative merely because a provider or user supplied it.
+- **Open gate:** Local-language search quality, operations verification, retention, abuse thresholds and authoritative Ethiopian airport/venue sources require research and separate approval before implementation.

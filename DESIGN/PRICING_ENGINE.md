@@ -102,6 +102,22 @@ Passengers receive a free waiting period.
 
 Extra waiting time is charged fairly.
 
+No waiting charge, cancellation fee or compensation rule is currently approved. A
+future Smart Arrival, Waiting and Fair Cancellation Engine may provide evidence only;
+Pricing remains the sole future server-authoritative financial-policy boundary.
+
+Eligibility must require verified arrival at the approved pickup, continued driver
+availability, reliable GPS/pickup confidence, reasonable rider notification and an
+accurate visible countdown. It must be suppressed for driver lateness/movement away,
+pickup or timer errors, platform/map failure, serious location uncertainty, road closure,
+emergency, airport confusion or communication failure. Verified external delay must not
+silently disadvantage the driver.
+
+Free-wait and consequence policies must be versioned and configurable by city, service,
+airport, premium, assisted, scheduled and accessibility context. Ethiopian launch values
+require field testing, qualified legal/operational review and separate CTO/CEO approval.
+AYO should prevent cancellations, not profit from them.
+
 ---
 
 # Cancellation Rules
@@ -115,6 +131,10 @@ Driver Cancels
 - Passenger pays nothing.
 
 Repeated cancellations reduce account reputation.
+
+This legacy product aspiration is not approved runtime policy. No cancellation may create
+a hidden rider or driver punishment score. Future consequences require explainable,
+appealable, evidence-based policy and separate leadership approval.
 
 ---
 

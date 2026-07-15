@@ -34,6 +34,11 @@ PERMISSION_REGISTRY = MappingProxyType(
         "scheduled.support.handoff": "Create an authorized assisted-booking support handoff.",
         "scheduled.worker.run": "Run bounded scheduled-dispatch workers.",
         "scheduled.worker.health.read": "Read scheduled worker health.",
+        "active_ride.read": "Read an owned active ride projection and event stream.",
+        "active_ride.rider.command": "Submit an authenticated rider active-ride command.",
+        "active_ride.driver.command": "Submit an assigned driver active-ride command.",
+        "active_ride.worker.run": "Run bounded active-ride recovery workers.",
+        "active_ride.worker.health.read": "Read active-ride worker health.",
     }
 )
 

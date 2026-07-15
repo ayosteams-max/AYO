@@ -1130,6 +1130,227 @@ reservation_idempotency_records = Table(
     schema=AYO_SCHEMA,
 )
 
+active_rides = Table(
+    "active_rides",
+    metadata,
+    Column("ride_id", UUID(as_uuid=True), primary_key=True),
+    Column("rider_id", UUID(as_uuid=True), nullable=False),
+    Column("driver_id", UUID(as_uuid=True)),
+    Column("reservation_id", UUID(as_uuid=True)),
+    Column("assignment_id", UUID(as_uuid=True)),
+    Column("state", String(48), nullable=False),
+    Column("pickup_place_id", String(128), nullable=False),
+    Column("destination_place_id", String(128), nullable=False),
+    Column("service_type", String(63), nullable=False),
+    Column("driver_changed", Boolean, nullable=False, server_default=text("false")),
+    Column("last_sequence", Integer, nullable=False, server_default=text("0")),
+    Column("version", Integer, nullable=False, server_default=text("1")),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+    CheckConstraint(
+        "version > 0 AND last_sequence >= 0", name="active_ride_positive_versions"
+    ),
+    schema=AYO_SCHEMA,
+)
+Index("ix_active_rides_rider_state", active_rides.c.rider_id, active_rides.c.state)
+Index("ix_active_rides_driver_state", active_rides.c.driver_id, active_rides.c.state)
+
+active_ride_events = Table(
+    "active_ride_events",
+    metadata,
+    Column("event_id", UUID(as_uuid=True), primary_key=True),
+    Column(
+        "ride_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.active_rides.ride_id"),
+        nullable=False,
+    ),
+    Column("sequence", Integer, nullable=False),
+    Column("aggregate_version", Integer, nullable=False),
+    Column("event_type", String(63), nullable=False),
+    Column("schema_version", Integer, nullable=False, server_default=text("1")),
+    Column("payload", JSONB().with_variant(JSON(), "sqlite"), nullable=False),
+    Column("occurred_at", DateTime(timezone=True), nullable=False),
+    UniqueConstraint("ride_id", "sequence"),
+    CheckConstraint(
+        "sequence > 0 AND aggregate_version > 0", name="active_event_positive_versions"
+    ),
+    schema=AYO_SCHEMA,
+)
+Index(
+    "ix_active_ride_events_replay",
+    active_ride_events.c.ride_id,
+    active_ride_events.c.sequence,
+)
+
+active_ride_idempotency_records = Table(
+    "active_ride_idempotency_records",
+    metadata,
+    Column("actor_id", UUID(as_uuid=True), primary_key=True),
+    Column("command_id", UUID(as_uuid=True), primary_key=True),
+    Column(
+        "ride_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.active_rides.ride_id"),
+        nullable=False,
+    ),
+    Column("command_type", String(63), nullable=False),
+    Column("request_hash", String(64), nullable=False),
+    Column("result_version", Integer, nullable=False),
+    Column("result_status", String(24), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("expires_at", DateTime(timezone=True), nullable=False),
+    schema=AYO_SCHEMA,
+)
+
+active_ride_projection_checkpoints = Table(
+    "active_ride_projection_checkpoints",
+    metadata,
+    Column(
+        "ride_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.active_rides.ride_id"),
+        primary_key=True,
+    ),
+    Column("role", String(24), primary_key=True),
+    Column("projection", JSONB().with_variant(JSON(), "sqlite"), nullable=False),
+    Column("aggregate_version", Integer, nullable=False),
+    Column("last_sequence", Integer, nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+    schema=AYO_SCHEMA,
+)
+
+active_ride_pickup_verifications = Table(
+    "active_ride_pickup_verifications",
+    metadata,
+    Column("verification_id", UUID(as_uuid=True), primary_key=True),
+    Column(
+        "ride_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.active_rides.ride_id"),
+        nullable=False,
+    ),
+    Column("assignment_id", UUID(as_uuid=True), nullable=False),
+    Column("secret_digest", LargeBinary, nullable=False),
+    Column("expires_at", DateTime(timezone=True), nullable=False),
+    Column("attempt_count", Integer, nullable=False, server_default=text("0")),
+    Column("maximum_attempts", Integer, nullable=False),
+    Column("cooldown_until", DateTime(timezone=True)),
+    Column("verified_at", DateTime(timezone=True)),
+    Column("invalidated_at", DateTime(timezone=True)),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    CheckConstraint(
+        "attempt_count >= 0 AND maximum_attempts BETWEEN 1 AND 10",
+        name="active_pickup_attempts_valid",
+    ),
+    schema=AYO_SCHEMA,
+)
+Index(
+    "ix_active_pickup_verification_current",
+    active_ride_pickup_verifications.c.ride_id,
+    active_ride_pickup_verifications.c.created_at,
+)
+
+active_ride_evidence = Table(
+    "active_ride_evidence",
+    metadata,
+    Column("evidence_id", UUID(as_uuid=True), primary_key=True),
+    Column(
+        "ride_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.active_rides.ride_id"),
+        nullable=False,
+    ),
+    Column("evidence_type", String(63), nullable=False),
+    Column("submitted_by_role", String(24), nullable=False),
+    Column("responsibility", String(32), nullable=False),
+    Column("reason_code", String(63), nullable=False),
+    Column(
+        "evidence_references", JSONB().with_variant(JSON(), "sqlite"), nullable=False
+    ),
+    Column("observed_at", DateTime(timezone=True), nullable=False),
+    schema=AYO_SCHEMA,
+)
+
+active_ride_confidence_decisions = Table(
+    "active_ride_confidence_decisions",
+    metadata,
+    Column("confidence_decision_id", UUID(as_uuid=True), primary_key=True),
+    Column(
+        "ride_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.active_rides.ride_id"),
+        nullable=False,
+    ),
+    Column("rule_set_id", String(63), nullable=False),
+    Column("rule_set_version", String(63), nullable=False),
+    Column("health_level", String(32), nullable=False),
+    Column("reason_codes", JSONB().with_variant(JSON(), "sqlite"), nullable=False),
+    Column("signal_freshness", JSONB().with_variant(JSON(), "sqlite"), nullable=False),
+    Column("data_quality_status", String(24), nullable=False),
+    Column(
+        "recommended_actions", JSONB().with_variant(JSON(), "sqlite"), nullable=False
+    ),
+    Column("generated_at", DateTime(timezone=True), nullable=False),
+    Column("expires_at", DateTime(timezone=True), nullable=False),
+    schema=AYO_SCHEMA,
+)
+Index(
+    "ix_active_confidence_latest",
+    active_ride_confidence_decisions.c.ride_id,
+    active_ride_confidence_decisions.c.generated_at,
+)
+
+active_ride_pickup_recommendations = Table(
+    "active_ride_pickup_recommendations",
+    metadata,
+    Column("recommendation_id", UUID(as_uuid=True), primary_key=True),
+    Column(
+        "ride_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.active_rides.ride_id"),
+        nullable=False,
+    ),
+    Column("payload", JSONB().with_variant(JSON(), "sqlite"), nullable=False),
+    Column("confidence", String(32), nullable=False),
+    Column("material_change", Boolean, nullable=False),
+    Column("change_status", String(24), nullable=False),
+    Column("generated_at", DateTime(timezone=True), nullable=False),
+    Column("expires_at", DateTime(timezone=True), nullable=False),
+    schema=AYO_SCHEMA,
+)
+Index(
+    "ix_active_pickup_recommendation_latest",
+    active_ride_pickup_recommendations.c.ride_id,
+    active_ride_pickup_recommendations.c.generated_at,
+)
+
+active_ride_recovery_checkpoints = Table(
+    "active_ride_recovery_checkpoints",
+    metadata,
+    Column("checkpoint_id", UUID(as_uuid=True), primary_key=True),
+    Column(
+        "ride_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.active_rides.ride_id"),
+        nullable=False,
+    ),
+    Column("kind", String(63), nullable=False),
+    Column("due_at", DateTime(timezone=True), nullable=False),
+    Column("claimed_by", String(128)),
+    Column("claimed_at", DateTime(timezone=True)),
+    Column("completed_at", DateTime(timezone=True)),
+    Column("attempt_count", Integer, nullable=False, server_default=text("0")),
+    Column("payload", JSONB().with_variant(JSON(), "sqlite"), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    schema=AYO_SCHEMA,
+)
+Index(
+    "ix_active_recovery_due",
+    active_ride_recovery_checkpoints.c.kind,
+    active_ride_recovery_checkpoints.c.due_at,
+)
+
 legacy_wallets = Table(
     "legacy_wallets",
     metadata,

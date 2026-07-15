@@ -4,6 +4,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from BACKEND.active_ride.application import ActiveRideApplication
 from BACKEND.authorization.enforcement import (
     AuthorizationContextMiddleware,
     AuthorizationEnforcer,
@@ -18,6 +19,7 @@ from BACKEND.dispatch.application import DispatchApplication
 from BACKEND.dispatch.outbox_worker import OutboxDeliveryWorker
 from BACKEND.dispatch.scheduler import DispatchRecoveryCoordinator, WorkerHealth
 from BACKEND.observability import MetricsSink, NullMetricsSink
+from BACKEND.routes.active_rides import create_active_ride_router
 from BACKEND.routes.dispatch import create_dispatch_router
 from BACKEND.routes.dispatch_internal import create_dispatch_internal_router
 from BACKEND.routes.driver_offer import router as driver_offer_router
@@ -50,11 +52,21 @@ class ScheduledDispatchActivation:
     metrics: MetricsSink
 
 
+@dataclass(frozen=True, slots=True)
+class ActiveRideActivation:
+    application: ActiveRideApplication
+    subject_resolver: TrustedSubjectResolver
+    authorization_enforcer: AuthorizationEnforcer
+    rate_limiter: DispatchRateLimitBoundary
+    metrics: MetricsSink
+
+
 def create_app(
     configuration: Settings | None = None,
     *,
     dispatch: DispatchActivation | None = None,
     scheduled_dispatch: ScheduledDispatchActivation | None = None,
+    active_ride: ActiveRideActivation | None = None,
 ) -> FastAPI:
     configured = configuration or settings
     application = FastAPI(
@@ -122,6 +134,32 @@ def create_app(
             )
     else:
         application.state.scheduled_dispatch_metrics = NullMetricsSink()
+
+    if configured.ACTIVE_RIDE_ENABLED:
+        if active_ride is None:
+            raise RuntimeError(
+                "Enabled active ride requires explicit secure dependencies"
+            )
+        application.state.authorization_enforcer = active_ride.authorization_enforcer
+        application.state.dispatch_rate_limiter = active_ride.rate_limiter
+        application.state.active_ride_metrics = active_ride.metrics
+        application.include_router(
+            create_active_ride_router(active_ride.application),
+            prefix=configured.API_PREFIX,
+        )
+        if (
+            not configured.DISPATCH_ENABLED
+            and not configured.SCHEDULED_DISPATCH_ENABLED
+        ):
+            application.add_middleware(
+                AuthorizationContextMiddleware, resolver=active_ride.subject_resolver
+            )
+            application.add_middleware(
+                RequestSizeLimitMiddleware,
+                maximum_bytes=configured.ACTIVE_RIDE_MAX_REQUEST_BYTES,
+            )
+    else:
+        application.state.active_ride_metrics = NullMetricsSink()
 
     @application.exception_handler(HTTPException)
     async def stable_http_error(request: Request, error: HTTPException) -> JSONResponse:

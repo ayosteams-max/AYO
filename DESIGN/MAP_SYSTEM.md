@@ -74,6 +74,25 @@ never silently moves a confirmed pickup; material changes are explained to rider
 driver and require the approved confirmation. Cached guidance is labelled with its
 freshness, and airport/venue rules are never presented as live unless verified.
 
+## Future Landmark Intelligence Layer
+
+Landmark Intelligence will supplement coordinates with locally meaningful, versioned
+records for hotel and hospital entrances, airport terminals/gates, shopping-centre
+entrances, churches, mosques, schools, apartment compounds, universities, cafes, banks,
+transport terminals, stadiums and named local landmarks.
+
+Canonical records support English and Amharic names, alternate spellings, local-language
+and phonetic search forms, entrances/gates, side of road, legal approach direction,
+accessibility, provenance, confidence, freshness and duplicate-merge lineage. Rider and
+driver contributions are untrusted suggestions until corroborated and operations-approved;
+malicious edits, bulk submissions and conflicts are rate-limited and reviewed.
+
+Provider-neutral adapters supply map and local-operational observations. Weak-network
+clients may use labelled cached guidance. Low-confidence or ambiguous matches fall back
+to coordinates. Dynamic Pickup may use an approved landmark but must recheck safety,
+legal access, accessibility and road direction and may never silently move a confirmed
+pickup.
+
 ---
 
 # Destination Suggestions

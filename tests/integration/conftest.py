@@ -9,6 +9,15 @@ from BACKEND.persistence.config import DatabaseSettings
 from BACKEND.persistence.engine import create_postgres_engine
 from BACKEND.persistence.tables import (
     AYO_SCHEMA,
+    active_ride_confidence_decisions,
+    active_ride_events,
+    active_ride_evidence,
+    active_ride_idempotency_records,
+    active_ride_pickup_recommendations,
+    active_ride_pickup_verifications,
+    active_ride_projection_checkpoints,
+    active_ride_recovery_checkpoints,
+    active_rides,
     audit_events,
     authentication_challenges,
     credential_verifiers,
@@ -97,6 +106,15 @@ def postgres_engine():
 @pytest.fixture(autouse=True)
 def clean_postgres_tables(postgres_engine):
     with postgres_engine.begin() as connection:
+        connection.execute(delete(active_ride_recovery_checkpoints))
+        connection.execute(delete(active_ride_pickup_recommendations))
+        connection.execute(delete(active_ride_confidence_decisions))
+        connection.execute(delete(active_ride_evidence))
+        connection.execute(delete(active_ride_pickup_verifications))
+        connection.execute(delete(active_ride_projection_checkpoints))
+        connection.execute(delete(active_ride_idempotency_records))
+        connection.execute(delete(active_ride_events))
+        connection.execute(delete(active_rides))
         connection.execute(delete(reservation_pickup_verifications))
         connection.execute(delete(reservation_idempotency_records))
         connection.execute(delete(reservation_checkpoints))

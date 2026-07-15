@@ -121,6 +121,12 @@ from an authorized projection, but cannot infer blame, expose raw signals, execu
 recommendation or silently relocate pickup. Any shadow comparison with deterministic
 confidence production authority remains non-executing until separately approved.
 
+Future Support may also explain an authorized arrival/waiting projection, timer state or
+landmark instruction. It must distinguish a notification from confirmed delivery and an
+arrival observation from responsibility. It cannot start/invalidate a timer, impose a
+consequence, approve compensation or promote an untrusted landmark. Human handoff keeps
+the relevant policy version and minimum evidence references.
+
 Provider-neutral channel contracts must support app chat, SMS, voice and call-centre
 workflows under weak connectivity, with Amharic and English as first-class evaluation
 languages. No channel or model provider is selected here. Future human-supervised
@@ -144,3 +150,12 @@ alternatives, threat model, user journeys, responsibility and recovery policy, f
 authority, abuse controls, retention, Ethiopian legal/operational verification,
 multilingual evaluation, deterministic fallback, human staffing and rollback. Provider,
 model, payment, wallet and public activation decisions remain separate approval gates.
+
+## Future evidence integrations approved for documentation
+
+The Smart Arrival, Waiting and Fair Cancellation Engine may contribute verified-arrival,
+waiting-window, notification, pickup-mismatch and suppression evidence to Customer
+Recovery. Landmark Intelligence may contribute versioned match, entrance, ambiguity and
+correction evidence. Neither source proves fault by itself. Recovery must corroborate the
+evidence, preserve rider/driver/AYO/external/shared/insufficient classifications and apply
+mandatory human review and financial-authority gates already defined above.

@@ -54,6 +54,24 @@ DISPATCH_RATE_POLICIES = {
         refill_tokens=Decimal(10),
         refill_period_seconds=3600,
     ),
+    "active_ride_read": RateLimitPolicy(
+        name="active_ride.read",
+        capacity=120,
+        refill_tokens=Decimal(120),
+        refill_period_seconds=60,
+    ),
+    "active_ride_command": RateLimitPolicy(
+        name="active_ride.command",
+        capacity=60,
+        refill_tokens=Decimal(60),
+        refill_period_seconds=60,
+    ),
+    "active_ride_verification": RateLimitPolicy(
+        name="active_ride.verification",
+        capacity=10,
+        refill_tokens=Decimal(10),
+        refill_period_seconds=60,
+    ),
 }
 
 
@@ -95,7 +113,9 @@ class RequestSizeLimitMiddleware:
             await self.app(scope, receive, send)
             return
         path = scope.get("path", "")
-        if "/dispatch" not in path and "/scheduled" not in path:
+        if not any(
+            part in path for part in ("/dispatch", "/scheduled", "/active-rides")
+        ):
             await self.app(scope, receive, send)
             return
         headers = Headers(scope=scope)

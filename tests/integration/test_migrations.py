@@ -48,6 +48,15 @@ def test_upgrade_empty_database_matches_metadata_and_postgresql_17(
     assert readiness.ready
     assert readiness.current_revision == expected_schema_revision()
     assert set(inspect(postgres_engine).get_table_names(schema=AYO_SCHEMA)) == {
+        "active_rides",
+        "active_ride_events",
+        "active_ride_idempotency_records",
+        "active_ride_projection_checkpoints",
+        "active_ride_pickup_verifications",
+        "active_ride_evidence",
+        "active_ride_confidence_decisions",
+        "active_ride_pickup_recommendations",
+        "active_ride_recovery_checkpoints",
         "audit_events",
         "authentication_challenges",
         "credential_verifiers",
@@ -355,3 +364,19 @@ def test_scheduled_dispatch_migration_is_reversible(
     tables = set(inspect(postgres_engine).get_table_names(schema=AYO_SCHEMA))
     assert "ride_reservations" not in tables
     assert not any(name.startswith("reservation_") for name in tables)
+
+
+def test_active_ride_migration_is_reversible(postgres_engine, empty_database) -> None:
+    runner = MigrationRunner(postgres_engine)
+    runner.upgrade()
+    from alembic import command
+
+    config = alembic_config()
+    config.attributes["connection"] = postgres_engine.connect()
+    try:
+        command.downgrade(config, "20260716_0012")
+    finally:
+        config.attributes["connection"].close()
+    tables = set(inspect(postgres_engine).get_table_names(schema=AYO_SCHEMA))
+    assert "active_rides" not in tables
+    assert not any(name.startswith("active_ride_") for name in tables)

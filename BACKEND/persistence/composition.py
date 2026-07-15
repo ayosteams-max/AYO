@@ -1,5 +1,6 @@
 from sqlalchemy import Engine
 
+from BACKEND.persistence.active_ride_repository import PostgresActiveRideRepository
 from BACKEND.persistence.audit_repository import PostgresAuditEventRepository
 from BACKEND.persistence.authorization_repository import (
     PostgresAuthorizationRepository,
@@ -87,6 +88,10 @@ class AyoPostgresUnitOfWork(SqlAlchemyUnitOfWork):
     def scheduled(self) -> PostgresScheduledRepository:
         return self.repository("scheduled", PostgresScheduledRepository)
 
+    @property
+    def active_rides(self) -> PostgresActiveRideRepository:
+        return self.repository("active_rides", PostgresActiveRideRepository)
+
 
 class PostgresRepositoryComposition:
     """Process-scoped factory for transaction-scoped repository sets."""
@@ -115,6 +120,7 @@ class PostgresRepositoryComposition:
             ),
             "outbox": PostgresOutboxRepository,
             "scheduled": PostgresScheduledRepository,
+            "active_rides": PostgresActiveRideRepository,
         }
 
     def unit_of_work(self) -> AyoPostgresUnitOfWork:

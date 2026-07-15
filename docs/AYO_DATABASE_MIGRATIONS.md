@@ -1,5 +1,16 @@
 # AYO Database Migration Standard
 
+## Mission 19 active ride revision
+
+Revision `20260716_0013` adds the reversible Active Ride aggregate, append-only ordered
+events, atomic command idempotency, role projection checkpoints, protected pickup
+verification, evidence, confidence decisions, pickup recommendations and recovery
+checkpoints. It registers five `active_ride.*` permissions. Runtime receives no
+delete/truncate and no update on append-only events, evidence or confidence records.
+
+Pre-activation rollback target: `20260716_0012`. Disable the feature and workers first;
+do not downgrade after real usage without an approved reconciliation/export procedure.
+
 ## Scheduled integration revision
 
 Revision `20260716_0012` adds only the hashed, expiring pickup-verification authority and scheduled RBAC permissions. It is additive and contains no personal test data. Mission 17 validated the full chain from an empty PostgreSQL 17.10 database, metadata parity, repeated upgrade and downgrade through `20260716_0010`.

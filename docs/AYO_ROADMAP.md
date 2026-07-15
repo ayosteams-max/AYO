@@ -307,7 +307,7 @@ The former Mission 14 production-resilience and controlled-launch scope is defer
 
 ## Mission 18 — Rider and driver real-time experience
 
-**Status:** Architecture proposed for CTO/CEO review; implementation is not authorized.
+**Status:** Architecture approved; Mission 19 implementation completed locally and awaiting CTO/CEO review. No activation, commit or deployment is authorized.
 
 **Objective:** Give riders and drivers a clear, safe and weak-network-resilient experience from request through assignment, pickup verification, trip completion, cancellation, recovery and rating while preserving server authority.
 
@@ -319,7 +319,43 @@ The former Mission 14 production-resilience and controlled-launch scope is defer
 
 **Amendment boundary:** Ride confidence may classify evidence and recommend approved action but cannot assign blame, change price, cancel, conclude safety or execute reassignment. Pickup Intelligence recommends versioned primary/fallback guidance but cannot silently move pickup or override Active Ride, Dispatch or Scheduled Dispatch authority. Both fail safely when stale or unavailable and remain provider-neutral.
 
+## Mission 19 — Active Ride Orchestrator and real-time core implementation
+
+**Status:** Implemented and under quality-gate review; do not commit automatically.
+
+**Delivered scope:** Canonical post-assignment lifecycle and compatibility translator; sanitized role projections; versioned snapshots, ordered replay, acknowledgements and adaptive polling; idempotent authenticated commands; protected pickup PIN and assisted/QR boundaries; cancellation/no-show evidence; deterministic Active Ride Confidence; Dynamic Pickup Intelligence; reversible PostgreSQL authority/outbox; disabled API; bounded lock-safe workers; metrics and synthetic two-device validation. See `MISSION_19_ACTIVE_RIDE_IMPLEMENTATION.md`.
+
+**Exclusions preserved:** Payments/wallet/refunds/fees, AI authority, external real-time/maps/traffic/airport/event/messaging providers, public activation, production secrets/data, deployment and complete mobile redesign.
+
+**Approved documentation amendment:** Future Smart Arrival, Waiting and Fair Cancellation
+will verify arrival, synchronize a visible configurable free-wait window and produce
+fairness-protected evidence only. Future Landmark Intelligence will add bilingual,
+confidence-bearing local landmark/entrance knowledge to Dynamic Pickup. Neither is
+implemented or assigned financial, cancellation, map, lifecycle or production authority.
+Ethiopian waiting values require local testing, legal/operational review and separate
+leadership approval.
+
 ## Deferred future engines — sequencing not yet approved
+
+### Smart Arrival, Waiting and Fair Cancellation Engine
+
+**Status:** Approved future architecture direction only; no runtime, fee, compensation or
+mission sequence authorized.
+
+**Objective:** Protect verified driver waiting time while giving riders early movement
+guidance, a fair visible free-wait countdown and reliable notification. Produce versioned
+arrival/waiting/no-show evidence and suppress consequences when pickup, data, platform or
+external conditions make them unfair.
+
+### Landmark Intelligence Layer
+
+**Status:** Approved future architecture direction only; no provider, schema, mission
+sequence or production data collection authorized.
+
+**Objective:** Combine coordinates with privacy-safe, locally meaningful English/Amharic
+landmarks, aliases, entrances, gates and approach knowledge. Keep user submissions
+untrusted until corroborated and approved; fall back to coordinates when confidence is
+insufficient.
 
 ### Customer Recovery and Trust Engine
 
