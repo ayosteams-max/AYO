@@ -6,11 +6,13 @@ from pydantic import BaseModel, ConfigDict
 
 from BACKEND.authorization.contracts import AuthorizationSubject
 from BACKEND.authorization.enforcement import AuthorizationRoute, permission_required
+from BACKEND.dispatch.api_security import require_rate_limit
 from BACKEND.dispatch.application import DispatchApplication
 from BACKEND.dispatch.contracts import DispatchConflict, IdempotencyConflict
 from BACKEND.dispatch.models import CreateRideCommand, DriverOffer, RideProjection
 from BACKEND.dispatch.service import QuoteExpired
 from BACKEND.identity.models import IdentityType
+from BACKEND.observability import MetricsSink, NullMetricsSink
 
 
 class PublicRideResponse(BaseModel):
@@ -60,13 +62,18 @@ def _subject(request: Request, expected: IdentityType) -> AuthorizationSubject:
         request.state, "authorization_subject", None
     )
     if subject is None:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Authentication required.")
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED, {"code": "authentication_required"}
+        )
     if subject.identity_type is not expected:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Access denied.")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, {"code": "access_denied"})
     return subject
 
 
-def create_dispatch_router(application: DispatchApplication) -> APIRouter:
+def create_dispatch_router(
+    application: DispatchApplication, *, metrics: MetricsSink | None = None
+) -> APIRouter:
+    metric_sink = metrics or NullMetricsSink()
     router = APIRouter(
         prefix="/dispatch", tags=["dispatch"], route_class=AuthorizationRoute
     )
@@ -83,8 +90,9 @@ def create_dispatch_router(application: DispatchApplication) -> APIRouter:
         ],
     ) -> PublicRideResponse:
         subject = _subject(request, IdentityType.RIDER)
+        require_rate_limit(request, subject, "ride_create")
         try:
-            ride, _ = application.create_ride(
+            ride, created = application.create_ride(
                 rider_id=subject.identity_id,
                 idempotency_key=idempotency_key,
                 command=command,
@@ -92,22 +100,33 @@ def create_dispatch_router(application: DispatchApplication) -> APIRouter:
             if ride.state.value == "searching":
                 application.dispatch_next(ride.ride_id)
             recovered = application.recover_ride(subject.identity_id)
-            return PublicRideResponse.from_projection(recovered or ride)
+            result = recovered or ride
+            metric_sink.increment(
+                "ride_creation_outcomes",
+                labels={"outcome": "created" if created else "idempotent_retry"},
+            )
+            if result.state.value == "no_driver_available":
+                metric_sink.increment("no_driver_outcomes")
+            return PublicRideResponse.from_projection(result)
         except QuoteExpired as error:
-            raise HTTPException(status.HTTP_409_CONFLICT, "Quote expired.") from error
-        except IdempotencyConflict as error:
             raise HTTPException(
-                status.HTTP_409_CONFLICT, "Idempotency conflict."
+                status.HTTP_409_CONFLICT, {"code": "quote_expired"}
+            ) from error
+        except IdempotencyConflict as error:
+            metric_sink.increment("idempotency_conflicts")
+            raise HTTPException(
+                status.HTTP_409_CONFLICT, {"code": "idempotency_conflict"}
             ) from error
         except DispatchConflict as error:
             raise HTTPException(
-                status.HTTP_409_CONFLICT, "Ride state conflict."
+                status.HTTP_409_CONFLICT, {"code": "ride_state_conflict"}
             ) from error
 
     @router.get("/rides/active", response_model=PublicRideResponse | None)
     @permission_required("dispatch.rider.request", resource_type="ride")
     def active_ride(request: Request) -> PublicRideResponse | None:
         subject = _subject(request, IdentityType.RIDER)
+        require_rate_limit(request, subject, "ride_active")
         ride = application.recover_ride(subject.identity_id)
         return None if ride is None else PublicRideResponse.from_projection(ride)
 
@@ -119,9 +138,10 @@ def create_dispatch_router(application: DispatchApplication) -> APIRouter:
     )
     def get_offer(offer_id: UUID, request: Request) -> DriverOfferResponse:
         subject = _subject(request, IdentityType.DRIVER)
+        require_rate_limit(request, subject, "offer_lookup")
         offer = application.get_offer(offer_id)
         if offer is None or offer.driver_id != subject.identity_id:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "Offer not found.")
+            raise HTTPException(status.HTTP_404_NOT_FOUND, {"code": "offer_not_found"})
         return DriverOfferResponse.from_offer(offer)
 
     @router.post("/offers/{offer_id}/accept", response_model=PublicRideResponse)
@@ -132,13 +152,16 @@ def create_dispatch_router(application: DispatchApplication) -> APIRouter:
     )
     def accept_offer(offer_id: UUID, request: Request) -> PublicRideResponse:
         subject = _subject(request, IdentityType.DRIVER)
+        require_rate_limit(request, subject, "offer_response")
         try:
-            return PublicRideResponse.from_projection(
+            result = PublicRideResponse.from_projection(
                 application.accept_offer(offer_id, subject.identity_id)
             )
+            metric_sink.increment("offer_acceptance_count")
+            return result
         except DispatchConflict as error:
             raise HTTPException(
-                status.HTTP_404_NOT_FOUND, "Offer not found."
+                status.HTTP_404_NOT_FOUND, {"code": "offer_not_found"}
             ) from error
 
     @router.post("/offers/{offer_id}/decline", status_code=status.HTTP_204_NO_CONTENT)
@@ -149,11 +172,13 @@ def create_dispatch_router(application: DispatchApplication) -> APIRouter:
     )
     def decline_offer(offer_id: UUID, request: Request) -> None:
         subject = _subject(request, IdentityType.DRIVER)
+        require_rate_limit(request, subject, "offer_response")
         try:
             application.decline_offer(offer_id, subject.identity_id)
+            metric_sink.increment("offer_decline_count")
         except DispatchConflict as error:
             raise HTTPException(
-                status.HTTP_404_NOT_FOUND, "Offer not found."
+                status.HTTP_404_NOT_FOUND, {"code": "offer_not_found"}
             ) from error
 
     return router

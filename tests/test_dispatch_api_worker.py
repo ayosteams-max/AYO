@@ -20,6 +20,7 @@ from BACKEND.dispatch.models import (
 )
 from BACKEND.dispatch.worker import DispatchRecoveryWorker
 from BACKEND.identity.models import IdentityType
+from BACKEND.rate_limit.models import RateLimitDecision
 from BACKEND.routes.dispatch import create_dispatch_router
 
 NOW = datetime(2026, 7, 16, 8, tzinfo=UTC)
@@ -76,6 +77,12 @@ class AllowingEnforcer:
         del request, requirement
 
 
+class AllowingRateLimiter:
+    def consume(self, *, subject, operation):
+        del subject, operation
+        return RateLimitDecision(allowed=True, remaining=1, retry_after_seconds=0)
+
+
 class FakeApplication:
     def __init__(self) -> None:
         self.ride = projection()
@@ -130,9 +137,12 @@ class FakeApplication:
         return None
 
 
-def client_for(subject: AuthorizationSubject | None, application: FakeApplication):
+def client_for(
+    subject: AuthorizationSubject | None, application: FakeApplication, limiter=None
+):
     app = FastAPI()
     app.state.authorization_enforcer = AllowingEnforcer()
+    app.state.dispatch_rate_limiter = limiter or AllowingRateLimiter()
     app.include_router(create_dispatch_router(application))
     app.add_middleware(AuthorizationContextMiddleware, resolver=FixedResolver(subject))
     return TestClient(app)
@@ -208,6 +218,22 @@ def test_driver_offer_is_owner_scoped_and_hides_scoring() -> None:
         stranger.get(f"/dispatch/offers/{application.offer.offer_id}").status_code
         == 404
     )
+
+
+def test_rate_limit_boundary_returns_stable_public_error() -> None:
+    class DenyingRateLimiter:
+        def consume(self, *, subject, operation):
+            del subject, operation
+            return RateLimitDecision(allowed=False, remaining=0, retry_after_seconds=12)
+
+    client = client_for(
+        subject(IdentityType.RIDER, RIDER_ID),
+        FakeApplication(),
+        DenyingRateLimiter(),
+    )
+    response = client.get("/dispatch/rides/active")
+    assert response.status_code == 429
+    assert response.headers["Retry-After"] == "12"
 
 
 class FakeUnit:

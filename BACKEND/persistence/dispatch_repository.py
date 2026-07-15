@@ -209,7 +209,7 @@ class PostgresDispatchRepository:
                 return stored, False
             raise DispatchConflict("Rider already has an active ride") from error
         self._audit.append(audit_event)
-        self._outbox("dispatch.ride.created", ride.ride_id, ride.accepted_at)
+        self._outbox("dispatch.ride.requested", ride.ride_id, ride.accepted_at)
         return ride, True
 
     def get_ride(self, ride_id: UUID) -> DispatchRide | None:
@@ -329,7 +329,7 @@ class PostgresDispatchRepository:
             raise DispatchConflict("Ride changed before offer")
         self._audit.append(audit_event)
         self._outbox(
-            "dispatch.offer.created",
+            "dispatch.driver_offer.created",
             offer.ride_id,
             offer.created_at,
             offer_id=str(offer.offer_id),
@@ -411,7 +411,10 @@ class PostgresDispatchRepository:
             raise DispatchConflict("Ride is no longer offering")
         self._audit.append(audit_event)
         self._outbox(
-            f"dispatch.offer.{outcome}", offer["ride_id"], now, offer_id=str(offer_id)
+            f"dispatch.driver_offer.{outcome}",
+            offer["ride_id"],
+            now,
+            offer_id=str(offer_id),
         )
         return _ride_from_row(row)
 
@@ -482,7 +485,7 @@ class PostgresDispatchRepository:
             raise DispatchConflict("Ride is no longer offering")
         self._audit.append(audit_event)
         self._outbox(
-            "dispatch.ride.assigned",
+            "dispatch.driver.assigned",
             offer["ride_id"],
             now,
             offer_id=str(offer_id),
@@ -541,7 +544,7 @@ class PostgresDispatchRepository:
         if row is None:
             raise DispatchConflict("Ride changed before no-driver outcome")
         self._audit.append(audit_event)
-        self._outbox("dispatch.ride.no_driver", ride_id, now)
+        self._outbox("dispatch.ride.no_driver_available", ride_id, now)
         return _ride_from_row(row)
 
     def append_audit(self, event: AuditEvent) -> None:
@@ -612,7 +615,7 @@ class PostgresDispatchRepository:
                     version=dispatch_ride_requests.c.version + 1,
                 )
             )
-            self._outbox("dispatch.ride.search_abandoned", ride_id, now)
+            self._outbox("dispatch.ride.no_driver_available", ride_id, now)
             self._audit.append(
                 AuditEvent(
                     occurred_at=now,

@@ -886,6 +886,7 @@ dispatch_outbox = Table(
     Column("claimed_at", DateTime(timezone=True)),
     Column("claimed_by", String(64)),
     Column("published_at", DateTime(timezone=True)),
+    Column("dead_lettered_at", DateTime(timezone=True)),
     Column("attempt_count", Integer, nullable=False, server_default=text("0")),
     Column("last_error_code", String(63)),
     CheckConstraint("attempt_count >= 0", name="dispatch_outbox_nonnegative_attempts"),
@@ -895,7 +896,8 @@ Index(
     "ix_dispatch_outbox_pending",
     dispatch_outbox.c.available_at,
     dispatch_outbox.c.occurred_at,
-    postgresql_where=dispatch_outbox.c.published_at.is_(None),
+    postgresql_where=(dispatch_outbox.c.published_at.is_(None))
+    & (dispatch_outbox.c.dead_lettered_at.is_(None)),
 )
 
 legacy_wallets = Table(

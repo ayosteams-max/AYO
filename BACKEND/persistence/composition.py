@@ -14,6 +14,7 @@ from BACKEND.persistence.identity_repository import (
     PostgresIdentityRepository,
     PostgresRefreshTokenRepository,
 )
+from BACKEND.persistence.outbox_repository import PostgresOutboxRepository
 from BACKEND.persistence.rate_limit_repository import PostgresTokenBucketRateLimiter
 from BACKEND.persistence.repositories import (
     PostgresLegacyWalletRepository,
@@ -77,6 +78,10 @@ class AyoPostgresUnitOfWork(SqlAlchemyUnitOfWork):
     def dispatch(self) -> PostgresDispatchRepository:
         return self.repository("dispatch", PostgresDispatchRepository)
 
+    @property
+    def outbox(self) -> PostgresOutboxRepository:
+        return self.repository("outbox", PostgresOutboxRepository)
+
 
 class PostgresRepositoryComposition:
     """Process-scoped factory for transaction-scoped repository sets."""
@@ -103,6 +108,7 @@ class PostgresRepositoryComposition:
             "dispatch": lambda connection: PostgresDispatchRepository(
                 connection, candidate_gateway
             ),
+            "outbox": PostgresOutboxRepository,
         }
 
     def unit_of_work(self) -> AyoPostgresUnitOfWork:

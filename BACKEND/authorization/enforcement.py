@@ -1,4 +1,4 @@
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Protocol
@@ -8,9 +8,11 @@ from fastapi import HTTPException, Request, status
 from fastapi.routing import APIRoute
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.responses import Response
+from starlette.types import ASGIApp
 
 from BACKEND.authorization.contracts import AuthorizationRequest, AuthorizationSubject
 from BACKEND.authorization.service import AuthorizationService
+from BACKEND.observability import MetricsSink, NullMetricsSink
 from BACKEND.persistence.composition import PostgresRepositoryComposition
 
 
@@ -27,15 +29,15 @@ class AnonymousSubjectResolver:
 class AuthorizationContextMiddleware(BaseHTTPMiddleware):
     """Resolves trusted Authentication output; it never parses caller role data."""
 
-    def __init__(self, app, *, resolver: TrustedSubjectResolver) -> None:
+    def __init__(self, app: ASGIApp, *, resolver: TrustedSubjectResolver) -> None:
         super().__init__(app)
         self._resolver = resolver
 
     async def dispatch(
         self, request: Request, call_next: RequestResponseEndpoint
     ) -> Response:
-        request.state.authorization_subject = await self._resolver.resolve(request)
         request.state.authorization_correlation_id = uuid4()
+        request.state.authorization_subject = await self._resolver.resolve(request)
         return await call_next(request)
 
 
@@ -47,18 +49,27 @@ class PermissionRequirement:
 
 
 class AuthorizationEnforcer:
-    def __init__(self, composition: PostgresRepositoryComposition) -> None:
+    def __init__(
+        self,
+        composition: PostgresRepositoryComposition,
+        *,
+        metrics: MetricsSink | None = None,
+    ) -> None:
         self._composition = composition
         self._service = AuthorizationService()
+        self._metrics = metrics or NullMetricsSink()
 
     def enforce(self, request: Request, requirement: PermissionRequirement) -> None:
         subject: AuthorizationSubject | None = getattr(
             request.state, "authorization_subject", None
         )
         if subject is None:
+            self._metrics.increment(
+                "authorization_failures", labels={"reason": "unauthenticated"}
+            )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Authentication required.",
+                detail={"code": "authentication_required"},
             )
         resource_id = (
             request.path_params.get(requirement.resource_id_parameter)
@@ -78,9 +89,12 @@ class AuthorizationEnforcer:
         with self._composition.unit_of_work() as unit_of_work:
             decision = self._service.authorize(unit_of_work, authorization_request)
         if not decision.allowed:
+            self._metrics.increment(
+                "authorization_failures", labels={"reason": "permission_denied"}
+            )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Access denied.",
+                detail={"code": "access_denied"},
             )
 
 
@@ -106,7 +120,9 @@ def permission_required(
 class AuthorizationRoute(APIRoute):
     """Route-level policy enforcement point for decorator-protected endpoints."""
 
-    def get_route_handler(self) -> Callable[[Request], Awaitable[Response]]:
+    def get_route_handler(
+        self,
+    ) -> Callable[[Request], Coroutine[object, object, Response]]:
         original = super().get_route_handler()
         requirement: PermissionRequirement | None = getattr(
             self.endpoint, "__ayo_permission_requirement__", None

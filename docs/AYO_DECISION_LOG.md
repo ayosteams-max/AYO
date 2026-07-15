@@ -451,3 +451,12 @@ Supersedes / superseded by:
 - **Explicit exclusions/gates:** No scheduled rides, pre-dispatch, payments, AI ranking, deployment, secrets, external production services, real customer data or public production activation. Stop before an irreversible migration.
 - **Rationale:** Durable atomic state is required for safe retries, concurrent workers and Ethiopian-network recovery. Extending the modular monolith with PostgreSQL transactions is simpler and safer than process memory, legacy ride storage or premature distributed infrastructure.
 - **Alternatives and risks:** Do not promote the float/JSON-based legacy `rides` table. Event sourcing and a broker are unnecessary now. Candidate discovery remains a provider-neutral dependency; authentication resolver/key activation and Ethiopian privacy/operational review remain launch gates.
+
+### AP-027 — Mission 14 secure internal dispatch activation
+
+- **Date:** 2026-07-16
+- **Status:** CTO and CEO implementation approval recorded; commit/push require a post-check approval.
+- **Decision:** Implement provider-neutral asymmetric JWT verification, trusted database-backed subjects, disabled-by-default non-production dispatch registration, request/rate limits, transactional outbox delivery, non-overlapping recovery scheduling and privacy-minimized observability.
+- **Explicit exclusions/gates:** No external identity or messaging connection, production secrets, public activation, deployment, real personal data, payments, scheduled/pre-dispatch, AI ranking or irreversible change.
+- **Rationale:** Controlled staging requires cryptographic identity and durable delivery/recovery boundaries, but provider connections and production trust configuration would materially expand security authority.
+- **Alternatives and risks:** Handwritten JWT verification is rejected; use a removable standards-based library behind an interface. Token roles remain non-authoritative. PostgreSQL outbox/locks are simpler than a broker before measured need. Bearer replay, key freshness, rate-limit availability and operational thresholds remain production risks.

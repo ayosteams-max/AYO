@@ -247,11 +247,17 @@ This roadmap is subordinate to `AYO_CONSTITUTION.md`. No mission or acceptance c
 
 Scheduled rides and smart pre-dispatch remain deferred and unnumbered until leadership authorizes a later roadmap position.
 
-## Mission 14 — Production resilience and controlled launch
+## Mission 14 — Secure authentication, internal dispatch activation and outbox delivery
 
-**Objective:** Prove AYO can operate, recover and respond safely in the approved launch area.
+**Objective:** Securely connect durable immediate dispatch for local and controlled staging verification without public activation.
 
-**Scope:** Observability, alerts/on-call, encrypted backups/restores, capacity/load testing, DR exercises, release/rollback, incident response, privacy/legal launch checklist and controlled pilot.
+**Scope:** Provider-neutral asymmetric token verification, trusted-subject construction, configuration-gated dispatch routes, database RBAC and ownership, request/rate limits, retry-safe outbox delivery, non-overlapping recovery coordination, privacy-safe logs/metrics and worker health/readiness.
+
+**Exclusions:** External identity or messaging services, production secrets, public deployment, real customer data, payments, scheduled rides, pre-dispatch, AI ranking and irreversible migration.
+
+**Acceptance criteria:** Dispatch remains disabled by default; forged, expired and malformed tokens fail closed; role claims never grant authority; authenticated rider-to-driver assignment persists end to end; public responses reveal no scoring data; outbox/recovery work is idempotent, bounded and restart safe; migration downgrade and security checks pass.
+
+The former Mission 14 production-resilience and controlled-launch scope is deferred and requires a separately numbered leadership authorization after secure staging evidence exists.
 
 **Exclusions:** Multi-region complexity or super-app expansion without measured need.
 
@@ -263,7 +269,7 @@ Scheduled rides and smart pre-dispatch remain deferred and unnumbered until lead
 
 **Acceptance criteria:** Approved SLOs and recovery objectives are demonstrated; critical alerts have owners; restores/reconciliation work; legal/operational launch decisions are recorded; pilot has stop/rollback criteria.
 
-**Dependencies:** Missions 1–12; Mission 13 only if included in launch scope.
+**Dependencies:** Approved Missions 12 and 13 plus controlled PostgreSQL test/staging infrastructure. Production activation remains separately gated.
 
 ## Post-launch expansion gate
 

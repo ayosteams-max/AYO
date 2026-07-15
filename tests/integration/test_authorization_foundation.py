@@ -288,7 +288,7 @@ def test_middleware_decorator_and_dependency_enforce_real_rbac(
     )
     response = anonymous.get("/decorated/one")
     assert response.status_code == 401
-    assert response.json() == {"detail": "Authentication required."}
+    assert response.json() == {"detail": {"code": "authentication_required"}}
 
     denied_identity = create_identity(postgres_composition)
     denied_subject = AuthorizationSubject(
@@ -303,7 +303,7 @@ def test_middleware_decorator_and_dependency_enforce_real_rbac(
     )
     response = denied.get("/decorated/one")
     assert response.status_code == 403
-    assert response.json() == {"detail": "Access denied."}
+    assert response.json() == {"detail": {"code": "access_denied"}}
 
 
 def test_authorization_and_audit_roll_back_together(postgres_composition) -> None:

@@ -26,6 +26,7 @@ PERMISSION_REGISTRY = MappingProxyType(
         "dispatch.rider.request": "Create and recover the authenticated rider's rides.",
         "dispatch.driver.offer.respond": "Read and respond to the authenticated driver's offers.",
         "dispatch.worker.recover": "Run bounded server-side dispatch recovery.",
+        "dispatch.admin.health.read": "Read internal dispatch worker health.",
     }
 )
 
