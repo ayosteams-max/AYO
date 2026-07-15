@@ -245,7 +245,7 @@ This roadmap is subordinate to `AYO_CONSTITUTION.md`. No mission or acceptance c
 
 **Dependencies:** Approved Mission 12 immediate-dispatch foundation plus existing PostgreSQL, identity, authentication and authorization foundations. Production authentication resolver/key activation remains separately gated.
 
-Scheduled rides and smart pre-dispatch remain deferred and unnumbered until leadership authorizes a later roadmap position.
+Scheduled rides and smart pre-dispatch are assigned to Mission 16 and implemented locally; activation remains gated below.
 
 ## Mission 14 — Secure authentication, internal dispatch activation and outbox delivery
 
@@ -282,6 +282,18 @@ The former Mission 14 production-resilience and controlled-launch scope is defer
 **Exclusions:** AI/ML ranking, automatic fare or incentive changes, payments, deployment, real customer data, external production providers and direct modification of immediate dispatch.
 
 **Activation dependency:** Leadership-approved Ethiopian operating thresholds, local legal/operational review and a controlled shadow-data activation mission. No recommendation currently affects dispatch or pricing.
+
+## Mission 16 — Scheduled Ride Engine, Smart Pre-Dispatch and Airport Intelligence
+
+**Status:** CTO and CEO architecture approved; implementation completed locally on 2026-07-16. Activation and deployment are not authorized.
+
+**Objective:** Make planned and airport rides reliably recoverable through honest reservation states, staged driver commitment, smart pre-dispatch and deterministic reassignment without weakening immediate dispatch or the current trip.
+
+**Implemented scope:** Reservation aggregate/lifecycle, scheduled-dispatch policy, soft-planned candidates with controlled material replacement, formal commitment locking, planning/revalidation checkpoints, smart pre-dispatch near trip completion, airport/flight provider-neutral context, reassignment/fallback/recovery, diaspora/authorized third-party booking with separate booker/passenger/future-payer/trusted-contact roles, explainable decisions and future AI strategy seams.
+
+**Exclusions:** Pricing/fees/guarantees, payment, AI ranking, external providers, deployment, real data and public activation.
+
+**Activation dependency:** Ethiopian airport/legal/operational verification, reviewed API and worker activation, provider adapters and explicit CTO/CEO activation approval.
 
 ## Post-launch expansion gate
 

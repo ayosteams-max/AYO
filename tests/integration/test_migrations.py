@@ -65,6 +65,17 @@ def test_upgrade_empty_database_matches_metadata_and_postgresql_17(
         "marketplace_decisions",
         "marketplace_rule_sets",
         "marketplace_simulation_runs",
+        "ride_reservations",
+        "reservation_participants",
+        "reservation_consents",
+        "reservation_state_history",
+        "reservation_planning_cycles",
+        "reservation_driver_commitments",
+        "reservation_soft_plans",
+        "reservation_attempts",
+        "reservation_checkpoints",
+        "reservation_flight_context",
+        "reservation_idempotency_records",
         "rate_limit_buckets",
         "recovery_cases",
         "refresh_token_rotations",
@@ -97,7 +108,7 @@ def test_upgrade_empty_database_matches_metadata_and_postgresql_17(
             connection.execute(text("SELECT code FROM ayo.permissions")).scalars()
         )
         assert registered_permissions == set(PERMISSION_REGISTRY)
-    assert extensions_after == extensions_before
+    assert extensions_after == extensions_before | {"btree_gist"}
 
 
 def test_runtime_role_has_append_read_but_not_mutation_privileges(
@@ -325,3 +336,21 @@ def test_dispatch_migration_is_reversible_before_activation(
         config.attributes["connection"].close()
     tables = set(inspect(postgres_engine).get_table_names(schema=AYO_SCHEMA))
     assert not any(name.startswith("dispatch_") for name in tables)
+
+
+def test_scheduled_dispatch_migration_is_reversible(
+    postgres_engine, empty_database
+) -> None:
+    runner = MigrationRunner(postgres_engine)
+    runner.upgrade()
+    from alembic import command
+
+    config = alembic_config()
+    config.attributes["connection"] = postgres_engine.connect()
+    try:
+        command.downgrade(config, "20260716_0010")
+    finally:
+        config.attributes["connection"].close()
+    tables = set(inspect(postgres_engine).get_table_names(schema=AYO_SCHEMA))
+    assert "ride_reservations" not in tables
+    assert not any(name.startswith("reservation_") for name in tables)

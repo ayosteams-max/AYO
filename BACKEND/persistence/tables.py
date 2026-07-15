@@ -17,7 +17,7 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID, ExcludeConstraint
 
 NAMING_CONVENTION = {
     "ix": "ix_%(table_name)s_%(column_0_name)s",
@@ -974,6 +974,137 @@ marketplace_simulation_runs = Table(
         "dataset_checksum ~ '^[a-f0-9]{64}$'",
         name="marketplace_simulation_valid_checksum",
     ),
+    schema=AYO_SCHEMA,
+)
+
+# Mission 16 scheduled dispatch authority. Flexible decision evidence is JSONB,
+# while lifecycle, identity references and concurrency constraints remain typed.
+ride_reservations = Table(
+    "ride_reservations",
+    metadata,
+    Column("reservation_id", UUID(as_uuid=True), primary_key=True),
+    Column("booker_id", UUID(as_uuid=True), nullable=False),
+    Column("passenger_participant_id", UUID(as_uuid=True), nullable=False),
+    Column("pickup_place_id", String(128), nullable=False),
+    Column("destination_place_id", String(128), nullable=False),
+    Column("requested_pickup_at", DateTime(timezone=True), nullable=False),
+    Column("requested_timezone", String(64), nullable=False),
+    Column("service_type", String(63), nullable=False),
+    Column("quote_id", UUID(as_uuid=True), nullable=False),
+    Column("state", String(40), nullable=False),
+    Column("policy_id", UUID(as_uuid=True), nullable=False),
+    Column("policy_version", String(63), nullable=False),
+    Column("airport_context_id", UUID(as_uuid=True)),
+    Column("active_soft_plan_id", UUID(as_uuid=True)),
+    Column("active_commitment_id", UUID(as_uuid=True)),
+    Column("activated_ride_id", UUID(as_uuid=True)),
+    Column("soft_replacement_count", Integer, nullable=False, server_default=text("0")),
+    Column(
+        "formal_replacement_count", Integer, nullable=False, server_default=text("0")
+    ),
+    Column("version", Integer, nullable=False, server_default=text("1")),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+    CheckConstraint(
+        "pickup_place_id <> destination_place_id", name="reservation_distinct_places"
+    ),
+    CheckConstraint("version > 0", name="reservation_positive_version"),
+    schema=AYO_SCHEMA,
+)
+Index(
+    "ix_ride_reservations_due",
+    ride_reservations.c.state,
+    ride_reservations.c.requested_pickup_at,
+)
+
+
+def _reservation_child(name: str, id_name: str, *, append_only: bool = False) -> Table:
+    columns = [
+        Column(id_name, UUID(as_uuid=True), primary_key=True),
+        Column(
+            "reservation_id",
+            UUID(as_uuid=True),
+            ForeignKey("ayo.ride_reservations.reservation_id"),
+            nullable=False,
+        ),
+        Column("payload", JSONB().with_variant(JSON(), "sqlite"), nullable=False),
+        Column("created_at", DateTime(timezone=True), nullable=False),
+    ]
+    if not append_only:
+        columns.append(
+            Column("version", Integer, nullable=False, server_default=text("1"))
+        )
+    return Table(name, metadata, *columns, schema=AYO_SCHEMA)
+
+
+reservation_participants = _reservation_child(
+    "reservation_participants", "participant_id"
+)
+reservation_consents = _reservation_child(
+    "reservation_consents", "consent_id", append_only=True
+)
+reservation_state_history = _reservation_child(
+    "reservation_state_history", "history_id", append_only=True
+)
+reservation_planning_cycles = _reservation_child(
+    "reservation_planning_cycles", "planning_cycle_id"
+)
+reservation_soft_plans = _reservation_child("reservation_soft_plans", "soft_plan_id")
+reservation_attempts = _reservation_child(
+    "reservation_attempts", "attempt_id", append_only=True
+)
+reservation_checkpoints = _reservation_child("reservation_checkpoints", "checkpoint_id")
+reservation_flight_context = _reservation_child(
+    "reservation_flight_context", "flight_context_id"
+)
+
+reservation_driver_commitments = Table(
+    "reservation_driver_commitments",
+    metadata,
+    Column("commitment_id", UUID(as_uuid=True), primary_key=True),
+    Column(
+        "reservation_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.ride_reservations.reservation_id"),
+        nullable=False,
+    ),
+    Column("driver_id", UUID(as_uuid=True), nullable=False),
+    Column("state", String(32), nullable=False),
+    Column("window_started_at", DateTime(timezone=True), nullable=False),
+    Column("window_ended_at", DateTime(timezone=True), nullable=False),
+    Column("payload", JSONB().with_variant(JSON(), "sqlite"), nullable=False),
+    Column("version", Integer, nullable=False, server_default=text("1")),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    ExcludeConstraint(
+        ("driver_id", "="),
+        (
+            func.tstzrange(text("window_started_at"), text("window_ended_at"), "[)"),
+            "&&",
+        ),
+        where=text("state = 'committed'"),
+        using="gist",
+        name="ex_reservation_driver_commitment_overlap",
+    ),
+    CheckConstraint(
+        "window_ended_at > window_started_at", name="commitment_positive_window"
+    ),
+    schema=AYO_SCHEMA,
+)
+
+reservation_idempotency_records = Table(
+    "reservation_idempotency_records",
+    metadata,
+    Column("actor_id", UUID(as_uuid=True), primary_key=True),
+    Column("key_fingerprint", String(64), primary_key=True),
+    Column("request_hash", String(64), nullable=False),
+    Column(
+        "reservation_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.ride_reservations.reservation_id"),
+        nullable=False,
+    ),
+    Column("expires_at", DateTime(timezone=True), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
     schema=AYO_SCHEMA,
 )
 
