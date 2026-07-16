@@ -644,3 +644,11 @@ Supersedes / superseded by:
 - **Authority:** Pricing calculates; Payments orchestrates external attempts; Ledger alone posts money movement; Wallet derives views; Recovery authorizes remedies; Finance reconciles/accounts. AI cannot authorize or execute transactions.
 - **Alternatives:** Mutable aggregates and provider-owned truth are rejected for audit/concurrency/lock-in gaps. Blockchain is rejected as unnecessary complexity.
 - **Open gates:** NBE/legal classification, safeguarding/customer-funds treatment, provider licensing/contracts, accounting/chart mappings, cash obligations, payout/refund/chargeback policy, AML/CFT, PCI scope, retention, diaspora/FX and AYO Pay strategy require qualified approval.
+
+### PP-046 — Implementation Phase 1 master-plan proposal
+
+- **Date:** 2026-07-16
+- **Status:** Master Plan approved by CTO/CEO on 2026-07-16. Only Increment 1 — Engineering Foundation and PostgreSQL Certification — is authorized; later increments remain gated.
+- **Problem:** Approved missions need one dependency-safe implementation order that produces a complete pilot ride instead of activating disconnected features.
+- **Proposal:** Certify foundations first, then identity/eligibility, ride/pickup, Immediate Dispatch, Active Ride, Pricing, immutable cash ledger, mobile MVP and support/operations; keep advanced features behind independent gates. See `docs/IMPLEMENTATION_PHASE_1_MASTER_PLAN.md`.
+- **Boundary:** No Mission 27 is created. Mission 20 remains disabled and all PostgreSQL certification gates remain mandatory.

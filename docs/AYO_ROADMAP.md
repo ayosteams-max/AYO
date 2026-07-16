@@ -509,6 +509,21 @@ before implementation. Then require PostgreSQL financial invariants, migration,
 concurrency, restart/recovery, provider sandbox, reconciliation, security and performance
 certification. Mission 20 status and its independent certification gate are unchanged.
 
+## Implementation Phase 1 planning gate
+
+**Status:** Master Plan approved by CTO/CEO on 2026-07-16. Increment 1 — Engineering
+Foundation and PostgreSQL Certification — is the only authorized implementation scope;
+later increments require separate approval.
+
+**MVP direction:** One complete authenticated Immediate Standard cash ride with verified
+driver eligibility, durable pickup/dispatch/ride state, versioned pricing, immutable cash
+accounting, weak-network mobile recovery, audit and support operations. See
+`IMPLEMENTATION_PHASE_1_MASTER_PLAN.md`.
+
+**Gate:** Leadership must authorize one named implementation increment at a time.
+Mission 20 remains false and certification-blocked; advanced Scheduled, Airport Premium,
+digital payment, AI and AYO Pay activation is excluded from the MVP.
+
 **Shared gate:** Each engine requires a separately authorized research and architecture mission, Ethiopian legal/operational review, explicit policy and financial limits, privacy/retention approval, abuse controls, human-operations design and CTO/CEO approval. See `docs/AYO_FUTURE_TRUST_AND_AI_SUPPORT_ENGINES.md`.
 
 ## Post-launch expansion gate

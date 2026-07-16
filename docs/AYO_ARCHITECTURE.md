@@ -387,6 +387,15 @@ multi-currency and AYO Pay are future legal/regulatory boundaries. No runtime, m
 provider, wallet, ledger, transaction, public route or activation is authorized pending
 separate implementation approval. Mission 20 remains disabled and certification-blocked.
 
+## Implementation Phase 1 planning boundary
+
+The proposed Phase 1 plan integrates approved architecture as one complete Immediate
+Standard cash ride before advanced activation. It sequences PostgreSQL/audit,
+authentication, driver eligibility, ride/pickup, Immediate Dispatch, Active Ride,
+Pricing, immutable cash accounting, mobile MVP and support/operations with independent
+quality and approval gates. See `IMPLEMENTATION_PHASE_1_MASTER_PLAN.md`. The plan creates
+no Mission 27 and authorizes no implementation, provider, migration or production use.
+
 # Authentication architecture requirements
 
 Authentication uses PostgreSQL as durable identity/session authority and the
