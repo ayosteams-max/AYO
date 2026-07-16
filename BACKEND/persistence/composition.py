@@ -13,6 +13,7 @@ from BACKEND.persistence.dispatch_repository import (
     NoDriverCandidateGateway,
     PostgresDispatchRepository,
 )
+from BACKEND.persistence.driver_trust_repository import PostgresDriverTrustRepository
 from BACKEND.persistence.identity_repository import (
     PostgresAuthenticationChallengeRepository,
     PostgresIdentityRepository,
@@ -99,6 +100,10 @@ class AyoPostgresUnitOfWork(SqlAlchemyUnitOfWork):
     def arrival_waiting(self) -> PostgresArrivalWaitingRepository:
         return self.repository("arrival_waiting", PostgresArrivalWaitingRepository)
 
+    @property
+    def driver_trust(self) -> PostgresDriverTrustRepository:
+        return self.repository("driver_trust", PostgresDriverTrustRepository)
+
 
 class PostgresRepositoryComposition:
     """Process-scoped factory for transaction-scoped repository sets."""
@@ -129,6 +134,7 @@ class PostgresRepositoryComposition:
             "scheduled": PostgresScheduledRepository,
             "active_rides": PostgresActiveRideRepository,
             "arrival_waiting": PostgresArrivalWaitingRepository,
+            "driver_trust": PostgresDriverTrustRepository,
         }
 
     def unit_of_work(self) -> AyoPostgresUnitOfWork:

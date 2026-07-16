@@ -31,6 +31,14 @@ from BACKEND.persistence.tables import (
     dispatch_idempotency_records,
     dispatch_outbox,
     dispatch_ride_requests,
+    driver_document_evidence,
+    driver_eligibility_decisions,
+    driver_onboarding_cases,
+    driver_trust_events,
+    driver_trust_idempotency,
+    driver_trust_outbox,
+    driver_vehicle_authorizations,
+    driver_vehicles,
     identities,
     identity_authentication_methods,
     identity_devices,
@@ -114,6 +122,14 @@ def postgres_engine():
 @pytest.fixture(autouse=True)
 def clean_postgres_tables(postgres_engine):
     with postgres_engine.begin() as connection:
+        connection.execute(delete(driver_trust_outbox))
+        connection.execute(delete(driver_trust_events))
+        connection.execute(delete(driver_trust_idempotency))
+        connection.execute(delete(driver_eligibility_decisions))
+        connection.execute(delete(driver_vehicle_authorizations))
+        connection.execute(delete(driver_document_evidence))
+        connection.execute(delete(driver_vehicles))
+        connection.execute(delete(driver_onboarding_cases))
         connection.execute(delete(arrival_waiting_idempotency))
         connection.execute(delete(consequence_suppression_decisions))
         connection.execute(delete(arrival_notification_evidence))

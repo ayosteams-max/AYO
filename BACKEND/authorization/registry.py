@@ -43,6 +43,11 @@ PERMISSION_REGISTRY = MappingProxyType(
         "arrival_waiting.rider.command": "Submit an owned rider arrival/waiting command.",
         "arrival_waiting.driver.command": "Submit an assigned driver arrival/waiting command.",
         "arrival_waiting.worker.run": "Run bounded arrival/waiting recovery work.",
+        "driver_trust.read_own": "Read the authenticated driver's onboarding projection.",
+        "driver_trust.evidence.read_own": "Read privacy-minimised own evidence metadata.",
+        "driver_trust.evidence.read_sensitive": "Read separately authorized sensitive evidence metadata.",
+        "driver_trust.review": "Perform an authorized operations review decision.",
+        "driver_trust.appeal.review": "Review a linked driver identity appeal.",
     }
 )
 

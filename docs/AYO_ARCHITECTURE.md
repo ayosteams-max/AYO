@@ -405,6 +405,15 @@ revealing another identity. The verified subject resolver is no longer dispatch-
 No provider, public authentication route, business workflow or production activation is
 authorized. See `IMPLEMENTATION_INCREMENT_2_AUTH_SECURITY_FOUNDATION.md`.
 
+### Increment 3 driver trust checkpoint
+
+The driver trust domain now separates driver onboarding, immutable document-evidence
+references, vehicle approval, driver-to-vehicle authorization and versioned eligibility.
+PostgreSQL and authenticated server context are authoritative; human reviewers retain all
+approval authority and eligibility fails closed. Capability metadata does not grant
+Trusted Driver or Airport eligibility. See
+`IMPLEMENTATION_INCREMENT_3_DRIVER_TRUST_FOUNDATION.md`. No public activation is approved.
+
 # Authentication architecture requirements
 
 Authentication uses PostgreSQL as durable identity/session authority and the

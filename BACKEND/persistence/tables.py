@@ -3,6 +3,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     Column,
+    Date,
     DateTime,
     Float,
     ForeignKey,
@@ -1539,6 +1540,233 @@ arrival_waiting_idempotency = Table(
     Column("request_hash", String(64), nullable=False),
     Column("response_payload", JSONB().with_variant(JSON(), "sqlite"), nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
+    schema=AYO_SCHEMA,
+)
+
+driver_onboarding_cases = Table(
+    "driver_onboarding_cases",
+    metadata,
+    Column("case_id", UUID(as_uuid=True), primary_key=True),
+    Column(
+        "driver_identity_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.identities.identity_id"),
+        nullable=False,
+    ),
+    Column("state", String(40), nullable=False),
+    Column("policy_version", String(63), nullable=False),
+    Column("version", Integer, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+    Column("expires_at", DateTime(timezone=True)),
+    Column(
+        "appeal_of_case_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.driver_onboarding_cases.case_id"),
+    ),
+    CheckConstraint("version > 0", name="driver_onboarding_positive_version"),
+    schema=AYO_SCHEMA,
+)
+Index(
+    "ix_driver_onboarding_owner_state",
+    driver_onboarding_cases.c.driver_identity_id,
+    driver_onboarding_cases.c.state,
+)
+
+driver_document_evidence = Table(
+    "driver_document_evidence",
+    metadata,
+    Column("evidence_id", UUID(as_uuid=True), primary_key=True),
+    Column(
+        "case_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.driver_onboarding_cases.case_id"),
+        nullable=False,
+    ),
+    Column(
+        "driver_identity_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.identities.identity_id"),
+        nullable=False,
+    ),
+    Column(
+        "vehicle_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.driver_vehicles.vehicle_id"),
+    ),
+    Column("evidence_type", String(40), nullable=False),
+    Column("immutable_reference", String(256), nullable=False),
+    Column("issuing_authority_code", String(63), nullable=False),
+    Column("document_reference_hash", LargeBinary(32), nullable=False),
+    Column("issue_date", Date(), nullable=False),
+    Column("expiry_date", Date(), nullable=False),
+    Column("status", String(24), nullable=False),
+    Column("policy_version", String(63), nullable=False),
+    Column(
+        "reviewer_identity_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.identities.identity_id"),
+    ),
+    Column("reason_codes", JSONB().with_variant(JSON(), "sqlite"), nullable=False),
+    Column(
+        "replaces_evidence_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.driver_document_evidence.evidence_id"),
+    ),
+    Column(
+        "superseded_by_evidence_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.driver_document_evidence.evidence_id"),
+    ),
+    Column("submitted_at", DateTime(timezone=True), nullable=False),
+    Column("reviewed_at", DateTime(timezone=True)),
+    Column("version", Integer, nullable=False),
+    UniqueConstraint("driver_identity_id", "document_reference_hash"),
+    CheckConstraint("expiry_date > issue_date", name="driver_evidence_valid_period"),
+    CheckConstraint("version > 0", name="driver_evidence_positive_version"),
+    schema=AYO_SCHEMA,
+)
+Index(
+    "ix_driver_evidence_owner_type",
+    driver_document_evidence.c.driver_identity_id,
+    driver_document_evidence.c.evidence_type,
+)
+
+driver_vehicles = Table(
+    "driver_vehicles",
+    metadata,
+    Column("vehicle_id", UUID(as_uuid=True), primary_key=True),
+    Column("canonical_reference_hash", LargeBinary(32), nullable=False, unique=True),
+    Column("category", String(63), nullable=False),
+    Column(
+        "accessibility_capabilities",
+        JSONB().with_variant(JSON(), "sqlite"),
+        nullable=False,
+    ),
+    Column(
+        "airport_standard_inputs",
+        JSONB().with_variant(JSON(), "sqlite"),
+        nullable=False,
+    ),
+    Column(
+        "airport_premium_inputs", JSONB().with_variant(JSON(), "sqlite"), nullable=False
+    ),
+    Column("approval_status", String(24), nullable=False),
+    Column("policy_version", String(63), nullable=False),
+    Column("version", Integer, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+    CheckConstraint("version > 0", name="driver_vehicle_positive_version"),
+    schema=AYO_SCHEMA,
+)
+
+driver_vehicle_authorizations = Table(
+    "driver_vehicle_authorizations",
+    metadata,
+    Column("authorization_id", UUID(as_uuid=True), primary_key=True),
+    Column(
+        "driver_identity_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.identities.identity_id"),
+        nullable=False,
+    ),
+    Column(
+        "vehicle_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.driver_vehicles.vehicle_id"),
+        nullable=False,
+    ),
+    Column("status", String(24), nullable=False),
+    Column("policy_version", String(63), nullable=False),
+    Column("effective_at", DateTime(timezone=True), nullable=False),
+    Column("expires_at", DateTime(timezone=True), nullable=False),
+    Column("reason_codes", JSONB().with_variant(JSON(), "sqlite"), nullable=False),
+    Column("version", Integer, nullable=False),
+    CheckConstraint(
+        "expires_at > effective_at", name="driver_vehicle_authorization_valid_period"
+    ),
+    CheckConstraint(
+        "version > 0", name="driver_vehicle_authorization_positive_version"
+    ),
+    schema=AYO_SCHEMA,
+)
+Index(
+    "ix_driver_vehicle_authorization_current",
+    driver_vehicle_authorizations.c.driver_identity_id,
+    driver_vehicle_authorizations.c.vehicle_id,
+    unique=True,
+    postgresql_where=driver_vehicle_authorizations.c.status == "authorized",
+)
+
+driver_eligibility_decisions = Table(
+    "driver_eligibility_decisions",
+    metadata,
+    Column("decision_id", UUID(as_uuid=True), primary_key=True),
+    Column(
+        "driver_identity_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.identities.identity_id"),
+        nullable=False,
+    ),
+    Column(
+        "vehicle_id", UUID(as_uuid=True), ForeignKey("ayo.driver_vehicles.vehicle_id")
+    ),
+    Column("policy_version", String(63), nullable=False),
+    Column("status", String(32), nullable=False),
+    Column("reason_codes", JSONB().with_variant(JSON(), "sqlite"), nullable=False),
+    Column("missing_evidence", JSONB().with_variant(JSON(), "sqlite"), nullable=False),
+    Column("expires_at", DateTime(timezone=True)),
+    Column("recomputed_at", DateTime(timezone=True), nullable=False),
+    Column("audit_reference", UUID(as_uuid=True), nullable=False),
+    schema=AYO_SCHEMA,
+)
+Index(
+    "ix_driver_eligibility_latest",
+    driver_eligibility_decisions.c.driver_identity_id,
+    driver_eligibility_decisions.c.recomputed_at,
+)
+
+driver_trust_idempotency = Table(
+    "driver_trust_idempotency",
+    metadata,
+    Column("actor_identity_id", UUID(as_uuid=True), primary_key=True),
+    Column("idempotency_key", String(128), primary_key=True),
+    Column("operation", String(63), nullable=False),
+    Column("request_hash", String(64), nullable=False),
+    Column("response_reference", UUID(as_uuid=True), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    schema=AYO_SCHEMA,
+)
+
+driver_trust_events = Table(
+    "driver_trust_events",
+    metadata,
+    Column("event_id", UUID(as_uuid=True), primary_key=True),
+    Column("aggregate_type", String(40), nullable=False),
+    Column("aggregate_id", UUID(as_uuid=True), nullable=False),
+    Column("aggregate_version", Integer, nullable=False),
+    Column("event_type", String(63), nullable=False),
+    Column("actor_identity_id", UUID(as_uuid=True)),
+    Column("reason_codes", JSONB().with_variant(JSON(), "sqlite"), nullable=False),
+    Column("occurred_at", DateTime(timezone=True), nullable=False),
+    UniqueConstraint("aggregate_type", "aggregate_id", "aggregate_version"),
+    schema=AYO_SCHEMA,
+)
+
+driver_trust_outbox = Table(
+    "driver_trust_outbox",
+    metadata,
+    Column("event_id", UUID(as_uuid=True), primary_key=True),
+    Column("event_type", String(63), nullable=False),
+    Column("aggregate_id", UUID(as_uuid=True), nullable=False),
+    Column("payload", JSONB().with_variant(JSON(), "sqlite"), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("available_at", DateTime(timezone=True), nullable=False),
+    Column("published_at", DateTime(timezone=True)),
+    Column("attempt_count", Integer, nullable=False, server_default=text("0")),
+    CheckConstraint(
+        "attempt_count >= 0", name="driver_trust_outbox_nonnegative_attempts"
+    ),
     schema=AYO_SCHEMA,
 )
 

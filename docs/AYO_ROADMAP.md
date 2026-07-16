@@ -535,6 +535,12 @@ Ownership is server-resolved and deny-by-default; authentication is provider-neu
 no public provider-backed flow or business route is activated. See
 `IMPLEMENTATION_INCREMENT_2_AUTH_SECURITY_FOUNDATION.md`.
 
+**Increment 3 checkpoint:** Driver onboarding, provider-neutral evidence metadata,
+vehicle/driver authorization separation and deterministic eligibility are implemented
+locally and awaiting CTO/CEO review. No provider, public activation, ride, dispatch,
+Trusted Driver or Airport eligibility is enabled. See
+`IMPLEMENTATION_INCREMENT_3_DRIVER_TRUST_FOUNDATION.md`.
+
 **Shared gate:** Each engine requires a separately authorized research and architecture mission, Ethiopian legal/operational review, explicit policy and financial limits, privacy/retention approval, abuse controls, human-operations design and CTO/CEO approval. See `docs/AYO_FUTURE_TRUST_AND_AI_SUPPORT_ENGINES.md`.
 
 ## Post-launch expansion gate

@@ -668,3 +668,12 @@ Supersedes / superseded by:
 - **Decision:** Certify the existing PostgreSQL identity/session/challenge/token/RBAC/rate-limit foundation; make the verified subject resolver route-neutral; add deny-by-default server-resolved ownership enforcement with privacy-safe audit.
 - **Authority:** Authentication establishes verified identity/session context; RBAC grants capability; owning domains resolve resource ownership. Clients cannot select identity, role, permission or owner. AI has no authority.
 - **Exclusions:** No rides, dispatch, pricing, payments, wallet, provider connection, production signing key or Mission 20 activation.
+
+### IP-049 — Implementation Increment 3 driver trust foundation
+
+- **Date:** 2026-07-16
+- **Status:** Implemented locally under explicit CTO/CEO authorization; awaiting review. No commit, push, provider or activation is authorized.
+- **Decision:** Use typed onboarding transitions, immutable provider-neutral evidence references, separate vehicle approval/driver authorization and append-only versioned eligibility decisions with PostgreSQL optimistic concurrency and idempotency.
+- **Authority:** Authenticated human Operations/Identity reviewers decide evidence and onboarding outcomes. Deterministic policy computes eligibility. AI, OCR and providers have no approval authority.
+- **Alternatives:** A generic verified flag and provider-authoritative result were rejected as unauditable and unsafe; storing document images in ordinary relational payloads was rejected for privacy and operating risk.
+- **Open gates:** Ethiopian document/issuer validity, inspection and expiry policy, reviewer procedure, appeals, retention, legal/privacy review and provider selection remain leadership/local-specialist decisions.
