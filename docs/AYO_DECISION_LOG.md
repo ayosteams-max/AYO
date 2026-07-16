@@ -686,3 +686,12 @@ Supersedes / superseded by:
 - **Authority:** Authentication supplies Rider identity; Ride Request owns pre-dispatch request validity; Dispatch remains the only assignment authority; Pricing remains the only fare authority; Mission 20 remains disabled.
 - **Alternatives:** Reusing the legacy in-memory ride object was rejected as non-durable and caller-shaped. PostGIS was deferred because reviewed pilot geometry does not yet justify a dependency; the containment contract preserves a replacement boundary.
 - **Open gates:** Ethiopian service/prohibited zones, pickup accuracy/freshness values, address/landmark governance, consent, retention and cancellation reasons require separate leadership and local operational/legal approval.
+
+### IP-051 — Implementation Increment 5 Immediate Dispatch handoff and localization
+
+- **Date:** 2026-07-16
+- **Status:** Implemented locally under explicit CTO/CEO authorization; awaiting review. No commit, push, public route, provider or production activation is authorized.
+- **Decision:** Use a minimal versioned one-way handoff into the existing Immediate Dispatch authority; revalidate Driver Trust evidence; rank eligible candidates by deterministic pickup cost first; use bounded sequential offers and PostgreSQL assignment locks. Add a separate global presentation contract based on BCP 47 preferences, versioned translation keys and pack metadata.
+- **Authority:** Ride Request owns validation and pre-assignment cancellation; Driver Trust owns eligibility evidence; Immediate Dispatch owns candidates, offers and assignment. Localization cannot alter domain state. AI has no assignment or critical-translation authority. Active Ride, Pricing and Mission 20 remain inactive.
+- **Alternatives:** Direct assignment by Ride Request and uncontrolled broadcast offers were rejected because they duplicate authority and create races. Hard-coded English/Amharic prose was rejected because it couples authoritative data to presentation and blocks safe global extension.
+- **Open gates:** Ethiopian dispatch timeouts, pickup-cost provider/policy, availability retention, destination disclosure, fatigue/commitment rules, approved initial languages, fallback order and human translation governance require leadership and local operational review.

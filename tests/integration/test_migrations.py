@@ -86,10 +86,19 @@ def test_upgrade_empty_database_matches_metadata_and_postgresql_17(
         "canonical_pickups",
         "canonical_ride_requests",
         "identities",
+        "immediate_dispatch_assignments",
+        "immediate_dispatch_candidate_sets",
+        "immediate_dispatch_events",
+        "immediate_dispatch_handoffs",
+        "immediate_dispatch_idempotency",
+        "immediate_dispatch_offers",
+        "immediate_dispatch_outbox",
         "identity_authentication_methods",
         "identity_devices",
         "identity_role_assignments",
         "legacy_wallets",
+        "localization_pack_manifests",
+        "localization_preferences",
         "marketplace_decisions",
         "marketplace_rule_sets",
         "marketplace_simulation_runs",
@@ -438,3 +447,21 @@ def test_canonical_ride_request_migration_is_reversible(
     tables = set(inspect(postgres_engine).get_table_names(schema=AYO_SCHEMA))
     assert "canonical_ride_requests" not in tables
     assert not any(name.startswith("ride_request_") for name in tables)
+
+
+def test_dispatch_handoff_localization_migration_is_reversible(
+    postgres_engine, empty_database
+) -> None:
+    runner = MigrationRunner(postgres_engine)
+    runner.upgrade()
+    from alembic import command
+
+    config = alembic_config()
+    config.attributes["connection"] = postgres_engine.connect()
+    try:
+        command.downgrade(config, "20260716_0016")
+    finally:
+        config.attributes["connection"].close()
+    tables = set(inspect(postgres_engine).get_table_names(schema=AYO_SCHEMA))
+    assert "immediate_dispatch_handoffs" not in tables
+    assert "localization_preferences" not in tables

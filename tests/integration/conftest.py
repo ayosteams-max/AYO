@@ -46,7 +46,16 @@ from BACKEND.persistence.tables import (
     identity_authentication_methods,
     identity_devices,
     identity_role_assignments,
+    immediate_dispatch_assignments,
+    immediate_dispatch_candidate_sets,
+    immediate_dispatch_events,
+    immediate_dispatch_handoffs,
+    immediate_dispatch_idempotency,
+    immediate_dispatch_offers,
+    immediate_dispatch_outbox,
     legacy_wallets,
+    localization_pack_manifests,
+    localization_preferences,
     marketplace_decisions,
     marketplace_rule_sets,
     marketplace_simulation_runs,
@@ -130,6 +139,15 @@ def postgres_engine():
 @pytest.fixture(autouse=True)
 def clean_postgres_tables(postgres_engine):
     with postgres_engine.begin() as connection:
+        connection.execute(delete(immediate_dispatch_outbox))
+        connection.execute(delete(immediate_dispatch_events))
+        connection.execute(delete(immediate_dispatch_assignments))
+        connection.execute(delete(immediate_dispatch_offers))
+        connection.execute(delete(immediate_dispatch_candidate_sets))
+        connection.execute(delete(immediate_dispatch_idempotency))
+        connection.execute(delete(immediate_dispatch_handoffs))
+        connection.execute(delete(localization_preferences))
+        connection.execute(delete(localization_pack_manifests))
         connection.execute(delete(ride_request_outbox))
         connection.execute(delete(ride_request_events))
         connection.execute(delete(ride_request_validation_decisions))

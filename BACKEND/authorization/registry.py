@@ -52,6 +52,10 @@ PERMISSION_REGISTRY = MappingProxyType(
         "ride_request.read_own": "Read the authenticated rider's canonical request.",
         "ride_request.cancel_own": "Cancel the authenticated rider's pre-dispatch request.",
         "ride_request.support.read": "Read an explicitly authorized support projection.",
+        "dispatch.handoff.receive": "Receive an authenticated internal canonical request handoff.",
+        "dispatch.handoff.worker": "Run bounded Immediate Dispatch handoff work.",
+        "localization.preference.read_own": "Read the authenticated identity's language preference.",
+        "localization.preference.update_own": "Update the authenticated identity's language preference.",
     }
 )
 

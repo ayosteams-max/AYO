@@ -543,10 +543,17 @@ Trusted Driver or Airport eligibility is enabled. See
 
 **Increment 4 checkpoint:** Canonical authenticated Immediate Standard pre-dispatch
 requests, pickup/destination metadata, configuration-driven service zones, deterministic
-validation, pre-assignment cancellation, idempotency and transactional events are
-implemented locally and awaiting CTO/CEO review. Driver assignment, Dispatch, Pricing,
-providers, public routes and Mission 20 remain inactive. See
+validation, pre-assignment cancellation, idempotency and transactional events were
+approved and preserved locally. Driver assignment, Dispatch, Pricing, providers, public
+routes and Mission 20 remained inactive. See
 `IMPLEMENTATION_INCREMENT_4_CANONICAL_RIDE_REQUEST.md`.
+
+**Increment 5 checkpoint:** A strict one-way Immediate Standard handoff, current
+eligibility filtering, pickup-speed-first sequential offers, PostgreSQL assignment locks
+and global BCP 47 localization contracts are implemented locally and awaiting CTO/CEO
+review. No public route, map/ETA provider, Active Ride, Pricing, payment, notification,
+critical machine translation or Mission 20 behavior is activated. See
+`IMPLEMENTATION_INCREMENT_5_DISPATCH_HANDOFF_LOCALIZATION.md`.
 
 **Shared gate:** Each engine requires a separately authorized research and architecture mission, Ethiopian legal/operational review, explicit policy and financial limits, privacy/retention approval, abuse controls, human-operations design and CTO/CEO approval. See `docs/AYO_FUTURE_TRUST_AND_AI_SUPPORT_ENGINES.md`.
 

@@ -423,6 +423,22 @@ readiness, not assignment and does not invoke Dispatch. Configuration and Postgr
 authoritative; AI and clients cannot validate ownership or product eligibility. See
 `IMPLEMENTATION_INCREMENT_4_CANONICAL_RIDE_REQUEST.md`. No public route is activated.
 
+### Increment 5 Immediate Dispatch handoff and localization checkpoint
+
+A durable one-way handoff now carries an authoritative `READY_FOR_DISPATCH` Immediate
+Standard request into the existing Immediate Dispatch domain. Dispatch rechecks current
+Driver Trust evidence, ranks suitable candidates by pickup cost first, owns bounded
+sequential offers and creates a PostgreSQL-locked assignment. Ride Request never assigns
+a driver. Cancellation/acceptance races, duplicate delivery, response loss and restart
+recover from transactional authoritative state.
+
+The shared localization boundary persists BCP 47 preferences and versioned language-pack
+metadata while domains retain stable reason codes and translation keys. Language choice
+is presentation-only; critical legal, safety, identity, pricing, financial and emergency
+wording requires human review. See
+`IMPLEMENTATION_INCREMENT_5_DISPATCH_HANDOFF_LOCALIZATION.md`. No public route, provider,
+Active Ride, Pricing, Mission 20 or production feature is activated.
+
 # Authentication architecture requirements
 
 Authentication uses PostgreSQL as durable identity/session authority and the

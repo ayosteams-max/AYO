@@ -1970,6 +1970,217 @@ ride_request_outbox = Table(
     schema=AYO_SCHEMA,
 )
 
+immediate_dispatch_handoffs = Table(
+    "immediate_dispatch_handoffs",
+    metadata,
+    Column("handoff_id", UUID(as_uuid=True), primary_key=True),
+    Column(
+        "ride_request_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.canonical_ride_requests.request_id"),
+        nullable=False,
+        unique=True,
+    ),
+    Column(
+        "rider_identity_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.identities.identity_id"),
+        nullable=False,
+    ),
+    Column("service_type", String(32), nullable=False),
+    Column("pickup_reference", UUID(as_uuid=True), nullable=False),
+    Column("destination_reference", UUID(as_uuid=True), nullable=False),
+    Column("service_zone_id", UUID(as_uuid=True), nullable=False),
+    Column("service_zone_version", String(63), nullable=False),
+    Column("validation_decision_id", UUID(as_uuid=True), nullable=False),
+    Column("ride_request_version", Integer, nullable=False),
+    Column("ride_policy_version", String(63), nullable=False),
+    Column("dispatch_policy_version", String(63), nullable=False),
+    Column("state", String(24), nullable=False),
+    Column("version", Integer, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("expires_at", DateTime(timezone=True), nullable=False),
+    Column("correlation_id", UUID(as_uuid=True), nullable=False),
+    Column("causation_id", UUID(as_uuid=True), nullable=False),
+    Column("idempotency_identity", String(128), nullable=False),
+    Column("audit_reference", UUID(as_uuid=True), nullable=False),
+    Column("assigned_driver_id", UUID(as_uuid=True)),
+    CheckConstraint(
+        "service_type='immediate_standard'", name="handoff_immediate_standard_only"
+    ),
+    CheckConstraint("version>0", name="handoff_positive_version"),
+    schema=AYO_SCHEMA,
+)
+Index(
+    "ix_immediate_handoff_state_expiry",
+    immediate_dispatch_handoffs.c.state,
+    immediate_dispatch_handoffs.c.expires_at,
+)
+
+immediate_dispatch_candidate_sets = Table(
+    "immediate_dispatch_candidate_sets",
+    metadata,
+    Column("candidate_set_id", UUID(as_uuid=True), primary_key=True),
+    Column(
+        "handoff_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.immediate_dispatch_handoffs.handoff_id"),
+        nullable=False,
+    ),
+    Column("policy_version", String(63), nullable=False),
+    Column("candidate_count", Integer, nullable=False),
+    Column(
+        "eligible_driver_ids", JSONB().with_variant(JSON(), "sqlite"), nullable=False
+    ),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    schema=AYO_SCHEMA,
+)
+
+immediate_dispatch_offers = Table(
+    "immediate_dispatch_offers",
+    metadata,
+    Column("offer_id", UUID(as_uuid=True), primary_key=True),
+    Column(
+        "handoff_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.immediate_dispatch_handoffs.handoff_id"),
+        nullable=False,
+    ),
+    Column("driver_id", UUID(as_uuid=True), nullable=False),
+    Column("vehicle_id", UUID(as_uuid=True), nullable=False),
+    Column("state", String(24), nullable=False),
+    Column("version", Integer, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("expires_at", DateTime(timezone=True), nullable=False),
+    Column("resolved_at", DateTime(timezone=True)),
+    Column("dispatch_policy_version", String(63), nullable=False),
+    Column("pickup_cost_seconds", Integer, nullable=False),
+    CheckConstraint("version>0", name="immediate_offer_positive_version"),
+    schema=AYO_SCHEMA,
+)
+Index(
+    "ix_immediate_offer_active_handoff",
+    immediate_dispatch_offers.c.handoff_id,
+    unique=True,
+    postgresql_where=immediate_dispatch_offers.c.state == "created",
+)
+Index(
+    "ix_immediate_offer_active_driver",
+    immediate_dispatch_offers.c.driver_id,
+    unique=True,
+    postgresql_where=immediate_dispatch_offers.c.state == "created",
+)
+
+immediate_dispatch_assignments = Table(
+    "immediate_dispatch_assignments",
+    metadata,
+    Column("assignment_id", UUID(as_uuid=True), primary_key=True),
+    Column(
+        "handoff_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.immediate_dispatch_handoffs.handoff_id"),
+        nullable=False,
+        unique=True,
+    ),
+    Column(
+        "offer_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.immediate_dispatch_offers.offer_id"),
+        nullable=False,
+        unique=True,
+    ),
+    Column("driver_id", UUID(as_uuid=True), nullable=False),
+    Column("vehicle_id", UUID(as_uuid=True), nullable=False),
+    Column("assigned_at", DateTime(timezone=True), nullable=False),
+    Column("released_at", DateTime(timezone=True)),
+    Column("correlation_id", UUID(as_uuid=True), nullable=False),
+    schema=AYO_SCHEMA,
+)
+Index(
+    "ix_immediate_assignment_active_driver",
+    immediate_dispatch_assignments.c.driver_id,
+    unique=True,
+    postgresql_where=immediate_dispatch_assignments.c.released_at.is_(None),
+)
+
+immediate_dispatch_idempotency = Table(
+    "immediate_dispatch_idempotency",
+    metadata,
+    Column("actor_id", UUID(as_uuid=True), primary_key=True),
+    Column("operation", String(32), primary_key=True),
+    Column("key", String(128), primary_key=True),
+    Column("request_hash", String(64), nullable=False),
+    Column("response_reference", UUID(as_uuid=True), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    schema=AYO_SCHEMA,
+)
+immediate_dispatch_events = Table(
+    "immediate_dispatch_events",
+    metadata,
+    Column("event_id", UUID(as_uuid=True), primary_key=True),
+    Column(
+        "handoff_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.immediate_dispatch_handoffs.handoff_id"),
+        nullable=False,
+    ),
+    Column("event_type", String(63), nullable=False),
+    Column("aggregate_version", Integer, nullable=False),
+    Column("safe_payload", JSONB().with_variant(JSON(), "sqlite"), nullable=False),
+    Column("correlation_id", UUID(as_uuid=True), nullable=False),
+    Column("causation_id", UUID(as_uuid=True), nullable=False),
+    Column("occurred_at", DateTime(timezone=True), nullable=False),
+    UniqueConstraint("handoff_id", "event_type", "aggregate_version"),
+    schema=AYO_SCHEMA,
+)
+immediate_dispatch_outbox = Table(
+    "immediate_dispatch_outbox",
+    metadata,
+    Column("event_id", UUID(as_uuid=True), primary_key=True),
+    Column("event_type", String(63), nullable=False),
+    Column("aggregate_id", UUID(as_uuid=True), nullable=False),
+    Column("aggregate_version", Integer, nullable=False),
+    Column("safe_payload", JSONB().with_variant(JSON(), "sqlite"), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("published_at", DateTime(timezone=True)),
+    Column("attempt_count", Integer, nullable=False, server_default=text("0")),
+    schema=AYO_SCHEMA,
+)
+
+localization_preferences = Table(
+    "localization_preferences",
+    metadata,
+    Column("preference_id", UUID(as_uuid=True), primary_key=True),
+    Column(
+        "identity_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.identities.identity_id"),
+        nullable=False,
+        unique=True,
+    ),
+    Column("preferred_language", String(63), nullable=False),
+    Column("device_language", String(63)),
+    Column("fallback_chain", JSONB().with_variant(JSON(), "sqlite"), nullable=False),
+    Column("version", Integer, nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+    CheckConstraint("version>0", name="localization_preference_positive_version"),
+    schema=AYO_SCHEMA,
+)
+localization_pack_manifests = Table(
+    "localization_pack_manifests",
+    metadata,
+    Column("language_tag", String(63), primary_key=True),
+    Column("pack_version", String(63), primary_key=True),
+    Column("direction", String(3), nullable=False),
+    Column("fallback_language", String(63)),
+    Column("offline_manifest_reference", String(256)),
+    Column("date_format_profile", String(63), nullable=False),
+    Column("number_format_profile", String(63), nullable=False),
+    Column("currency_format_profile", String(63), nullable=False),
+    Column("approved_at", DateTime(timezone=True)),
+    schema=AYO_SCHEMA,
+)
+
 legacy_wallets = Table(
     "legacy_wallets",
     metadata,

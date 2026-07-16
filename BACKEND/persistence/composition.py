@@ -14,11 +14,15 @@ from BACKEND.persistence.dispatch_repository import (
     PostgresDispatchRepository,
 )
 from BACKEND.persistence.driver_trust_repository import PostgresDriverTrustRepository
+from BACKEND.persistence.handoff_dispatch_repository import (
+    PostgresHandoffDispatchRepository,
+)
 from BACKEND.persistence.identity_repository import (
     PostgresAuthenticationChallengeRepository,
     PostgresIdentityRepository,
     PostgresRefreshTokenRepository,
 )
+from BACKEND.persistence.localization_repository import PostgresLocalizationRepository
 from BACKEND.persistence.outbox_repository import PostgresOutboxRepository
 from BACKEND.persistence.rate_limit_repository import PostgresTokenBucketRateLimiter
 from BACKEND.persistence.repositories import (
@@ -109,6 +113,14 @@ class AyoPostgresUnitOfWork(SqlAlchemyUnitOfWork):
     def ride_requests(self) -> PostgresRideRequestRepository:
         return self.repository("ride_requests", PostgresRideRequestRepository)
 
+    @property
+    def handoff_dispatch(self) -> PostgresHandoffDispatchRepository:
+        return self.repository("handoff_dispatch", PostgresHandoffDispatchRepository)
+
+    @property
+    def localization(self) -> PostgresLocalizationRepository:
+        return self.repository("localization", PostgresLocalizationRepository)
+
 
 class PostgresRepositoryComposition:
     """Process-scoped factory for transaction-scoped repository sets."""
@@ -141,6 +153,8 @@ class PostgresRepositoryComposition:
             "arrival_waiting": PostgresArrivalWaitingRepository,
             "driver_trust": PostgresDriverTrustRepository,
             "ride_requests": PostgresRideRequestRepository,
+            "handoff_dispatch": PostgresHandoffDispatchRepository,
+            "localization": PostgresLocalizationRepository,
         }
 
     def unit_of_work(self) -> AyoPostgresUnitOfWork:
