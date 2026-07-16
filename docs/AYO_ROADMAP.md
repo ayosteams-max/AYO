@@ -472,6 +472,25 @@ questions. See `MISSION_24_IDENTITY_VERIFICATION_TRUST_ARCHITECTURE.md`.
 operations before any implementation mission. Mission 20 remains disabled and its
 PostgreSQL certification gate is unchanged.
 
+### Pricing, Fares, Consequences, Incentives and Marketplace Economics — Mission 25
+
+**Status:** Architecture, research, policy modelling, threat modelling and simulation
+documentation approved by CTO/CEO on 2026-07-16 for preservation. No runtime,
+migration, dependency, provider, numeric policy, financial action, production route,
+commit, push or activation is authorized.
+
+**Scope:** Deterministic versioned fare lifecycle; Standard and separate Airport
+Standard/Premium pricing; Mission 20 evidence-gated waiting/cancellation/no-show
+consequences; driver earnings and commission; separate incentives/promotions;
+demand-adjustment options; tax/legal boundary; cash/future payment reconciliation;
+Customer Recovery separation; threats, persistence/contracts and economic simulation.
+See `MISSION_25_PRICING_MARKETPLACE_ECONOMICS_ARCHITECTURE.md`.
+
+**Gate:** CTO/CEO architecture approval, qualified Ethiopian legal/tax/operational
+review, local cost and affordability evidence, driver consultation and approved
+simulation thresholds precede any implementation or numeric policy. Mission 20 remains
+disabled until every PostgreSQL certification gate and separate activation approval.
+
 
 **Shared gate:** Each engine requires a separately authorized research and architecture mission, Ethiopian legal/operational review, explicit policy and financial limits, privacy/retention approval, abuse controls, human-operations design and CTO/CEO approval. See `docs/AYO_FUTURE_TRUST_AND_AI_SUPPORT_ENGINES.md`.
 

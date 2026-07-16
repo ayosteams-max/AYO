@@ -1,5 +1,11 @@
 # AYO PRICING ENGINE
 
+> Mission 25 architecture note (2026-07-16): this legacy product-intent document does
+> not define approved numeric pricing policy. The proposed server-authoritative,
+> versioned architecture and its authority gates are in
+> `docs/MISSION_25_PRICING_MARKETPLACE_ECONOMICS_ARCHITECTURE.md`. No Mission 25 runtime,
+> fee, tax, commission, incentive, demand adjustment or financial action is authorized.
+
 ## Mission
 
 Prices must be:
@@ -140,7 +146,7 @@ appealable, evidence-based policy and separate leadership approval.
 
 # AI Pricing
 
-AYO AI considers:
+AYO AI may advise on:
 
 - Traffic
 - Weather
@@ -149,7 +155,8 @@ AYO AI considers:
 - Events
 - Road Closures
 
-The goal is always fair pricing.
+The deterministic Pricing authority alone applies an approved policy. AI cannot set,
+publish, personalize or finalize a fare, surge, consequence, commission or incentive.
 
 ---
 

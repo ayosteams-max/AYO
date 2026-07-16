@@ -355,6 +355,22 @@ eligibility or bypass Safety/Fraud/Authorization. See
 Approval covers documentation architecture only. Providers, proofing operations,
 biometrics, migrations, production routes and activation remain separately gated.
 
+## Approved Pricing and Marketplace Economics architecture
+
+Mission 25 defines a deterministic server-authoritative Pricing boundary for versioned
+estimates, final fares, corrections, commission and approved financial-policy
+interpretation. Incentives remains a separate eligibility/programme authority;
+Customer Recovery authorizes approved remedies; Payments collects/reconciles; and
+Wallet/Ledger alone moves value. Mission 20 supplies arrival, waiting and consequence-
+readiness evidence only and never calculates a fee. See
+`MISSION_25_PRICING_MARKETPLACE_ECONOMICS_ARCHITECTURE.md`.
+
+Approval covers documentation architecture only. It contains no numeric Ethiopian
+price, duration, fee, tax, commission,
+incentive or surge policy. No runtime, migration, provider, public route, financial
+action or activation is authorized. AI and Marketplace Health
+remain advisory only. Mission 20 remains disabled and PostgreSQL-certification blocked.
+
 # Authentication architecture requirements
 
 Authentication uses PostgreSQL as durable identity/session authority and the

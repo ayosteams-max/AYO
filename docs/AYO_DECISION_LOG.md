@@ -624,3 +624,13 @@ Supersedes / superseded by:
 - **Authority:** Authentication proves authenticator control; proofing binds approved evidence for a purpose; Eligibility/Safety decides service access. AI/OCR remains advisory and cannot approve identity/documents, recover/suspend accounts or grant eligibility.
 - **Alternatives:** A single “verified” flag is rejected because it hides purpose, evidence, expiry and appeal. Provider-owned identity authority is deferred because legal, lock-in, outage, bias and data-sovereignty obligations are unresolved.
 - **Open gates:** Ethiopian rider/driver proof requirements, Fayda boundary, document authorities, biometrics/liveness, OTP/provider operations, Trusted Driver policy, airport requirements, retention/cross-border rules and appeal staffing require leadership, local operations and qualified legal approval.
+
+### PA-044 — Mission 25 Pricing and Marketplace Economics architecture
+
+- **Date:** 2026-07-16
+- **Status:** Architecture approved by CTO/CEO on 2026-07-16 for documentation preservation. No runtime, migration, dependency, provider, numeric policy, financial action, production route, deployment, push or activation is authorized.
+- **Problem:** AYO needs rider-price clarity, sustainable driver earnings and auditable economics without allowing uncertainty, AI, Support, dispatch or payment channels to create hidden or unauthorized financial consequences.
+- **Proposal:** Use immutable effective-dated pricing policies and deterministic minor-unit calculations for estimate/final/correction lineage; keep Incentives eligibility, Recovery authorization, Payment collection/reconciliation and Wallet/Ledger posting as separate authorities. See `docs/MISSION_25_PRICING_MARKETPLACE_ECONOMICS_ARCHITECTURE.md`.
+- **Alternatives:** Static versioned tariffs are the recommended pilot baseline. Capped deterministic demand adjustment remains a separately approved extension; individualized learned pricing is rejected for opacity, discrimination, privacy and drift risk.
+- **Authority:** Pricing alone calculates fares and financial-policy outcomes. Mission 20 supplies evidence only; Support investigates; Customer Recovery authorizes approved remedies; Wallet/Ledger alone moves value. AI and Marketplace Health advise only.
+- **Open gates:** Ethiopian cost/affordability study, driver consultation, tax/legal/transport/airport review, cash reconciliation procedure, numeric policy, incentive/fatigue rules, demand-adjustment decision and simulation thresholds require separate leadership approval. Mission 20 certification/activation remains unchanged.
