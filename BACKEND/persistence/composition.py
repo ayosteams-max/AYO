@@ -24,6 +24,7 @@ from BACKEND.persistence.identity_repository import (
 )
 from BACKEND.persistence.localization_repository import PostgresLocalizationRepository
 from BACKEND.persistence.outbox_repository import PostgresOutboxRepository
+from BACKEND.persistence.pricing_repository import PostgresPricingRepository
 from BACKEND.persistence.rate_limit_repository import PostgresTokenBucketRateLimiter
 from BACKEND.persistence.repositories import (
     PostgresLegacyWalletRepository,
@@ -121,6 +122,10 @@ class AyoPostgresUnitOfWork(SqlAlchemyUnitOfWork):
     def localization(self) -> PostgresLocalizationRepository:
         return self.repository("localization", PostgresLocalizationRepository)
 
+    @property
+    def pricing(self) -> PostgresPricingRepository:
+        return self.repository("pricing", PostgresPricingRepository)
+
 
 class PostgresRepositoryComposition:
     """Process-scoped factory for transaction-scoped repository sets."""
@@ -155,6 +160,7 @@ class PostgresRepositoryComposition:
             "ride_requests": PostgresRideRequestRepository,
             "handoff_dispatch": PostgresHandoffDispatchRepository,
             "localization": PostgresLocalizationRepository,
+            "pricing": PostgresPricingRepository,
         }
 
     def unit_of_work(self) -> AyoPostgresUnitOfWork:

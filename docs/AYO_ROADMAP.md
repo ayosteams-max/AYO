@@ -563,6 +563,21 @@ inactive event seams only. No fare, money, consequence, public route, future pro
 Mission 20 behavior is activated. See
 `IMPLEMENTATION_INCREMENT_6_ACTIVE_RIDE_LIFECYCLE.md`.
 
+**Increment 7 checkpoint:** Versioned synthetic Immediate Standard ETB policies,
+integer-only estimates, authenticated acceptance, completed-ride final calculation,
+Rider/Driver breakdowns, append-only correction lineage and pricing outbox are implemented
+locally and awaiting CTO/CEO review. Every result carries complete policy, input, provider,
+component, commission, tax-placeholder, rounding, correction, approval and event lineage
+that deterministically reproduces the persisted result. Future financial consumers consume
+that output without fare recalculation. Immutable lifecycle traceability explicitly connects
+Ride Request, Dispatch Handoff, Assignment, Active Ride, Estimate and every append-only Fare
+Calculation; the persistence layer now fails closed on missing, mismatched, forged or
+cross-ride lineage and requires a distinct predecessor chain for corrections. Future Ledger,
+Wallet and Settlement records must extend, never reconstruct or overwrite, the chain. AI
+supplies no financial reasoning. No production tariff, payment, cash proof, ledger,
+wallet, bonus, promotion, waiting/cancellation consequence, public route or Mission 20
+behavior is activated. See `IMPLEMENTATION_INCREMENT_7_PRICING_FOUNDATION.md`.
+
 **Shared gate:** Each engine requires a separately authorized research and architecture mission, Ethiopian legal/operational review, explicit policy and financial limits, privacy/retention approval, abuse controls, human-operations design and CTO/CEO approval. See `docs/AYO_FUTURE_TRUST_AND_AI_SUPPORT_ENGINES.md`.
 
 ## Post-launch expansion gate

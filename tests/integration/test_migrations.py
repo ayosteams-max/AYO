@@ -49,6 +49,14 @@ def test_upgrade_empty_database_matches_metadata_and_postgresql_17(
     assert readiness.current_revision == expected_schema_revision()
     assert set(inspect(postgres_engine).get_table_names(schema=AYO_SCHEMA)) == {
         "active_rides",
+        "pricing_policies",
+        "fare_estimates",
+        "fare_estimate_acceptances",
+        "fare_calculations",
+        "pricing_calculation_components",
+        "pricing_idempotency",
+        "pricing_events",
+        "pricing_outbox",
         "active_ride_events",
         "active_ride_idempotency_records",
         "active_ride_projection_checkpoints",
@@ -500,3 +508,21 @@ def test_active_ride_lifecycle_migration_is_reversible(
     }
     assert "ride_request_id" not in columns
     assert "dispatch_handoff_id" not in columns
+
+
+def test_pricing_foundation_migration_is_reversible(
+    postgres_engine, empty_database
+) -> None:
+    runner = MigrationRunner(postgres_engine)
+    runner.upgrade()
+    from alembic import command
+
+    config = alembic_config()
+    config.attributes["connection"] = postgres_engine.connect()
+    try:
+        command.downgrade(config, "20260716_0018")
+    finally:
+        config.attributes["connection"].close()
+    tables = set(inspect(postgres_engine).get_table_names(schema=AYO_SCHEMA))
+    assert "pricing_policies" not in tables
+    assert "fare_estimates" not in tables

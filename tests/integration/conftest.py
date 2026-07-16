@@ -42,6 +42,9 @@ from BACKEND.persistence.tables import (
     driver_trust_outbox,
     driver_vehicle_authorizations,
     driver_vehicles,
+    fare_calculations,
+    fare_estimate_acceptances,
+    fare_estimates,
     identities,
     identity_authentication_methods,
     identity_devices,
@@ -61,6 +64,11 @@ from BACKEND.persistence.tables import (
     marketplace_simulation_runs,
     metadata,
     permissions,
+    pricing_calculation_components,
+    pricing_events,
+    pricing_idempotency,
+    pricing_outbox,
+    pricing_policies,
     rate_limit_buckets,
     recovery_cases,
     refresh_token_rotations,
@@ -139,6 +147,14 @@ def postgres_engine():
 @pytest.fixture(autouse=True)
 def clean_postgres_tables(postgres_engine):
     with postgres_engine.begin() as connection:
+        connection.execute(delete(pricing_outbox))
+        connection.execute(delete(pricing_events))
+        connection.execute(delete(pricing_calculation_components))
+        connection.execute(delete(fare_calculations))
+        connection.execute(delete(fare_estimate_acceptances))
+        connection.execute(delete(fare_estimates))
+        connection.execute(delete(pricing_idempotency))
+        connection.execute(delete(pricing_policies))
         connection.execute(delete(immediate_dispatch_outbox))
         connection.execute(delete(immediate_dispatch_events))
         connection.execute(delete(immediate_dispatch_assignments))

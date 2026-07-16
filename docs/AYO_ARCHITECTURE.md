@@ -453,6 +453,35 @@ AYO Wallet/Ledger, AYO Status, AYO Family, Growth Engine, Driver Support Bonus a
 Engine. These systems receive no activation or authority from the seam. See
 `IMPLEMENTATION_INCREMENT_6_ACTIVE_RIDE_LIFECYCLE.md`. Mission 20 remains disabled.
 
+### Increment 7 Pricing calculation checkpoint
+
+Pricing now owns a versioned, effective-dated ETB calculation boundary for synthetic
+Immediate Standard policies, immutable estimates and Rider acceptance, completed-ride
+final calculation, transparent Rider/Driver projections and append-only corrections.
+All money uses integer minor units and deterministic rounding. Route providers supply
+evidence only; clients and AI cannot provide authoritative totals.
+
+Each Pricing result includes a formula-versioned immutable lineage snapshot covering
+policy approval/publication, route input sources and provider version, all numeric operands,
+component and rounding derivation, canonical input hash, correction predecessor and event
+correlation/causation. The stored result is reproducible solely from that snapshot. Ledger,
+Wallet, Tax, Finance, Audit and regulatory reporting must consume the authoritative Pricing
+output without recalculating it; opaque AI reasoning is never a financial input.
+
+Permanent Financial Traceability is carried as immutable data, not reconstructed later.
+Pricing estimates preserve Ride Request and Estimate references; completed and corrected
+calculations preserve Ride Request, Dispatch Handoff, Assignment, Active Ride, Estimate and
+Calculation references. Corrections append a predecessor-linked record. The persistence layer
+now fails closed on missing, mismatched, forged or cross-ride lineage, and the Ride-ID
+journey projection returns the complete explicit chain for Support, Finance and Audit without
+changing any upstream authority. Future Ledger, Wallet and Settlement artifacts must extend
+the same chain with their own immutable IDs.
+
+Pricing produces no payment authorization, cash proof, ledger posting, wallet balance,
+refund, bonus, waiting or cancellation consequence. Transactional events expose inactive
+consumer seams only. See `IMPLEMENTATION_INCREMENT_7_PRICING_FOUNDATION.md`. No numeric
+production tariff or public feature is activated; Mission 20 remains disabled.
+
 # Authentication architecture requirements
 
 Authentication uses PostgreSQL as durable identity/session authority and the

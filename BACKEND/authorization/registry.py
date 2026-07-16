@@ -57,6 +57,13 @@ PERMISSION_REGISTRY = MappingProxyType(
         "dispatch.handoff.worker": "Run bounded Immediate Dispatch handoff work.",
         "localization.preference.read_own": "Read the authenticated identity's language preference.",
         "localization.preference.update_own": "Update the authenticated identity's language preference.",
+        "pricing.policy.manage": "Create and approve immutable pricing policy versions.",
+        "pricing.policy.publish": "Publish a checker-approved pricing policy version.",
+        "pricing.estimate.create": "Create an owned Immediate Standard ETB estimate.",
+        "pricing.estimate.accept": "Accept an owned unexpired fare estimate.",
+        "pricing.final.calculate": "Calculate a final fare from a completed canonical ride.",
+        "pricing.breakdown.read_own": "Read an authorized role-safe pricing breakdown.",
+        "pricing.trace.read": "Read an authorized immutable financial journey projection.",
     }
 )
 
