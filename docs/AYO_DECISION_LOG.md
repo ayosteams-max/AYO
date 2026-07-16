@@ -606,3 +606,12 @@ Supersedes / superseded by:
 - **Store strategy:** Differentiate through verifiable AYO strengths rather than competitor names or unshipped claims. Every asset must map to the submitted build and release evidence; Mission 20 cannot appear while disabled or uncertified.
 - **Open gates:** Ethiopian field usability, Amharic content, accessibility, airport/venue terminology, safety operations, supported-device targets, Rider/Driver app packaging and prototype success thresholds require leadership/operations review before implementation.
 - **Sequencing:** Stop after Mission 22 documentation. No later scope may be inferred without explicit leadership authorization.
+
+### PA-042 — Mission 23 Dispatch Optimization architecture
+
+- **Date:** 2026-07-16
+- **Status:** Architecture approved by CTO on 2026-07-16 for documentation preservation. No runtime, migration, dependency, provider, route, production feature or activation authorized.
+- **Proposal:** Coordinate existing dispatch domains through a deterministic versioned policy pipeline and a separate read-only Marketplace Health Engine; preserve exclusive sequential Immediate offers as launch default, Scheduled commitment locks, current-trip-first pre-dispatch, separate airport products, aggregate fairness monitoring and provider-neutral prediction shadowing. See `docs/MISSION_23_DISPATCH_OPTIMIZATION_ARCHITECTURE.md`.
+- **Authority:** Mission 23 does not assign drivers or own offers/commitments/lifecycle. AI/predictions advise only and cannot remove, punish, price, bonus, restrict, override safety or bypass commitments. Marketplace health cannot execute its recommendations.
+- **Alternatives:** Uncontrolled broadcast and a global learned optimizer are rejected for launch because delay, contention, distraction, data, bias, explainability and recovery costs are not justified. Bounded batch strategies require simulation and separate approval.
+- **Open gates:** Addis zone definitions, offer/radius timing, airport operations, working-time/fatigue rules, opportunity/earnings metrics, privacy retention, simulation thresholds and any experiment require CTO/CEO and local operational/legal approval.

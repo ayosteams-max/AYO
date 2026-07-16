@@ -329,6 +329,19 @@ code, routes, providers, deployment or activation. Mission 20 still requires suc
 PostgreSQL integration, migration upgrade/downgrade, recovery, restart and concurrency
 certification before its flag can be considered for separate activation approval.
 
+## Approved Dispatch Optimization and Marketplace Health architecture
+
+Mission 23 coordinates existing dispatch authorities through a versioned deterministic
+policy boundary and adds a read-only advisory Marketplace Health Engine. Immediate,
+Scheduled, Smart Pre-Dispatch, Airport, Active Ride, Mission 20, Availability, Eligibility,
+Safety, Pricing, Incentives and Support retain their approved ownership. Mission 23 is not
+a second dispatcher and cannot assign, break commitments, price, bonus, punish, restrict
+or activate Mission 20. See `MISSION_23_DISPATCH_OPTIMIZATION_ARCHITECTURE.md`.
+
+CTO approval covers architecture documentation only. Implementation, migrations,
+providers, production routes and activation require separate approval. AI remains
+advisory, and Mission 20 remains disabled pending all PostgreSQL certification gates.
+
 # Authentication architecture requirements
 
 Authentication uses PostgreSQL as durable identity/session authority and the

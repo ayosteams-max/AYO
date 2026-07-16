@@ -436,6 +436,25 @@ content and success thresholds, then obtain separate CTO implementation authoriz
 Mission 20 remains disabled and cannot be marketed or exposed until every PostgreSQL
 certification gate and separate activation approval passes.
 
+### Dispatch Optimization, Marketplace Health and Fairness — Mission 23
+
+**Status:** Architecture, research, threat modelling and simulation strategy approved by
+CTO on 2026-07-16 for documentation preservation. No implementation, migration,
+provider, production route or activation is authorized.
+
+**Scope:** Coordinate—not replace—Immediate, Scheduled, Smart Pre-Dispatch, Airport and
+Active Ride dispatch; deterministic pipeline; offer strategies; advisory marketplace
+health; rider/driver fairness; prediction boundaries; recovery, security, privacy,
+explanations, simulation and gradual scale. See
+`MISSION_23_DISPATCH_OPTIMIZATION_ARCHITECTURE.md`.
+
+**Gate:** Approve authorities, Ethiopian operating policy and simulation measures before
+any implementation mission. Mission 20 remains disabled and PostgreSQL certification is
+unchanged.
+
+**Sequencing hold:** No Mission 24 or later mission is defined or authorized. Work stops
+after preserving Mission 23 until leadership supplies the next mission scope.
+
 
 **Shared gate:** Each engine requires a separately authorized research and architecture mission, Ethiopian legal/operational review, explicit policy and financial limits, privacy/retention approval, abuse controls, human-operations design and CTO/CEO approval. See `docs/AYO_FUTURE_TRUST_AND_AI_SUPPORT_ENGINES.md`.
 
