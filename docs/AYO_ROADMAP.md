@@ -376,11 +376,20 @@ insufficient.
 
 ### AI Customer Support Engine
 
-**Status:** Future architecture direction only; no implementation, model, provider or channel selected.
+**Status:** Mission 21 research direction was approved by CTO/CEO on 2026-07-16 for
+future architecture work. Architecture design and implementation remain unauthorized;
+no schema, migration, dependency, model, provider, channel, financial action or
+activation is authorized. See `MISSION_21_AI_CUSTOMER_SUPPORT_DISPUTE_RESEARCH.md`.
 
 **Objective:** Acknowledge immediately and resolve routine verified cases within seconds through approved structured evidence, tools and low-risk workflows, without making users repeat known information. Serious, ambiguous, financial, safety, legal, identity, fraud and vulnerable-person cases require seamless human escalation.
 
 **Potential future scope:** Multilingual Amharic/English support across provider-neutral app, SMS, voice and call-centre interfaces; deterministic fallback; minimum-data retrieval; auditable explanations; and later human-supervised learning from confirmed outcomes.
+
+**Approved research direction:** Use constrained AI interaction over deterministic,
+versioned support policy and purpose-scoped evidence. Routine allow-listed workflows may
+resolve only when evidence and calibrated confidence are sufficient. Safety, emergency,
+identity, account recovery, fraud, irreversible restrictions and material financial
+cases require specialist control regardless of model confidence.
 
 **Shared gate:** Each engine requires a separately authorized research and architecture mission, Ethiopian legal/operational review, explicit policy and financial limits, privacy/retention approval, abuse controls, human-operations design and CTO/CEO approval. See `docs/AYO_FUTURE_TRUST_AND_AI_SUPPORT_ENGINES.md`.
 
