@@ -339,13 +339,22 @@ leadership approval.
 
 ### Smart Arrival, Waiting and Fair Cancellation Engine
 
-**Status:** Approved future architecture direction only; no runtime, fee, compensation or
-mission sequence authorized.
+**Status:** Mission 20 architecture was approved by CTO/CEO on 2026-07-16 and bounded
+implementation is authorized. Fees, paid waiting, refunds, compensation, providers,
+public activation and deployment remain excluded. See
+`MISSION_20_SMART_ARRIVAL_WAITING_CANCELLATION_RESEARCH.md` and
+`MISSION_20_SMART_ARRIVAL_WAITING_CANCELLATION_ARCHITECTURE.md`.
 
 **Objective:** Protect verified driver waiting time while giving riders early movement
 guidance, a fair visible free-wait countdown and reliable notification. Produce versioned
 arrival/waiting/no-show evidence and suppress consequences when pickup, data, platform or
 external conditions make them unfair.
+
+**Approved amendment:** Continuously estimate confidence-bearing Rider Readiness and
+issue bounded, non-spammy leave-for-pickup guidance when useful. Select waiting behavior
+from immutable versioned configuration covering airport, hotel, hospital, shopping
+centre, residential, Immediate, Scheduled, accessibility, severe-weather and approved
+operational contexts; no global hard-coded waiting duration.
 
 ### Landmark Intelligence Layer
 
