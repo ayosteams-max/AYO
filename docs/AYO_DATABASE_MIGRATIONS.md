@@ -138,6 +138,15 @@ matrix and does not attach authorization to the 12 compatibility routes.
 Revision `20260715_0006` registers the authorization-ready, non-privileged
 `support.*` permission set for future AI-first chat and voice support. It creates no
 service identity, role, assignment, support workflow, AI model or provider.
+
+## Backup and restore certification
+
+`database/certify_restore.py` operates only on the disposable database named by
+`AYO_TEST_DATABASE_URL`. It creates a sibling ending in `_restore_cert`, restores a
+custom-format `pg_dump`, verifies the AYO schema-version row and removes the target in
+all outcomes. It rejects PostgreSQL system databases and never drops the source.
+PostgreSQL client executables must be on `PATH`; credentials stay in protected
+environment configuration and must not be printed or committed.
 # Mission 15 marketplace intelligence migration
 
 Revision `20260716_0010` adds only advisory marketplace tables: immutable rule versions, replayable decision explanations and simulation results. It is additive, contains no customer data conversion and does not alter dispatch or pricing tables.

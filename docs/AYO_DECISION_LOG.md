@@ -652,3 +652,11 @@ Supersedes / superseded by:
 - **Problem:** Approved missions need one dependency-safe implementation order that produces a complete pilot ride instead of activating disconnected features.
 - **Proposal:** Certify foundations first, then identity/eligibility, ride/pickup, Immediate Dispatch, Active Ride, Pricing, immutable cash ledger, mobile MVP and support/operations; keep advanced features behind independent gates. See `docs/IMPLEMENTATION_PHASE_1_MASTER_PLAN.md`.
 - **Boundary:** No Mission 27 is created. Mission 20 remains disabled and all PostgreSQL certification gates remain mandatory.
+
+### AP-047 — Implementation Increment 1 foundation certification
+
+- **Date:** 2026-07-16
+- **Status:** Implementation approved by CTO/CEO on 2026-07-16 for local preservation. No push, deployment or business-feature activation authorized.
+- **Decision:** Preserve the existing PostgreSQL/Alembic/audit/idempotency/health foundation and close the identified recovery gap with a standard-client, disposable backup/restore certification tool wired into CI.
+- **Evidence:** PostgreSQL 17.10; migration 9/9; full suite 235 passed and one expected legacy-wallet xfail; 86.02% branch coverage; actual dump/restore and clean restart retained head `20260716_0014`; Ruff passed; dependency audit clean; no medium/high Bandit finding.
+- **Boundary:** No authentication, ride, dispatch, pricing, payment, wallet or business behavior changed. Mission 20 remains disabled. Global strict mypy retains 34 pre-existing business-module errors and is not represented as passing.
