@@ -1,5 +1,6 @@
 from sqlalchemy import (
     JSON,
+    BigInteger,
     Boolean,
     CheckConstraint,
     Column,
@@ -2230,5 +2231,231 @@ legacy_wallets = Table(
         "Non-authoritative prototype state. Never treat as a financial ledger or "
         "migrate as trusted balances."
     ),
+    schema=AYO_SCHEMA,
+)
+
+pricing_policies = Table(
+    "pricing_policies",
+    metadata,
+    Column("policy_id", UUID(as_uuid=True), primary_key=True),
+    Column("policy_version", String(63), nullable=False, unique=True),
+    Column("predecessor_policy_id", UUID(as_uuid=True)),
+    Column("service_zone_id", UUID(as_uuid=True), nullable=False),
+    Column("service_type", String(32), nullable=False),
+    Column("currency", String(3), nullable=False),
+    Column("base_fare_minor", BigInteger, nullable=False),
+    Column("distance_rate_per_km_minor", BigInteger, nullable=False),
+    Column("time_rate_per_minute_minor", BigInteger, nullable=False),
+    Column("minimum_fare_minor", BigInteger, nullable=False),
+    Column("commission_basis_points", Integer, nullable=False),
+    Column("tax_placeholder_basis_points", Integer, nullable=False),
+    Column("rounding_increment_minor", Integer, nullable=False),
+    Column("effective_from", DateTime(timezone=True), nullable=False),
+    Column("effective_until", DateTime(timezone=True)),
+    Column("status", String(24), nullable=False),
+    Column("made_by_identity_id", UUID(as_uuid=True), nullable=False),
+    Column("approved_by_identity_id", UUID(as_uuid=True)),
+    Column("approved_at", DateTime(timezone=True)),
+    Column("published_at", DateTime(timezone=True)),
+    Column("published_by_identity_id", UUID(as_uuid=True)),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    CheckConstraint(
+        "service_type='immediate_standard' AND currency='ETB'",
+        name="pricing_policy_pilot_boundary",
+    ),
+    CheckConstraint(
+        "base_fare_minor>=0 AND distance_rate_per_km_minor>=0 AND "
+        "time_rate_per_minute_minor>=0 AND minimum_fare_minor>=base_fare_minor",
+        name="pricing_policy_nonnegative_money",
+    ),
+    CheckConstraint(
+        "commission_basis_points BETWEEN 0 AND 10000 AND "
+        "tax_placeholder_basis_points BETWEEN 0 AND 10000",
+        name="pricing_policy_bounded_rates",
+    ),
+    CheckConstraint(
+        "approved_by_identity_id IS NULL OR approved_by_identity_id<>made_by_identity_id",
+        name="pricing_policy_maker_checker",
+    ),
+    schema=AYO_SCHEMA,
+)
+Index(
+    "ix_pricing_policy_lookup",
+    pricing_policies.c.service_zone_id,
+    pricing_policies.c.service_type,
+    pricing_policies.c.status,
+    pricing_policies.c.effective_from,
+)
+
+fare_estimates = Table(
+    "fare_estimates",
+    metadata,
+    Column("estimate_id", UUID(as_uuid=True), primary_key=True),
+    Column("ride_request_id", UUID(as_uuid=True), nullable=False),
+    Column("rider_identity_id", UUID(as_uuid=True), nullable=False),
+    Column(
+        "policy_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.pricing_policies.policy_id"),
+        nullable=False,
+    ),
+    Column("policy_version", String(63), nullable=False),
+    Column("service_zone_id", UUID(as_uuid=True), nullable=False),
+    Column("service_type", String(32), nullable=False),
+    Column("metrics", JSONB().with_variant(JSON(), "sqlite"), nullable=False),
+    Column("breakdown", JSONB().with_variant(JSON(), "sqlite"), nullable=False),
+    Column(
+        "financial_traceability", JSONB().with_variant(JSON(), "sqlite"), nullable=False
+    ),
+    Column(
+        "calculation_lineage", JSONB().with_variant(JSON(), "sqlite"), nullable=False
+    ),
+    Column("state", String(32), nullable=False),
+    Column("expires_at", DateTime(timezone=True), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("reason_codes", JSONB().with_variant(JSON(), "sqlite"), nullable=False),
+    Column("translation_keys", JSONB().with_variant(JSON(), "sqlite"), nullable=False),
+    Column("audit_reference", UUID(as_uuid=True), nullable=False),
+    Column("correlation_id", UUID(as_uuid=True), nullable=False),
+    Column("causation_id", UUID(as_uuid=True), nullable=False),
+    schema=AYO_SCHEMA,
+)
+Index(
+    "ix_fare_estimate_owner",
+    fare_estimates.c.rider_identity_id,
+    fare_estimates.c.created_at,
+)
+
+fare_estimate_acceptances = Table(
+    "fare_estimate_acceptances",
+    metadata,
+    Column("acceptance_id", UUID(as_uuid=True), primary_key=True),
+    Column(
+        "estimate_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.fare_estimates.estimate_id"),
+        nullable=False,
+        unique=True,
+    ),
+    Column("rider_identity_id", UUID(as_uuid=True), nullable=False),
+    Column("accepted_policy_version", String(63), nullable=False),
+    Column("accepted_amount_minor", BigInteger, nullable=False),
+    Column("currency", String(3), nullable=False),
+    Column("accepted_at", DateTime(timezone=True), nullable=False),
+    Column("idempotency_key", String(128), nullable=False),
+    Column("audit_reference", UUID(as_uuid=True), nullable=False),
+    CheckConstraint(
+        "accepted_amount_minor>=0 AND currency='ETB'",
+        name="estimate_acceptance_etb_nonnegative",
+    ),
+    UniqueConstraint("rider_identity_id", "idempotency_key"),
+    schema=AYO_SCHEMA,
+)
+
+fare_calculations = Table(
+    "fare_calculations",
+    metadata,
+    Column("calculation_id", UUID(as_uuid=True), primary_key=True),
+    Column("estimate_id", UUID(as_uuid=True), nullable=False),
+    Column("acceptance_id", UUID(as_uuid=True), nullable=False),
+    Column("ride_id", UUID(as_uuid=True), nullable=False),
+    Column("rider_identity_id", UUID(as_uuid=True), nullable=False),
+    Column("driver_identity_id", UUID(as_uuid=True), nullable=False),
+    Column("policy_id", UUID(as_uuid=True), nullable=False),
+    Column("policy_version", String(63), nullable=False),
+    Column("state", String(40), nullable=False),
+    Column("metrics", JSONB().with_variant(JSON(), "sqlite"), nullable=False),
+    Column("breakdown", JSONB().with_variant(JSON(), "sqlite"), nullable=False),
+    Column(
+        "financial_traceability", JSONB().with_variant(JSON(), "sqlite"), nullable=False
+    ),
+    Column(
+        "calculation_lineage", JSONB().with_variant(JSON(), "sqlite"), nullable=False
+    ),
+    Column("estimate_difference_minor", BigInteger, nullable=False),
+    Column("predecessor_calculation_id", UUID(as_uuid=True)),
+    Column("reason_codes", JSONB().with_variant(JSON(), "sqlite"), nullable=False),
+    Column("translation_keys", JSONB().with_variant(JSON(), "sqlite"), nullable=False),
+    Column("audit_reference", UUID(as_uuid=True), nullable=False),
+    Column("calculated_at", DateTime(timezone=True), nullable=False),
+    Column(
+        "settlement_instruction_ready",
+        Boolean,
+        nullable=False,
+        server_default=text("false"),
+    ),
+    schema=AYO_SCHEMA,
+)
+Index(
+    "ix_fare_calculation_ride",
+    fare_calculations.c.ride_id,
+    fare_calculations.c.calculated_at,
+)
+Index(
+    "uq_fare_calculation_original",
+    fare_calculations.c.ride_id,
+    unique=True,
+    postgresql_where=fare_calculations.c.predecessor_calculation_id.is_(None),
+)
+
+pricing_calculation_components = Table(
+    "pricing_calculation_components",
+    metadata,
+    Column("component_id", UUID(as_uuid=True), primary_key=True),
+    Column(
+        "calculation_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.fare_calculations.calculation_id"),
+        nullable=False,
+    ),
+    Column("component_type", String(40), nullable=False),
+    Column("amount_minor", BigInteger, nullable=False),
+    Column("currency", String(3), nullable=False),
+    Column("policy_version", String(63), nullable=False),
+    CheckConstraint(
+        "amount_minor>=0 AND currency='ETB'", name="pricing_component_etb_nonnegative"
+    ),
+    UniqueConstraint("calculation_id", "component_type"),
+    schema=AYO_SCHEMA,
+)
+
+pricing_idempotency = Table(
+    "pricing_idempotency",
+    metadata,
+    Column("actor_id", UUID(as_uuid=True), primary_key=True),
+    Column("operation", String(40), primary_key=True),
+    Column("idempotency_key", String(128), primary_key=True),
+    Column("request_hash", String(64), nullable=False),
+    Column("response_reference", UUID(as_uuid=True), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    schema=AYO_SCHEMA,
+)
+
+pricing_events = Table(
+    "pricing_events",
+    metadata,
+    Column("event_id", UUID(as_uuid=True), primary_key=True),
+    Column("aggregate_type", String(32), nullable=False),
+    Column("aggregate_id", UUID(as_uuid=True), nullable=False),
+    Column("event_type", String(63), nullable=False),
+    Column("schema_version", Integer, nullable=False),
+    Column("safe_payload", JSONB().with_variant(JSON(), "sqlite"), nullable=False),
+    Column("occurred_at", DateTime(timezone=True), nullable=False),
+    Column("correlation_id", UUID(as_uuid=True), nullable=False),
+    Column("causation_id", UUID(as_uuid=True), nullable=False),
+    schema=AYO_SCHEMA,
+)
+
+pricing_outbox = Table(
+    "pricing_outbox",
+    metadata,
+    Column("message_id", UUID(as_uuid=True), primary_key=True),
+    Column("event_id", UUID(as_uuid=True), nullable=False, unique=True),
+    Column("event_type", String(63), nullable=False),
+    Column("safe_payload", JSONB().with_variant(JSON(), "sqlite"), nullable=False),
+    Column("occurred_at", DateTime(timezone=True), nullable=False),
+    Column("available_at", DateTime(timezone=True), nullable=False),
+    Column("published_at", DateTime(timezone=True)),
+    Column("attempt_count", Integer, nullable=False, server_default=text("0")),
     schema=AYO_SCHEMA,
 )
