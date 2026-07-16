@@ -529,6 +529,12 @@ approved by CTO/CEO on 2026-07-16. The change adds CI-backed disposable dump/res
 certification and documentation only; it does not activate business features. See
 `IMPLEMENTATION_INCREMENT_1_ENGINEERING_FOUNDATION.md`.
 
+**Increment 2 checkpoint:** Authentication, session, refresh replay, RBAC, ownership,
+rate-limit and audit foundations were approved by CTO/CEO on 2026-07-16.
+Ownership is server-resolved and deny-by-default; authentication is provider-neutral and
+no public provider-backed flow or business route is activated. See
+`IMPLEMENTATION_INCREMENT_2_AUTH_SECURITY_FOUNDATION.md`.
+
 **Shared gate:** Each engine requires a separately authorized research and architecture mission, Ethiopian legal/operational review, explicit policy and financial limits, privacy/retention approval, abuse controls, human-operations design and CTO/CEO approval. See `docs/AYO_FUTURE_TRUST_AND_AI_SUPPORT_ENGINES.md`.
 
 ## Post-launch expansion gate

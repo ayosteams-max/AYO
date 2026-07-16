@@ -107,6 +107,7 @@ def test_permission_decorator_records_policy_without_enforcing_it_early() -> Non
     requirement = endpoint.__ayo_permission_requirement__  # type: ignore[attr-defined]
     assert requirement.permission == "rides.read"
     assert requirement.resource_type == "ride"
+    assert not requirement.ownership_required
     assert asyncio.run(AnonymousSubjectResolver().resolve(object())) is None  # type: ignore[arg-type]
 
 

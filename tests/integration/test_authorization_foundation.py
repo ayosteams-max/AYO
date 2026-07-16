@@ -39,6 +39,16 @@ class TrustedTestSubjectResolver:
         return self._subject
 
 
+class StaticOwnershipResolver:
+    def __init__(self, owner_identity_id):
+        self._owner_identity_id = owner_identity_id
+
+    def owner_identity_id(self, *, resource_type: str, resource_id: str):
+        assert resource_type == "test_resource"
+        assert resource_id
+        return self._owner_identity_id
+
+
 def create_identity(postgres_composition, identity_type=IdentityType.RIDER) -> Identity:
     now = datetime.now(UTC)
     identity = Identity(
@@ -268,6 +278,28 @@ def build_protected_app(postgres_composition, resolver) -> FastAPI:
     return app
 
 
+def build_owned_app(postgres_composition, resolver, ownership_resolver) -> FastAPI:
+    app = FastAPI()
+    app.state.authorization_enforcer = AuthorizationEnforcer(
+        postgres_composition, ownership_resolver=ownership_resolver
+    )
+    app.add_middleware(AuthorizationContextMiddleware, resolver=resolver)
+    router = APIRouter(route_class=AuthorizationRoute)
+
+    @router.get("/owned/{resource_id}")
+    @permission_required(
+        "test.route.read",
+        resource_type="test_resource",
+        resource_id_parameter="resource_id",
+        ownership_required=True,
+    )
+    def owned(resource_id: str) -> dict[str, str]:
+        return {"resource_id": resource_id}
+
+    app.include_router(router)
+    return app
+
+
 def test_middleware_decorator_and_dependency_enforce_real_rbac(
     postgres_composition,
 ) -> None:
@@ -304,6 +336,79 @@ def test_middleware_decorator_and_dependency_enforce_real_rbac(
     response = denied.get("/decorated/one")
     assert response.status_code == 403
     assert response.json() == {"detail": {"code": "access_denied"}}
+
+
+def test_ownership_is_server_resolved_and_denied_by_default(
+    postgres_composition, postgres_engine
+) -> None:
+    owner = create_identity(postgres_composition)
+    _, role, _, owner_subject = provision_permission(
+        postgres_composition,
+        identity=owner,
+        permission_code="test.route.read",
+    )
+    owner_client = TestClient(
+        build_owned_app(
+            postgres_composition,
+            TrustedTestSubjectResolver(owner_subject),
+            StaticOwnershipResolver(owner.identity_id),
+        )
+    )
+    assert owner_client.get("/owned/resource-1").status_code == 200
+
+    other = create_identity(postgres_composition)
+    with postgres_composition.unit_of_work() as unit_of_work:
+        unit_of_work.authorization.assign_role(
+            RoleAssignment(
+                identity_id=other.identity_id,
+                role_id=role.role_id,
+                assigned_by_identity_id=owner.identity_id,
+                assigned_at=datetime.now(UTC),
+            )
+        )
+    other_subject = AuthorizationSubject(
+        identity_id=other.identity_id,
+        identity_type=other.identity_type,
+        actor_type=ActorType.RIDER,
+    )
+    denied = TestClient(
+        build_owned_app(
+            postgres_composition,
+            TrustedTestSubjectResolver(other_subject),
+            StaticOwnershipResolver(owner.identity_id),
+        )
+    )
+    response = denied.get("/owned/resource-1")
+    assert response.status_code == 403
+    assert response.json() == {"detail": {"code": "resource_access_denied"}}
+    with postgres_engine.connect() as connection:
+        assert "authorization.ownership_denied" in set(
+            connection.execute(select(audit_events.c.action)).scalars()
+        )
+
+    no_resolver = FastAPI()
+    no_resolver.state.authorization_enforcer = AuthorizationEnforcer(
+        postgres_composition
+    )
+    no_resolver.add_middleware(
+        AuthorizationContextMiddleware,
+        resolver=TrustedTestSubjectResolver(owner_subject),
+    )
+    router = APIRouter(route_class=AuthorizationRoute)
+
+    @router.get("/owned/{resource_id}")
+    @permission_required(
+        "test.route.read",
+        resource_type="test_resource",
+        resource_id_parameter="resource_id",
+        ownership_required=True,
+    )
+    def owned_without_resolver(resource_id: str) -> dict[str, str]:
+        return {"resource_id": resource_id}
+
+    no_resolver.include_router(router)
+    response = TestClient(no_resolver).get("/owned/resource-1")
+    assert response.status_code == 403
 
 
 def test_authorization_and_audit_roll_back_together(postgres_composition) -> None:

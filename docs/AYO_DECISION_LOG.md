@@ -660,3 +660,11 @@ Supersedes / superseded by:
 - **Decision:** Preserve the existing PostgreSQL/Alembic/audit/idempotency/health foundation and close the identified recovery gap with a standard-client, disposable backup/restore certification tool wired into CI.
 - **Evidence:** PostgreSQL 17.10; migration 9/9; full suite 235 passed and one expected legacy-wallet xfail; 86.02% branch coverage; actual dump/restore and clean restart retained head `20260716_0014`; Ruff passed; dependency audit clean; no medium/high Bandit finding.
 - **Boundary:** No authentication, ride, dispatch, pricing, payment, wallet or business behavior changed. Mission 20 remains disabled. Global strict mypy retains 34 pre-existing business-module errors and is not represented as passing.
+
+### AP-048 — Implementation Increment 2 authentication security foundation
+
+- **Date:** 2026-07-16
+- **Status:** Implementation approved by CTO/CEO on 2026-07-16 for local preservation. No push, provider, public activation or business workflow authorized.
+- **Decision:** Certify the existing PostgreSQL identity/session/challenge/token/RBAC/rate-limit foundation; make the verified subject resolver route-neutral; add deny-by-default server-resolved ownership enforcement with privacy-safe audit.
+- **Authority:** Authentication establishes verified identity/session context; RBAC grants capability; owning domains resolve resource ownership. Clients cannot select identity, role, permission or owner. AI has no authority.
+- **Exclusions:** No rides, dispatch, pricing, payments, wallet, provider connection, production signing key or Mission 20 activation.

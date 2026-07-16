@@ -396,6 +396,15 @@ Pricing, immutable cash accounting, mobile MVP and support/operations with indep
 quality and approval gates. See `IMPLEMENTATION_PHASE_1_MASTER_PLAN.md`. The plan creates
 no Mission 27 and authorizes no implementation, provider, migration or production use.
 
+### Increment 2 authentication and ownership checkpoint
+
+The provider-neutral authentication/session/RBAC foundation now includes reusable
+server-resolved ownership enforcement. Ownership-required routes deny when the resolver
+is absent or the authenticated identity is not the owner, and denial is audited without
+revealing another identity. The verified subject resolver is no longer dispatch-specific.
+No provider, public authentication route, business workflow or production activation is
+authorized. See `IMPLEMENTATION_INCREMENT_2_AUTH_SECURITY_FOUNDATION.md`.
+
 # Authentication architecture requirements
 
 Authentication uses PostgreSQL as durable identity/session authority and the

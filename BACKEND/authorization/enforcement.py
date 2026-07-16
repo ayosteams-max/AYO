@@ -2,7 +2,7 @@ from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Protocol
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from fastapi import HTTPException, Request, status
 from fastapi.routing import APIRoute
@@ -10,6 +10,7 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 from starlette.responses import Response
 from starlette.types import ASGIApp
 
+from BACKEND.audit.models import AuditEvent, AuditOutcome
 from BACKEND.authorization.contracts import AuthorizationRequest, AuthorizationSubject
 from BACKEND.authorization.service import AuthorizationService
 from BACKEND.observability import MetricsSink, NullMetricsSink
@@ -23,6 +24,28 @@ class TrustedSubjectResolver(Protocol):
 class AnonymousSubjectResolver:
     async def resolve(self, request: Request) -> None:
         del request
+        return None
+
+
+class ResourceOwnershipResolver(Protocol):
+    """Resolve authoritative ownership without trusting caller-supplied identity."""
+
+    def owner_identity_id(
+        self,
+        *,
+        resource_type: str,
+        resource_id: str,
+    ) -> UUID | None: ...
+
+
+class DenyAllOwnershipResolver:
+    def owner_identity_id(
+        self,
+        *,
+        resource_type: str,
+        resource_id: str,
+    ) -> None:
+        del resource_type, resource_id
         return None
 
 
@@ -46,6 +69,7 @@ class PermissionRequirement:
     permission: str
     resource_type: str
     resource_id_parameter: str | None = None
+    ownership_required: bool = False
 
 
 class AuthorizationEnforcer:
@@ -54,10 +78,12 @@ class AuthorizationEnforcer:
         composition: PostgresRepositoryComposition,
         *,
         metrics: MetricsSink | None = None,
+        ownership_resolver: ResourceOwnershipResolver | None = None,
     ) -> None:
         self._composition = composition
         self._service = AuthorizationService()
         self._metrics = metrics or NullMetricsSink()
+        self._ownership = ownership_resolver or DenyAllOwnershipResolver()
 
     def enforce(self, request: Request, requirement: PermissionRequirement) -> None:
         subject: AuthorizationSubject | None = getattr(
@@ -76,6 +102,43 @@ class AuthorizationEnforcer:
             if requirement.resource_id_parameter is not None
             else None
         )
+        if requirement.ownership_required:
+            if resource_id is None:
+                raise RuntimeError("Ownership enforcement requires a resource ID")
+            owner_identity_id = self._ownership.owner_identity_id(
+                resource_type=requirement.resource_type,
+                resource_id=resource_id,
+            )
+            if owner_identity_id != subject.identity_id:
+                correlation_id = getattr(
+                    request.state, "authorization_correlation_id", uuid4()
+                )
+                with self._composition.unit_of_work() as unit_of_work:
+                    unit_of_work.audit_events.append(
+                        AuditEvent(
+                            actor_type=subject.actor_type,
+                            actor_id=str(subject.identity_id),
+                            session_id=subject.session_id,
+                            action="authorization.ownership_denied",
+                            resource_type=requirement.resource_type,
+                            resource_id=resource_id,
+                            outcome=AuditOutcome.DENIED,
+                            reason="ownership_mismatch",
+                            correlation_id=correlation_id,
+                            source_module="authorization",
+                            safe_metadata={
+                                "category": "authorization",
+                                "operation": requirement.permission,
+                            },
+                        )
+                    )
+                self._metrics.increment(
+                    "authorization_failures", labels={"reason": "ownership_denied"}
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail={"code": "resource_access_denied"},
+                )
         authorization_request = AuthorizationRequest(
             subject=subject,
             permission=requirement.permission,
@@ -103,11 +166,13 @@ def permission_required(
     *,
     resource_type: str,
     resource_id_parameter: str | None = None,
+    ownership_required: bool = False,
 ) -> Callable[[Callable[..., object]], Callable[..., object]]:
     requirement = PermissionRequirement(
         permission=permission,
         resource_type=resource_type,
         resource_id_parameter=resource_id_parameter,
+        ownership_required=ownership_required,
     )
 
     def decorator(endpoint: Callable[..., object]) -> Callable[..., object]:
@@ -143,11 +208,13 @@ def require_permission(
     *,
     resource_type: str,
     resource_id_parameter: str | None = None,
+    ownership_required: bool = False,
 ) -> Callable[[Request], None]:
     requirement = PermissionRequirement(
         permission=permission,
         resource_type=resource_type,
         resource_id_parameter=resource_id_parameter,
+        ownership_required=ownership_required,
     )
 
     def dependency(request: Request) -> None:

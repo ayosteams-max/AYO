@@ -210,8 +210,6 @@ class VerifiedSubjectResolver:
         self._audit_writer = audit_writer
 
     async def resolve(self, request: Request) -> AuthorizationSubject | None:
-        if "/dispatch" not in request.url.path:
-            return None
         authorization = request.headers.get("Authorization", "")
         if not authorization.startswith("Bearer ") or len(authorization) > 8200:
             self._record_failure(request, "missing_or_malformed")
