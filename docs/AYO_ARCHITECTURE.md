@@ -282,6 +282,33 @@ provider selection and publication are not part of Mission 20. CTO/CEO approval 
 local preservation only: PostgreSQL 17 certification remains pending, the feature flag
 must remain false, and production activation, public exposure, deployment and push are
 prohibited.
+
+## Proposed AI Customer Support boundary
+
+Mission 21 proposes extending the existing PostgreSQL Support module with a deterministic
+Support Case Orchestrator, purpose-scoped evidence gateway, provider-neutral untrusted
+language adapter, least-privilege tool broker, emergency router and typed human/specialist
+queues. AI may propose language and allow-listed recommendations but cannot transition
+cases or become authority for safety, identity, fraud, restrictions, pricing, recovery,
+money movement, payouts or legal conclusions. See
+`MISSION_21_AI_CUSTOMER_SUPPORT_ARCHITECTURE.md` and its linked design artifacts.
+
+The proposal is documentation only. No runtime, schema, dependency, provider, public
+route, financial action or activation is authorized pending CTO/CEO architecture review.
+
+Future support UX may consume versioned plain-language “why” explanations, canonical
+role-redacted timelines, coarse privacy-safe visual replay and idempotent appeals with
+governed evidence metadata. These remain presentation seams: owning domains retain
+evidence authority, Support applies purpose/RBAC redaction, and replay cannot expose raw
+GPS trails or restricted safety, identity or fraud material.
+
+The same boundary preserves provider-neutral future adapters for voice/optional voice AI,
+video, screen sharing, co-browsing and purpose-expiring live support location. Explicit
+participant grants support family and diaspora cases. Versioned knowledge, quality and
+satisfaction projections remain advisory analytics; any learning from human-reviewed
+resolutions is prohibited until separately approved and governed. None of these seams
+authorizes media capture, providers, UI, tracking, automated sanctions or model authority.
+
 # Authentication architecture requirements
 
 Authentication uses PostgreSQL as durable identity/session authority and the

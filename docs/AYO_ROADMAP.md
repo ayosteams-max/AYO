@@ -400,6 +400,26 @@ resolve only when evidence and calibrated confidence are sufficient. Safety, eme
 identity, account recovery, fraud, irreversible restrictions and material financial
 cases require specialist control regardless of model confidence.
 
+**Architecture checkpoint:** CTO approved the case lifecycle, authority matrix, evidence graph,
+emergency flow, threat model, risk register, provider-neutral contracts, proposed
+persistence and staged evaluation design for documentation preservation. No runtime,
+migration, dependency, provider, financial action, deployment or activation is
+authorized. Implementation remains a future separately approved roadmap step.
+
+**Future UX extension points:** Preserve provider-neutral projections for cited “why”
+explanations, canonical timelines, privacy-safe coarse visual replay, one-tap appeal with
+governed evidence metadata, fact-consistent role-redacted Support/rider/driver views and
+reviewed simple-language English/Amharic explanations. No UI, upload storage or public
+route is authorized in Mission 21 architecture.
+
+**Future channel and learning extension points:** Preserve provider-neutral seams for
+voice/optional voice AI, video, screen sharing, co-browsing, purpose-expiring live
+location, typed family/diaspora participation, versioned knowledge, advisory quality and
+satisfaction analytics, and separately approved governed learning from eligible human-
+reviewed resolutions. No provider, recording, tracking, UI, training or automated
+sanction is authorized.
+
+
 **Shared gate:** Each engine requires a separately authorized research and architecture mission, Ethiopian legal/operational review, explicit policy and financial limits, privacy/retention approval, abuse controls, human-operations design and CTO/CEO approval. See `docs/AYO_FUTURE_TRUST_AND_AI_SUPPORT_ENGINES.md`.
 
 ## Post-launch expansion gate
