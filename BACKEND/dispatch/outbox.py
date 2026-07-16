@@ -26,6 +26,15 @@ APPROVED_OUTBOX_EVENTS = frozenset(
         "reservation.activated_as_ride",
         "reservation.no_driver_available",
         "reservation.support_handoff",
+        "arrival.rider_start_walking_advised",
+        "arrival.driver_arrival_verified",
+        "arrival.free_wait_started",
+        "arrival.free_wait_ending",
+        "arrival.waiting_paused",
+        "arrival.waiting_invalidated",
+        "arrival.pickup_mismatch",
+        "arrival.evidence_ready",
+        "arrival.consequence_suppressed",
     }
 )
 

@@ -1351,6 +1351,197 @@ Index(
     active_ride_recovery_checkpoints.c.due_at,
 )
 
+arrival_evaluations = Table(
+    "arrival_evaluations",
+    metadata,
+    Column("evaluation_id", UUID(as_uuid=True), primary_key=True),
+    Column(
+        "ride_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.active_rides.ride_id"),
+        nullable=False,
+    ),
+    Column("assignment_id", UUID(as_uuid=True), nullable=False),
+    Column("state", String(32), nullable=False),
+    Column("confidence_bps", Integer, nullable=False),
+    Column("observation_sequence", Integer, nullable=False),
+    Column("payload", JSONB().with_variant(JSON(), "sqlite"), nullable=False),
+    Column("evaluated_at", DateTime(timezone=True), nullable=False),
+    CheckConstraint(
+        "confidence_bps BETWEEN 0 AND 10000", name="arrival_confidence_range"
+    ),
+    UniqueConstraint("ride_id", "observation_sequence"),
+    schema=AYO_SCHEMA,
+)
+Index(
+    "ix_arrival_evaluations_latest",
+    arrival_evaluations.c.ride_id,
+    arrival_evaluations.c.evaluated_at,
+)
+
+rider_readiness_decisions = Table(
+    "rider_readiness_decisions",
+    metadata,
+    Column("decision_id", UUID(as_uuid=True), primary_key=True),
+    Column(
+        "ride_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.active_rides.ride_id"),
+        nullable=False,
+    ),
+    Column("classification", String(32), nullable=False),
+    Column("confidence_bps", Integer, nullable=False),
+    Column("notification_recommended", Boolean, nullable=False),
+    Column("payload", JSONB().with_variant(JSON(), "sqlite"), nullable=False),
+    Column("evaluated_at", DateTime(timezone=True), nullable=False),
+    Column("expires_at", DateTime(timezone=True), nullable=False),
+    CheckConstraint(
+        "confidence_bps BETWEEN 0 AND 10000", name="readiness_confidence_range"
+    ),
+    schema=AYO_SCHEMA,
+)
+Index(
+    "ix_rider_readiness_latest",
+    rider_readiness_decisions.c.ride_id,
+    rider_readiness_decisions.c.evaluated_at,
+)
+
+waiting_policy_snapshots = Table(
+    "waiting_policy_snapshots",
+    metadata,
+    Column("snapshot_id", UUID(as_uuid=True), primary_key=True),
+    Column(
+        "ride_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.active_rides.ride_id"),
+        nullable=False,
+    ),
+    Column("source_policy_id", UUID(as_uuid=True), nullable=False),
+    Column("source_policy_version", String(63), nullable=False),
+    Column("payload", JSONB().with_variant(JSON(), "sqlite"), nullable=False),
+    Column("selected_at", DateTime(timezone=True), nullable=False),
+    schema=AYO_SCHEMA,
+)
+
+waiting_sessions = Table(
+    "waiting_sessions",
+    metadata,
+    Column("session_id", UUID(as_uuid=True), primary_key=True),
+    Column(
+        "ride_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.active_rides.ride_id"),
+        nullable=False,
+    ),
+    Column("assignment_id", UUID(as_uuid=True), nullable=False),
+    Column(
+        "policy_snapshot_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.waiting_policy_snapshots.snapshot_id"),
+        nullable=False,
+    ),
+    Column("state", String(32), nullable=False),
+    Column("version", Integer, nullable=False),
+    Column("payload", JSONB().with_variant(JSON(), "sqlite"), nullable=False),
+    Column("started_at", DateTime(timezone=True), nullable=False),
+    Column("free_wait_deadline", DateTime(timezone=True), nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+    CheckConstraint("version > 0", name="waiting_session_positive_version"),
+    schema=AYO_SCHEMA,
+)
+Index(
+    "ix_waiting_session_ride_state",
+    waiting_sessions.c.ride_id,
+    waiting_sessions.c.state,
+)
+
+waiting_session_events = Table(
+    "waiting_session_events",
+    metadata,
+    Column("event_id", UUID(as_uuid=True), primary_key=True),
+    Column(
+        "session_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.waiting_sessions.session_id"),
+        nullable=False,
+    ),
+    Column(
+        "ride_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.active_rides.ride_id"),
+        nullable=False,
+    ),
+    Column("event_type", String(63), nullable=False),
+    Column("session_version", Integer, nullable=False),
+    Column("payload", JSONB().with_variant(JSON(), "sqlite"), nullable=False),
+    Column("occurred_at", DateTime(timezone=True), nullable=False),
+    UniqueConstraint("session_id", "session_version"),
+    schema=AYO_SCHEMA,
+)
+
+arrival_notification_evidence = Table(
+    "arrival_notification_evidence",
+    metadata,
+    Column("notification_evidence_id", UUID(as_uuid=True), primary_key=True),
+    Column(
+        "ride_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.active_rides.ride_id"),
+        nullable=False,
+    ),
+    Column("session_id", UUID(as_uuid=True), nullable=True),
+    Column("intent_type", String(63), nullable=False),
+    Column("delivery_status", String(32), nullable=False),
+    Column("reason_code", String(63), nullable=False),
+    Column("occurred_at", DateTime(timezone=True), nullable=False),
+    schema=AYO_SCHEMA,
+)
+
+consequence_suppression_decisions = Table(
+    "consequence_suppression_decisions",
+    metadata,
+    Column("evidence_id", UUID(as_uuid=True), primary_key=True),
+    Column(
+        "ride_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.active_rides.ride_id"),
+        nullable=False,
+    ),
+    Column(
+        "session_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.waiting_sessions.session_id"),
+        nullable=False,
+    ),
+    Column("ready", Boolean, nullable=False),
+    Column("responsibility", String(40), nullable=False),
+    Column("confidence_bps", Integer, nullable=False),
+    Column("payload", JSONB().with_variant(JSON(), "sqlite"), nullable=False),
+    Column("evaluated_at", DateTime(timezone=True), nullable=False),
+    CheckConstraint(
+        "confidence_bps BETWEEN 0 AND 10000", name="evidence_confidence_range"
+    ),
+    schema=AYO_SCHEMA,
+)
+
+arrival_waiting_idempotency = Table(
+    "arrival_waiting_idempotency",
+    metadata,
+    Column("actor_id", UUID(as_uuid=True), primary_key=True),
+    Column("command_id", UUID(as_uuid=True), primary_key=True),
+    Column(
+        "ride_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.active_rides.ride_id"),
+        nullable=False,
+    ),
+    Column("command_type", String(63), nullable=False),
+    Column("request_hash", String(64), nullable=False),
+    Column("response_payload", JSONB().with_variant(JSON(), "sqlite"), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    schema=AYO_SCHEMA,
+)
+
 legacy_wallets = Table(
     "legacy_wallets",
     metadata,

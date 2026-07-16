@@ -5,6 +5,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from BACKEND.active_ride.application import ActiveRideApplication
+from BACKEND.arrival_waiting.application import ArrivalWaitingApplication
 from BACKEND.authorization.enforcement import (
     AuthorizationContextMiddleware,
     AuthorizationEnforcer,
@@ -20,6 +21,7 @@ from BACKEND.dispatch.outbox_worker import OutboxDeliveryWorker
 from BACKEND.dispatch.scheduler import DispatchRecoveryCoordinator, WorkerHealth
 from BACKEND.observability import MetricsSink, NullMetricsSink
 from BACKEND.routes.active_rides import create_active_ride_router
+from BACKEND.routes.arrival_waiting_routes import create_arrival_waiting_router
 from BACKEND.routes.dispatch import create_dispatch_router
 from BACKEND.routes.dispatch_internal import create_dispatch_internal_router
 from BACKEND.routes.driver_offer import router as driver_offer_router
@@ -61,12 +63,22 @@ class ActiveRideActivation:
     metrics: MetricsSink
 
 
+@dataclass(frozen=True, slots=True)
+class ArrivalWaitingActivation:
+    application: ArrivalWaitingApplication
+    subject_resolver: TrustedSubjectResolver
+    authorization_enforcer: AuthorizationEnforcer
+    rate_limiter: DispatchRateLimitBoundary
+    metrics: MetricsSink
+
+
 def create_app(
     configuration: Settings | None = None,
     *,
     dispatch: DispatchActivation | None = None,
     scheduled_dispatch: ScheduledDispatchActivation | None = None,
     active_ride: ActiveRideActivation | None = None,
+    arrival_waiting: ArrivalWaitingActivation | None = None,
 ) -> FastAPI:
     configured = configuration or settings
     application = FastAPI(
@@ -160,6 +172,38 @@ def create_app(
             )
     else:
         application.state.active_ride_metrics = NullMetricsSink()
+
+    if configured.ARRIVAL_WAITING_ENABLED:
+        if arrival_waiting is None:
+            raise RuntimeError(
+                "Enabled arrival/waiting requires explicit secure dependencies"
+            )
+        application.state.authorization_enforcer = (
+            arrival_waiting.authorization_enforcer
+        )
+        application.state.dispatch_rate_limiter = arrival_waiting.rate_limiter
+        application.state.arrival_waiting_metrics = arrival_waiting.metrics
+        application.include_router(
+            create_arrival_waiting_router(arrival_waiting.application),
+            prefix=configured.API_PREFIX,
+        )
+        if not any(
+            (
+                configured.DISPATCH_ENABLED,
+                configured.SCHEDULED_DISPATCH_ENABLED,
+                configured.ACTIVE_RIDE_ENABLED,
+            )
+        ):
+            application.add_middleware(
+                AuthorizationContextMiddleware,
+                resolver=arrival_waiting.subject_resolver,
+            )
+            application.add_middleware(
+                RequestSizeLimitMiddleware,
+                maximum_bytes=configured.ARRIVAL_WAITING_MAX_REQUEST_BYTES,
+            )
+    else:
+        application.state.arrival_waiting_metrics = NullMetricsSink()
 
     @application.exception_handler(HTTPException)
     async def stable_http_error(request: Request, error: HTTPException) -> JSONResponse:

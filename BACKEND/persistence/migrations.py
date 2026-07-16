@@ -130,6 +130,9 @@ class SchemaVersionReadinessChecker:
                         " AND to_regclass('ayo.dispatch_assignments') IS NOT NULL"
                         " AND to_regclass('ayo.dispatch_idempotency_records') IS NOT NULL"
                         " AND to_regclass('ayo.dispatch_outbox') IS NOT NULL"
+                        " AND to_regclass('ayo.arrival_evaluations') IS NOT NULL"
+                        " AND to_regclass('ayo.waiting_sessions') IS NOT NULL"
+                        " AND to_regclass('ayo.consequence_suppression_decisions') IS NOT NULL"
                     )
                 ).scalar_one()
             ready = current == expected and bool(required_tables)

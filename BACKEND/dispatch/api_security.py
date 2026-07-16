@@ -72,6 +72,18 @@ DISPATCH_RATE_POLICIES = {
         refill_tokens=Decimal(10),
         refill_period_seconds=60,
     ),
+    "arrival_waiting_read": RateLimitPolicy(
+        name="arrival_waiting.read",
+        capacity=120,
+        refill_tokens=Decimal("120"),
+        refill_period_seconds=60,
+    ),
+    "arrival_waiting_command": RateLimitPolicy(
+        name="arrival_waiting.command",
+        capacity=60,
+        refill_tokens=Decimal("60"),
+        refill_period_seconds=60,
+    ),
 }
 
 
@@ -114,7 +126,13 @@ class RequestSizeLimitMiddleware:
             return
         path = scope.get("path", "")
         if not any(
-            part in path for part in ("/dispatch", "/scheduled", "/active-rides")
+            part in path
+            for part in (
+                "/dispatch",
+                "/scheduled",
+                "/active-rides",
+                "/arrival-waiting",
+            )
         ):
             await self.app(scope, receive, send)
             return

@@ -345,6 +345,15 @@ public activation and deployment remain excluded. See
 `MISSION_20_SMART_ARRIVAL_WAITING_CANCELLATION_RESEARCH.md` and
 `MISSION_20_SMART_ARRIVAL_WAITING_CANCELLATION_ARCHITECTURE.md`.
 
+**Implementation checkpoint:** CTO/CEO approved the disabled-by-default implementation
+and reversible migration 0014 for local preservation only. Ruff, focused strict typing,
+non-integration tests, coverage, security scan, dependency audit and benchmark gates
+pass. PostgreSQL 17 integration and migration upgrade/downgrade certification are
+blocked by the unavailable local service and upstream installer HTTP 403; Mission 20
+therefore remains uncertified for activation. Public routes, deployment, push and
+enabling `ARRIVAL_WAITING_ENABLED` are prohibited pending separate certification and
+activation approval.
+
 **Objective:** Protect verified driver waiting time while giving riders early movement
 guidance, a fair visible free-wait countdown and reliable notification. Produce versioned
 arrival/waiting/no-show evidence and suppress consequences when pickup, data, platform or

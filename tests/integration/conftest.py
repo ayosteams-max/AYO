@@ -18,8 +18,12 @@ from BACKEND.persistence.tables import (
     active_ride_projection_checkpoints,
     active_ride_recovery_checkpoints,
     active_rides,
+    arrival_evaluations,
+    arrival_notification_evidence,
+    arrival_waiting_idempotency,
     audit_events,
     authentication_challenges,
+    consequence_suppression_decisions,
     credential_verifiers,
     dispatch_assignments,
     dispatch_attempts,
@@ -52,6 +56,7 @@ from BACKEND.persistence.tables import (
     reservation_soft_plans,
     reservation_state_history,
     ride_reservations,
+    rider_readiness_decisions,
     rides,
     role_permissions,
     roles,
@@ -61,6 +66,9 @@ from BACKEND.persistence.tables import (
     support_case_messages,
     support_cases,
     token_families,
+    waiting_policy_snapshots,
+    waiting_session_events,
+    waiting_sessions,
 )
 
 
@@ -106,6 +114,14 @@ def postgres_engine():
 @pytest.fixture(autouse=True)
 def clean_postgres_tables(postgres_engine):
     with postgres_engine.begin() as connection:
+        connection.execute(delete(arrival_waiting_idempotency))
+        connection.execute(delete(consequence_suppression_decisions))
+        connection.execute(delete(arrival_notification_evidence))
+        connection.execute(delete(waiting_session_events))
+        connection.execute(delete(waiting_sessions))
+        connection.execute(delete(waiting_policy_snapshots))
+        connection.execute(delete(rider_readiness_decisions))
+        connection.execute(delete(arrival_evaluations))
         connection.execute(delete(active_ride_recovery_checkpoints))
         connection.execute(delete(active_ride_pickup_recommendations))
         connection.execute(delete(active_ride_confidence_decisions))

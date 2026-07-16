@@ -257,6 +257,31 @@ Express, Eat, Marketplace and Home may share identity, payment-provider adapters
 AYO Pay is a regulatory and architectural boundary. Future stored-value or payment services require explicit leadership strategy and Ethiopian legal/licensing verification. The ride driver's internal ledger must not be presented as independently issued electronic money.
 
 Extraction is an evidence-based migration, not an architectural milestone by itself. A module may become an independently deployed service only after CTO review and CEO approval confirms at least one justified trigger: materially different scaling, a stronger security/isolation boundary, clear independent team ownership, or operational/reliability evidence that deployment separation improves customer outcomes.
+
+## Smart Arrival, Rider Readiness and Waiting boundary
+
+Mission 20 is a disabled-by-default module inside the modular monolith. It consumes the
+authoritative Active Ride identity/version and Dynamic Pickup recommendation/version,
+then produces deterministic arrival, readiness, waiting and consequence-suppression
+evidence. It never transitions the ride lifecycle or performs a financial action.
+
+Its PostgreSQL boundary uses append-oriented arrival/readiness/evidence records,
+versioned immutable policy snapshots, optimistic waiting-session state, typed pause and
+invalidation events, notification evidence and the shared transactional outbox.
+Configuration resolution uses explicit effective dates and deterministic contextual
+precedence and fails closed on missing or equally specific conflicting policies.
+External maps, landmarks, airports and notification transports remain provider-neutral
+inputs or intents. Migration 0014 is reversible; production activation remains gated on
+PostgreSQL 17 validation and separate CTO/CEO review.
+
+Landmark guidance may expose multiple verified bilingual named entrances and exact
+stopping positions. Precise rider walking guidance remains an injected, expiring route
+projection rather than Mission 20 map authority. A future verified pickup-photo field is
+limited to opaque metadata and accessible descriptions; image storage, moderation,
+provider selection and publication are not part of Mission 20. CTO/CEO approval covers
+local preservation only: PostgreSQL 17 certification remains pending, the feature flag
+must remain false, and production activation, public exposure, deployment and push are
+prohibited.
 # Authentication architecture requirements
 
 Authentication uses PostgreSQL as durable identity/session authority and the

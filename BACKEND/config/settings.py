@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     )
     ACTIVE_RIDE_ENABLED: bool = False
     ACTIVE_RIDE_MAX_REQUEST_BYTES: int = Field(default=16_384, ge=1_024, le=1_048_576)
+    ARRIVAL_WAITING_ENABLED: bool = False
+    ARRIVAL_WAITING_MAX_REQUEST_BYTES: int = Field(
+        default=16_384, ge=1_024, le=1_048_576
+    )
 
     @model_validator(mode="after")
     def production_dispatch_gate(self) -> "Settings":
@@ -54,6 +58,17 @@ class Settings(BaseSettings):
         if self.ACTIVE_RIDE_ENABLED and self.ENVIRONMENT is AppEnvironment.PRODUCTION:
             raise ValueError(
                 "Active ride production activation requires separate approval"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def production_arrival_waiting_gate(self) -> "Settings":
+        if (
+            self.ARRIVAL_WAITING_ENABLED
+            and self.ENVIRONMENT is AppEnvironment.PRODUCTION
+        ):
+            raise ValueError(
+                "Arrival/waiting production activation requires separate approval"
             )
         return self
 

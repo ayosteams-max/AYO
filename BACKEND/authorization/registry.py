@@ -39,6 +39,10 @@ PERMISSION_REGISTRY = MappingProxyType(
         "active_ride.driver.command": "Submit an assigned driver active-ride command.",
         "active_ride.worker.run": "Run bounded active-ride recovery workers.",
         "active_ride.worker.health.read": "Read active-ride worker health.",
+        "arrival_waiting.read": "Read an owned arrival and waiting projection.",
+        "arrival_waiting.rider.command": "Submit an owned rider arrival/waiting command.",
+        "arrival_waiting.driver.command": "Submit an assigned driver arrival/waiting command.",
+        "arrival_waiting.worker.run": "Run bounded arrival/waiting recovery work.",
     }
 )
 
