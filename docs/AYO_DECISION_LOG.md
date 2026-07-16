@@ -615,3 +615,12 @@ Supersedes / superseded by:
 - **Authority:** Mission 23 does not assign drivers or own offers/commitments/lifecycle. AI/predictions advise only and cannot remove, punish, price, bonus, restrict, override safety or bypass commitments. Marketplace health cannot execute its recommendations.
 - **Alternatives:** Uncontrolled broadcast and a global learned optimizer are rejected for launch because delay, contention, distraction, data, bias, explainability and recovery costs are not justified. Bounded batch strategies require simulation and separate approval.
 - **Open gates:** Addis zone definitions, offer/radius timing, airport operations, working-time/fatigue rules, opportunity/earnings metrics, privacy retention, simulation thresholds and any experiment require CTO/CEO and local operational/legal approval.
+
+### PA-043 — Mission 24 Identity, Verification and Trust architecture
+
+- **Date:** 2026-07-16
+- **Status:** Architecture approved by CTO/CEO on 2026-07-16 for documentation preservation. No runtime, migration, dependency, identity/document/biometric provider, production route or activation authorized.
+- **Proposal:** Preserve PostgreSQL identity/session authority and add a deterministic purpose-specific assurance orchestrator with separate rider/driver lifecycles, onboarding, document/vehicle results, eligibility projections, device/recovery controls, Trusted/Airport Driver policy, business/family/diaspora grants and independent appeal. See `docs/MISSION_24_IDENTITY_VERIFICATION_TRUST_ARCHITECTURE.md`.
+- **Authority:** Authentication proves authenticator control; proofing binds approved evidence for a purpose; Eligibility/Safety decides service access. AI/OCR remains advisory and cannot approve identity/documents, recover/suspend accounts or grant eligibility.
+- **Alternatives:** A single “verified” flag is rejected because it hides purpose, evidence, expiry and appeal. Provider-owned identity authority is deferred because legal, lock-in, outage, bias and data-sovereignty obligations are unresolved.
+- **Open gates:** Ethiopian rider/driver proof requirements, Fayda boundary, document authorities, biometrics/liveness, OTP/provider operations, Trusted Driver policy, airport requirements, retention/cross-border rules and appeal staffing require leadership, local operations and qualified legal approval.

@@ -342,6 +342,19 @@ CTO approval covers architecture documentation only. Implementation, migrations,
 providers, production routes and activation require separate approval. AI remains
 advisory, and Mission 20 remains disabled pending all PostgreSQL certification gates.
 
+## Approved Identity, Verification and Trust architecture
+
+Mission 24 extends the existing PostgreSQL identity/session foundation with a deterministic
+purpose-specific assurance orchestrator and separate driver onboarding, document, vehicle,
+eligibility, Trusted Driver, business/participant and appeal boundaries. Authentication,
+proofing and eligibility remain distinct. AI/OCR may extract, classify or recommend but
+cannot approve identity/documents, recover or suspend accounts, grant Trusted/Airport
+eligibility or bypass Safety/Fraud/Authorization. See
+`MISSION_24_IDENTITY_VERIFICATION_TRUST_ARCHITECTURE.md`.
+
+Approval covers documentation architecture only. Providers, proofing operations,
+biometrics, migrations, production routes and activation remain separately gated.
+
 # Authentication architecture requirements
 
 Authentication uses PostgreSQL as durable identity/session authority and the

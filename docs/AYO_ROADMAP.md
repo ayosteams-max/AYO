@@ -452,8 +452,25 @@ explanations, simulation and gradual scale. See
 any implementation mission. Mission 20 remains disabled and PostgreSQL certification is
 unchanged.
 
-**Sequencing hold:** No Mission 24 or later mission is defined or authorized. Work stops
-after preserving Mission 23 until leadership supplies the next mission scope.
+**Sequencing update:** Leadership subsequently defined and authorized Mission 24 as the
+documentation-only Identity, Verification and Trust architecture mission below. No later
+mission is inferred or authorized by that decision.
+
+### Identity, Verification and Trust — Mission 24
+
+**Status:** Architecture approved by CTO/CEO on 2026-07-16 for documentation preservation.
+No implementation, migration, provider, production route or feature activation is
+authorized.
+
+**Scope:** Rider/driver identity lifecycles; driver onboarding; document and vehicle
+verification; contact methods; device/multi-device trust; Trusted and Airport Trusted
+Driver eligibility; business/family/diaspora grants; fraud boundaries; recovery/lost
+device; appeal; privacy/retention; explainability; security; audit and Ethiopian operating
+questions. See `MISSION_24_IDENTITY_VERIFICATION_TRUST_ARCHITECTURE.md`.
+
+**Gate:** Approve purpose-specific assurance, provider/legal boundaries and Ethiopian
+operations before any implementation mission. Mission 20 remains disabled and its
+PostgreSQL certification gate is unchanged.
 
 
 **Shared gate:** Each engine requires a separately authorized research and architecture mission, Ethiopian legal/operational review, explicit policy and financial limits, privacy/retention approval, abuse controls, human-operations design and CTO/CEO approval. See `docs/AYO_FUTURE_TRUST_AND_AI_SUPPORT_ENGINES.md`.
