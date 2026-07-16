@@ -371,6 +371,22 @@ incentive or surge policy. No runtime, migration, provider, public route, financ
 action or activation is authorized. AI and Marketplace Health
 remain advisory only. Mission 20 remains disabled and PostgreSQL-certification blocked.
 
+## Approved Payments, Wallet, Ledger and Financial Integrity architecture
+
+Mission 26 defines an immutable PostgreSQL double-entry subledger as the exclusive
+future authority for money movement. Pricing calculates approved amounts; Payments owns
+external attempts and provider evidence; Reconciliation compares provider, bank, cash
+and ledger facts; Wallets are derived role-specific projections; Customer Recovery
+authorizes approved remedies; Finance controls accounting and manual adjustments. AI has
+no authorization or execution capability. See
+`MISSION_26_PAYMENTS_WALLET_LEDGER_FINANCIAL_INTEGRITY_ARCHITECTURE.md`.
+
+The mutable legacy wallet remains quarantined prototype behavior and cannot seed trusted
+opening balances without reconciliation and approval. ETB is the primary currency;
+multi-currency and AYO Pay are future legal/regulatory boundaries. No runtime, migration,
+provider, wallet, ledger, transaction, public route or activation is authorized pending
+separate implementation approval. Mission 20 remains disabled and certification-blocked.
+
 # Authentication architecture requirements
 
 Authentication uses PostgreSQL as durable identity/session authority and the

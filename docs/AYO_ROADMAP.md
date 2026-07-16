@@ -491,6 +491,23 @@ review, local cost and affordability evidence, driver consultation and approved
 simulation thresholds precede any implementation or numeric policy. Mission 20 remains
 disabled until every PostgreSQL certification gate and separate activation approval.
 
+### Payments, Wallet, Ledger and Financial Integrity — Mission 26
+
+**Status:** Architecture, financial modelling, threat modelling and documentation
+approved by CTO/CEO on 2026-07-16 for preservation. No runtime, migration, dependency,
+provider integration, wallet/ledger, transaction, production feature, commit, push or
+activation is authorized.
+
+**Scope:** Immutable double-entry ledger; Driver/Rider/Business projections; cash,
+mobile-money/bank/card compatibility; diaspora and multi-currency boundaries; refunds,
+commission/incentive settlement, payouts, chargebacks, manual adjustments,
+reconciliation, accounting/reporting, security, audit and provider-neutral contracts.
+See `MISSION_26_PAYMENTS_WALLET_LEDGER_FINANCIAL_INTEGRITY_ARCHITECTURE.md`.
+
+**Gate:** Approve architecture, Ethiopian regulatory/accounting policy and risk controls
+before implementation. Then require PostgreSQL financial invariants, migration,
+concurrency, restart/recovery, provider sandbox, reconciliation, security and performance
+certification. Mission 20 status and its independent certification gate are unchanged.
 
 **Shared gate:** Each engine requires a separately authorized research and architecture mission, Ethiopian legal/operational review, explicit policy and financial limits, privacy/retention approval, abuse controls, human-operations design and CTO/CEO approval. See `docs/AYO_FUTURE_TRUST_AND_AI_SUPPORT_ENGINES.md`.
 

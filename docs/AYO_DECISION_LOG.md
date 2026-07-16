@@ -634,3 +634,13 @@ Supersedes / superseded by:
 - **Alternatives:** Static versioned tariffs are the recommended pilot baseline. Capped deterministic demand adjustment remains a separately approved extension; individualized learned pricing is rejected for opacity, discrimination, privacy and drift risk.
 - **Authority:** Pricing alone calculates fares and financial-policy outcomes. Mission 20 supplies evidence only; Support investigates; Customer Recovery authorizes approved remedies; Wallet/Ledger alone moves value. AI and Marketplace Health advise only.
 - **Open gates:** Ethiopian cost/affordability study, driver consultation, tax/legal/transport/airport review, cash reconciliation procedure, numeric policy, incentive/fatigue rules, demand-adjustment decision and simulation thresholds require separate leadership approval. Mission 20 certification/activation remains unchanged.
+
+### PA-045 — Mission 26 Payments, Wallet, Ledger and Financial Integrity architecture
+
+- **Date:** 2026-07-16
+- **Status:** Architecture approved by CTO/CEO on 2026-07-16 for documentation preservation. No runtime, migration, dependency, provider, wallet/ledger, transaction, commit, push or activation is authorized.
+- **Problem:** The legacy mutable wallet cannot safely represent cash, provider receipts, driver earnings, refunds or payouts and cannot be migrated as trusted value.
+- **Proposal:** Use an immutable balanced PostgreSQL double-entry subledger with derived Driver/Rider/Business wallet projections; provider-neutral Payment attempts; independent cash/provider/bank reconciliation; compensating corrections; maker-checker adjustments; ETB-primary, currency-separated readiness. See `docs/MISSION_26_PAYMENTS_WALLET_LEDGER_FINANCIAL_INTEGRITY_ARCHITECTURE.md`.
+- **Authority:** Pricing calculates; Payments orchestrates external attempts; Ledger alone posts money movement; Wallet derives views; Recovery authorizes remedies; Finance reconciles/accounts. AI cannot authorize or execute transactions.
+- **Alternatives:** Mutable aggregates and provider-owned truth are rejected for audit/concurrency/lock-in gaps. Blockchain is rejected as unnecessary complexity.
+- **Open gates:** NBE/legal classification, safeguarding/customer-funds treatment, provider licensing/contracts, accounting/chart mappings, cash obligations, payout/refund/chargeback policy, AML/CFT, PCI scope, retention, diaspora/FX and AYO Pay strategy require qualified approval.
