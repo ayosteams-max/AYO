@@ -25,6 +25,7 @@ from BACKEND.persistence.repositories import (
     PostgresLegacyWalletRepository,
     PostgresRideRepository,
 )
+from BACKEND.persistence.ride_request_repository import PostgresRideRequestRepository
 from BACKEND.persistence.scheduled_repository import PostgresScheduledRepository
 from BACKEND.persistence.session_repository import PostgresSessionRepository
 from BACKEND.persistence.support_repository import PostgresSupportRepository
@@ -104,6 +105,10 @@ class AyoPostgresUnitOfWork(SqlAlchemyUnitOfWork):
     def driver_trust(self) -> PostgresDriverTrustRepository:
         return self.repository("driver_trust", PostgresDriverTrustRepository)
 
+    @property
+    def ride_requests(self) -> PostgresRideRequestRepository:
+        return self.repository("ride_requests", PostgresRideRequestRepository)
+
 
 class PostgresRepositoryComposition:
     """Process-scoped factory for transaction-scoped repository sets."""
@@ -135,6 +140,7 @@ class PostgresRepositoryComposition:
             "active_rides": PostgresActiveRideRepository,
             "arrival_waiting": PostgresArrivalWaitingRepository,
             "driver_trust": PostgresDriverTrustRepository,
+            "ride_requests": PostgresRideRequestRepository,
         }
 
     def unit_of_work(self) -> AyoPostgresUnitOfWork:

@@ -414,6 +414,15 @@ approval authority and eligibility fails closed. Capability metadata does not gr
 Trusted Driver or Airport eligibility. See
 `IMPLEMENTATION_INCREMENT_3_DRIVER_TRUST_FOUNDATION.md`. No public activation is approved.
 
+### Increment 4 canonical ride-request checkpoint
+
+The canonical ride-request domain now owns only authenticated Immediate Standard
+pre-dispatch requests, pickup/destination definitions, service-zone validation,
+pre-assignment cancellation and privacy-minimised events. `READY_FOR_DISPATCH` is evidence
+readiness, not assignment and does not invoke Dispatch. Configuration and PostgreSQL are
+authoritative; AI and clients cannot validate ownership or product eligibility. See
+`IMPLEMENTATION_INCREMENT_4_CANONICAL_RIDE_REQUEST.md`. No public route is activated.
+
 # Authentication architecture requirements
 
 Authentication uses PostgreSQL as durable identity/session authority and the

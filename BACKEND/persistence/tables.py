@@ -1770,6 +1770,206 @@ driver_trust_outbox = Table(
     schema=AYO_SCHEMA,
 )
 
+service_zones = Table(
+    "service_zones",
+    metadata,
+    Column("zone_id", UUID(as_uuid=True), primary_key=True),
+    Column("code", String(63), nullable=False),
+    Column("version", String(63), nullable=False),
+    Column("min_latitude", Float, nullable=False),
+    Column("max_latitude", Float, nullable=False),
+    Column("min_longitude", Float, nullable=False),
+    Column("max_longitude", Float, nullable=False),
+    Column(
+        "prohibited_rectangles", JSONB().with_variant(JSON(), "sqlite"), nullable=False
+    ),
+    Column(
+        "supported_service_types",
+        JSONB().with_variant(JSON(), "sqlite"),
+        nullable=False,
+    ),
+    Column("active_from", DateTime(timezone=True), nullable=False),
+    Column("active_until", DateTime(timezone=True)),
+    Column("policy_version", String(63), nullable=False),
+    UniqueConstraint("code", "version"),
+    CheckConstraint(
+        "min_latitude < max_latitude AND min_longitude < max_longitude",
+        name="service_zone_positive_area",
+    ),
+    schema=AYO_SCHEMA,
+)
+Index(
+    "ix_service_zones_active", service_zones.c.active_from, service_zones.c.active_until
+)
+
+canonical_pickups = Table(
+    "canonical_pickups",
+    metadata,
+    Column("pickup_id", UUID(as_uuid=True), primary_key=True),
+    Column("latitude", Float, nullable=False),
+    Column("longitude", Float, nullable=False),
+    Column("source", String(32), nullable=False),
+    Column("observed_at", DateTime(timezone=True), nullable=False),
+    Column("accuracy_metres", Float),
+    Column("structured_address", String(512)),
+    Column("landmark_reference", String(128)),
+    Column("note", String(280)),
+    Column("map_confidence_bps", Integer, nullable=False),
+    Column("entrance_reference", String(128)),
+    Column("exact_stop_reference", String(128)),
+    Column("airport_terminal_reference", String(128)),
+    Column("airport_zone_reference", String(128)),
+    Column("reference_photo_metadata_reference", String(128)),
+    Column("safety_status", String(24), nullable=False),
+    Column("policy_version", String(63), nullable=False),
+    CheckConstraint(
+        "latitude BETWEEN -90 AND 90 AND longitude BETWEEN -180 AND 180",
+        name="canonical_pickup_coordinates",
+    ),
+    CheckConstraint(
+        "map_confidence_bps BETWEEN 0 AND 10000", name="canonical_pickup_confidence"
+    ),
+    schema=AYO_SCHEMA,
+)
+
+canonical_destinations = Table(
+    "canonical_destinations",
+    metadata,
+    Column("destination_id", UUID(as_uuid=True), primary_key=True),
+    Column("latitude", Float, nullable=False),
+    Column("longitude", Float, nullable=False),
+    Column("source", String(32), nullable=False),
+    Column("observed_at", DateTime(timezone=True), nullable=False),
+    Column("accuracy_metres", Float),
+    Column("structured_address", String(512)),
+    Column("landmark_reference", String(128)),
+    Column("note", String(280)),
+    Column("map_confidence_bps", Integer, nullable=False),
+    CheckConstraint(
+        "latitude BETWEEN -90 AND 90 AND longitude BETWEEN -180 AND 180",
+        name="canonical_destination_coordinates",
+    ),
+    schema=AYO_SCHEMA,
+)
+
+canonical_ride_requests = Table(
+    "canonical_ride_requests",
+    metadata,
+    Column("request_id", UUID(as_uuid=True), primary_key=True),
+    Column("client_request_id", UUID(as_uuid=True), nullable=False),
+    Column(
+        "rider_identity_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.identities.identity_id"),
+        nullable=False,
+    ),
+    Column("state", String(32), nullable=False),
+    Column("service_type", String(32), nullable=False),
+    Column("payment_intent", String(32), nullable=False),
+    Column(
+        "pickup_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.canonical_pickups.pickup_id"),
+        nullable=False,
+    ),
+    Column(
+        "destination_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.canonical_destinations.destination_id"),
+        nullable=False,
+    ),
+    Column(
+        "service_zone_id", UUID(as_uuid=True), ForeignKey("ayo.service_zones.zone_id")
+    ),
+    Column("consent_policy_version", String(63), nullable=False),
+    Column("version", Integer, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+    Column("expires_at", DateTime(timezone=True), nullable=False),
+    Column("cancellation_reason", String(63)),
+    UniqueConstraint("rider_identity_id", "client_request_id"),
+    CheckConstraint("version > 0", name="canonical_ride_request_positive_version"),
+    CheckConstraint(
+        "service_type = 'immediate_standard'",
+        name="canonical_ride_request_supported_type",
+    ),
+    schema=AYO_SCHEMA,
+)
+Index(
+    "ix_canonical_ride_request_owner_state",
+    canonical_ride_requests.c.rider_identity_id,
+    canonical_ride_requests.c.state,
+)
+
+ride_request_validation_decisions = Table(
+    "ride_request_validation_decisions",
+    metadata,
+    Column("decision_id", UUID(as_uuid=True), primary_key=True),
+    Column(
+        "request_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.canonical_ride_requests.request_id"),
+        nullable=False,
+    ),
+    Column("policy_version", String(63), nullable=False),
+    Column("zone_id", UUID(as_uuid=True)),
+    Column("zone_version", String(63)),
+    Column("status", String(24), nullable=False),
+    Column("reason_codes", JSONB().with_variant(JSON(), "sqlite"), nullable=False),
+    Column("invalid_fields", JSONB().with_variant(JSON(), "sqlite"), nullable=False),
+    Column("evidence_freshness_seconds", Integer),
+    Column("audit_reference", UUID(as_uuid=True), nullable=False),
+    Column("decided_at", DateTime(timezone=True), nullable=False),
+    schema=AYO_SCHEMA,
+)
+
+ride_request_idempotency = Table(
+    "ride_request_idempotency",
+    metadata,
+    Column("rider_identity_id", UUID(as_uuid=True), primary_key=True),
+    Column("operation", String(32), primary_key=True),
+    Column("idempotency_key", String(128), primary_key=True),
+    Column("request_hash", String(64), nullable=False),
+    Column("response_reference", UUID(as_uuid=True), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    schema=AYO_SCHEMA,
+)
+
+ride_request_events = Table(
+    "ride_request_events",
+    metadata,
+    Column("event_id", UUID(as_uuid=True), primary_key=True),
+    Column(
+        "request_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.canonical_ride_requests.request_id"),
+        nullable=False,
+    ),
+    Column("request_version", Integer, nullable=False),
+    Column("event_type", String(63), nullable=False),
+    Column("safe_payload", JSONB().with_variant(JSON(), "sqlite"), nullable=False),
+    Column("occurred_at", DateTime(timezone=True), nullable=False),
+    UniqueConstraint("request_id", "request_version", "event_type"),
+    schema=AYO_SCHEMA,
+)
+
+ride_request_outbox = Table(
+    "ride_request_outbox",
+    metadata,
+    Column("event_id", UUID(as_uuid=True), primary_key=True),
+    Column("event_type", String(63), nullable=False),
+    Column("aggregate_id", UUID(as_uuid=True), nullable=False),
+    Column("aggregate_version", Integer, nullable=False),
+    Column("safe_payload", JSONB().with_variant(JSON(), "sqlite"), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("published_at", DateTime(timezone=True)),
+    Column("attempt_count", Integer, nullable=False, server_default=text("0")),
+    CheckConstraint(
+        "attempt_count >= 0", name="ride_request_outbox_nonnegative_attempts"
+    ),
+    schema=AYO_SCHEMA,
+)
+
 legacy_wallets = Table(
     "legacy_wallets",
     metadata,

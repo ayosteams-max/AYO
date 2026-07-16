@@ -82,6 +82,9 @@ def test_upgrade_empty_database_matches_metadata_and_postgresql_17(
         "driver_trust_outbox",
         "driver_vehicle_authorizations",
         "driver_vehicles",
+        "canonical_destinations",
+        "canonical_pickups",
+        "canonical_ride_requests",
         "identities",
         "identity_authentication_methods",
         "identity_devices",
@@ -106,9 +109,14 @@ def test_upgrade_empty_database_matches_metadata_and_postgresql_17(
         "recovery_cases",
         "refresh_token_rotations",
         "rides",
+        "ride_request_events",
+        "ride_request_idempotency",
+        "ride_request_outbox",
+        "ride_request_validation_decisions",
         "role_permissions",
         "roles",
         "sessions",
+        "service_zones",
         "token_families",
         "permissions",
         "support_cases",
@@ -412,3 +420,21 @@ def test_driver_trust_migration_is_reversible(postgres_engine, empty_database) -
     tables = set(inspect(postgres_engine).get_table_names(schema=AYO_SCHEMA))
     assert "driver_onboarding_cases" not in tables
     assert not any(name.startswith("driver_trust_") for name in tables)
+
+
+def test_canonical_ride_request_migration_is_reversible(
+    postgres_engine, empty_database
+) -> None:
+    runner = MigrationRunner(postgres_engine)
+    runner.upgrade()
+    from alembic import command
+
+    config = alembic_config()
+    config.attributes["connection"] = postgres_engine.connect()
+    try:
+        command.downgrade(config, "20260716_0015")
+    finally:
+        config.attributes["connection"].close()
+    tables = set(inspect(postgres_engine).get_table_names(schema=AYO_SCHEMA))
+    assert "canonical_ride_requests" not in tables
+    assert not any(name.startswith("ride_request_") for name in tables)

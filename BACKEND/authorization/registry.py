@@ -48,6 +48,10 @@ PERMISSION_REGISTRY = MappingProxyType(
         "driver_trust.evidence.read_sensitive": "Read separately authorized sensitive evidence metadata.",
         "driver_trust.review": "Perform an authorized operations review decision.",
         "driver_trust.appeal.review": "Review a linked driver identity appeal.",
+        "ride_request.create": "Create an authenticated rider's Immediate Standard request.",
+        "ride_request.read_own": "Read the authenticated rider's canonical request.",
+        "ride_request.cancel_own": "Cancel the authenticated rider's pre-dispatch request.",
+        "ride_request.support.read": "Read an explicitly authorized support projection.",
     }
 )
 

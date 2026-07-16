@@ -677,3 +677,12 @@ Supersedes / superseded by:
 - **Authority:** Authenticated human Operations/Identity reviewers decide evidence and onboarding outcomes. Deterministic policy computes eligibility. AI, OCR and providers have no approval authority.
 - **Alternatives:** A generic verified flag and provider-authoritative result were rejected as unauditable and unsafe; storing document images in ordinary relational payloads was rejected for privacy and operating risk.
 - **Open gates:** Ethiopian document/issuer validity, inspection and expiry policy, reviewer procedure, appeals, retention, legal/privacy review and provider selection remain leadership/local-specialist decisions.
+
+### IP-050 — Implementation Increment 4 canonical ride-request foundation
+
+- **Date:** 2026-07-16
+- **Status:** Implemented locally under explicit CTO/CEO authorization; awaiting review. No commit, push, public route or production activation is authorized.
+- **Decision:** Add a PostgreSQL-authoritative Immediate Standard pre-dispatch aggregate with canonical pickup/destination metadata, configuration-driven rectangular service zones, deterministic validation, Rider-bound idempotency, optimistic versions, audit and transactional outbox.
+- **Authority:** Authentication supplies Rider identity; Ride Request owns pre-dispatch request validity; Dispatch remains the only assignment authority; Pricing remains the only fare authority; Mission 20 remains disabled.
+- **Alternatives:** Reusing the legacy in-memory ride object was rejected as non-durable and caller-shaped. PostGIS was deferred because reviewed pilot geometry does not yet justify a dependency; the containment contract preserves a replacement boundary.
+- **Open gates:** Ethiopian service/prohibited zones, pickup accuracy/freshness values, address/landmark governance, consent, retention and cancellation reasons require separate leadership and local operational/legal approval.

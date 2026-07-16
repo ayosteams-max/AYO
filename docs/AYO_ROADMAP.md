@@ -541,6 +541,13 @@ locally and awaiting CTO/CEO review. No provider, public activation, ride, dispa
 Trusted Driver or Airport eligibility is enabled. See
 `IMPLEMENTATION_INCREMENT_3_DRIVER_TRUST_FOUNDATION.md`.
 
+**Increment 4 checkpoint:** Canonical authenticated Immediate Standard pre-dispatch
+requests, pickup/destination metadata, configuration-driven service zones, deterministic
+validation, pre-assignment cancellation, idempotency and transactional events are
+implemented locally and awaiting CTO/CEO review. Driver assignment, Dispatch, Pricing,
+providers, public routes and Mission 20 remain inactive. See
+`IMPLEMENTATION_INCREMENT_4_CANONICAL_RIDE_REQUEST.md`.
+
 **Shared gate:** Each engine requires a separately authorized research and architecture mission, Ethiopian legal/operational review, explicit policy and financial limits, privacy/retention approval, abuse controls, human-operations design and CTO/CEO approval. See `docs/AYO_FUTURE_TRUST_AND_AI_SUPPORT_ENGINES.md`.
 
 ## Post-launch expansion gate

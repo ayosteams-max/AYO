@@ -23,6 +23,9 @@ from BACKEND.persistence.tables import (
     arrival_waiting_idempotency,
     audit_events,
     authentication_challenges,
+    canonical_destinations,
+    canonical_pickups,
+    canonical_ride_requests,
     consequence_suppression_decisions,
     credential_verifiers,
     dispatch_assignments,
@@ -63,11 +66,16 @@ from BACKEND.persistence.tables import (
     reservation_planning_cycles,
     reservation_soft_plans,
     reservation_state_history,
+    ride_request_events,
+    ride_request_idempotency,
+    ride_request_outbox,
+    ride_request_validation_decisions,
     ride_reservations,
     rider_readiness_decisions,
     rides,
     role_permissions,
     roles,
+    service_zones,
     sessions,
     support_ai_interactions,
     support_case_events,
@@ -122,6 +130,14 @@ def postgres_engine():
 @pytest.fixture(autouse=True)
 def clean_postgres_tables(postgres_engine):
     with postgres_engine.begin() as connection:
+        connection.execute(delete(ride_request_outbox))
+        connection.execute(delete(ride_request_events))
+        connection.execute(delete(ride_request_validation_decisions))
+        connection.execute(delete(ride_request_idempotency))
+        connection.execute(delete(canonical_ride_requests))
+        connection.execute(delete(canonical_destinations))
+        connection.execute(delete(canonical_pickups))
+        connection.execute(delete(service_zones))
         connection.execute(delete(driver_trust_outbox))
         connection.execute(delete(driver_trust_events))
         connection.execute(delete(driver_trust_idempotency))
