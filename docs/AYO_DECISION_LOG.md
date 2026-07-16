@@ -596,3 +596,13 @@ Supersedes / superseded by:
 - **Open gates:** Initial low-risk allow-list, queue staffing/SLOs, Ethiopian emergency procedures, privacy/retention/cross-border rules, Amharic evaluation, upload security, provider/model selection and calibrated stage thresholds require separate approval before implementation.
 - **Approved documentation amendment:** Preserve future UI projection seams for cited plain-language “why” explanations, canonical rich timelines, privacy-safe coarse visual replay, idempotent one-tap appeals with governed evidence metadata, and fact-consistent role-redacted Support/rider/driver views. These seams add no raw-location exposure, provider, storage, decision authority or implementation authorization.
 - **Approved channel/learning amendment:** Preserve provider-neutral future seams for voice/optional voice AI, video, screen sharing, co-browsing, purpose-expiring live location, typed family/diaspora participants, versioned knowledge, advisory quality/CSAT analytics and separately approved learning from eligible human-reviewed resolutions. These seams confer no provider, recording, tracking, UI, training, consequential score or AI decision authority.
+
+### PA-041 — Mission 22 Rider and Driver UX architecture
+
+- **Date:** 2026-07-16
+- **Status:** Architecture approved by CTO on 2026-07-16 for documentation preservation only. No code, provider, UI deployment, production feature or activation is authorized.
+- **Proposal:** Adopt role-specific presentation machines and shared UX grammar over versioned server projections, with idempotent commands, explicit pending/confirmed states, snapshot recovery, bilingual landmark/walking/exact-stop guidance, accessibility, separate airport Standard/Premium journeys, Ethiopian complex pickup patterns, first-use onboarding and persistent Trust/Safety access. See `docs/MISSION_22_RIDER_DRIVER_UX_ARCHITECTURE.md`.
+- **Authority:** Immediate/Scheduled Dispatch, Active Ride, Dynamic Pickup, Mission 20, Pricing, Safety, Identity, Support/Recovery and Ledger retain their approved domains. UX and AI remain presentation/advice only.
+- **Store strategy:** Differentiate through verifiable AYO strengths rather than competitor names or unshipped claims. Every asset must map to the submitted build and release evidence; Mission 20 cannot appear while disabled or uncertified.
+- **Open gates:** Ethiopian field usability, Amharic content, accessibility, airport/venue terminology, safety operations, supported-device targets, Rider/Driver app packaging and prototype success thresholds require leadership/operations review before implementation.
+- **Sequencing:** Stop after Mission 22 documentation. No later scope may be inferred without explicit leadership authorization.

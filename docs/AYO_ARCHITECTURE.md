@@ -309,6 +309,26 @@ satisfaction projections remain advisory analytics; any learning from human-revi
 resolutions is prohibited until separately approved and governed. None of these seams
 authorizes media capture, providers, UI, tracking, automated sanctions or model authority.
 
+## Approved Rider and Driver UX architecture
+
+Mission 22 defines role-specific presentation machines over the existing server-
+authoritative Immediate, Scheduled, Active Ride, Dynamic Pickup and future certified
+Mission 20 projections. Clients render versioned snapshots, interpolate display-only
+countdowns from server time, submit idempotent commands and recover through snapshot
+reconciliation. They cannot advance lifecycle, verify arrival, authorize waiting,
+calculate money, determine blame or become safety/AI authority.
+
+The presentation boundary supports bilingual landmark entrances, precise walking and
+driver stopping guidance, accessibility, airport Standard/Premium separation, Ethiopian
+complex pickups and low-network/offline recovery. Mission 20 screens remain hidden while
+`ARRIVAL_WAITING_ENABLED` is false and until PostgreSQL certification plus separate
+activation approval. See `MISSION_22_RIDER_DRIVER_UX_ARCHITECTURE.md`.
+
+CTO approval covers documentation architecture only. It does not approve production
+code, routes, providers, deployment or activation. Mission 20 still requires successful
+PostgreSQL integration, migration upgrade/downgrade, recovery, restart and concurrency
+certification before its flag can be considered for separate activation approval.
+
 # Authentication architecture requirements
 
 Authentication uses PostgreSQL as durable identity/session authority and the

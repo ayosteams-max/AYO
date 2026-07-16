@@ -419,6 +419,23 @@ satisfaction analytics, and separately approved governed learning from eligible 
 reviewed resolutions. No provider, recording, tracking, UI, training or automated
 sanction is authorized.
 
+### Rider and Driver Experience UX — Mission 22
+
+**Status:** Architecture approved by CTO on 2026-07-16 for documentation preservation;
+no production code, provider, deployment or feature activation is authorized.
+
+**Scope:** Complete Rider booking and Driver work journeys; first-use onboarding; Smart
+Arrival and dynamic waiting presentation behind Mission 20 certification; bilingual
+landmark, walking and exact-stop guidance; countdown; accessibility; weak/offline
+recovery; airport Standard/Premium; Ethiopian complex pickup patterns; Trust/Safety UX;
+and truthful App Store/Google Play positioning. See
+`MISSION_22_RIDER_DRIVER_UX_ARCHITECTURE.md`.
+
+**Gate:** Validate prototypes with Rider/Driver and native Amharic participants, approve
+content and success thresholds, then obtain separate CTO implementation authorization.
+Mission 20 remains disabled and cannot be marketed or exposed until every PostgreSQL
+certification gate and separate activation approval passes.
+
 
 **Shared gate:** Each engine requires a separately authorized research and architecture mission, Ethiopian legal/operational review, explicit policy and financial limits, privacy/retention approval, abuse controls, human-operations design and CTO/CEO approval. See `docs/AYO_FUTURE_TRUST_AND_AI_SUPPORT_ENGINES.md`.
 
