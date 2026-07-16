@@ -29,6 +29,8 @@ from BACKEND.persistence.tables import (
     active_ride_projection_checkpoints,
     active_rides,
     dispatch_outbox,
+    immediate_dispatch_assignments,
+    immediate_dispatch_handoffs,
 )
 
 
@@ -37,8 +39,13 @@ def _ride(row: Mapping[str, Any]) -> ActiveRide:
         ride_id=row["ride_id"],
         rider_id=row["rider_id"],
         driver_id=row["driver_id"],
+        vehicle_id=row["vehicle_id"],
         reservation_id=row["reservation_id"],
         assignment_id=row["assignment_id"],
+        ride_request_id=row["ride_request_id"],
+        dispatch_handoff_id=row["dispatch_handoff_id"],
+        lifecycle_policy_version=row["lifecycle_policy_version"],
+        source_assignment_version=row["source_assignment_version"],
         state=ActiveRideState(row["state"]),
         pickup_place_id=row["pickup_place_id"],
         destination_place_id=row["destination_place_id"],
@@ -69,6 +76,91 @@ class PostgresActiveRideRepository:
         self._checkpoint(ride)
         return ride
 
+    def create_from_immediate_assignment(
+        self,
+        *,
+        assignment_id: UUID,
+        lifecycle_policy_version: str,
+        now: datetime,
+    ) -> ActiveRide:
+        source = (
+            self._connection.execute(
+                select(
+                    immediate_dispatch_assignments.c.assignment_id,
+                    immediate_dispatch_assignments.c.driver_id,
+                    immediate_dispatch_assignments.c.vehicle_id,
+                    immediate_dispatch_assignments.c.released_at,
+                    immediate_dispatch_handoffs.c.handoff_id,
+                    immediate_dispatch_handoffs.c.ride_request_id,
+                    immediate_dispatch_handoffs.c.rider_identity_id,
+                    immediate_dispatch_handoffs.c.service_type,
+                    immediate_dispatch_handoffs.c.pickup_reference,
+                    immediate_dispatch_handoffs.c.destination_reference,
+                    immediate_dispatch_handoffs.c.state.label("handoff_state"),
+                    immediate_dispatch_handoffs.c.version.label("handoff_version"),
+                    immediate_dispatch_handoffs.c.assigned_driver_id,
+                )
+                .join(
+                    immediate_dispatch_handoffs,
+                    immediate_dispatch_handoffs.c.handoff_id
+                    == immediate_dispatch_assignments.c.handoff_id,
+                )
+                .where(immediate_dispatch_assignments.c.assignment_id == assignment_id)
+                .with_for_update()
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if (
+            source is None
+            or source["handoff_state"] != "assigned"
+            or source["released_at"] is not None
+            or source["service_type"] != "immediate_standard"
+            or source["assigned_driver_id"] != source["driver_id"]
+        ):
+            raise ActiveRideConflict("authoritative_assignment_required")
+        existing = (
+            self._connection.execute(
+                select(active_rides).where(
+                    active_rides.c.assignment_id == assignment_id
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if existing is not None:
+            return _ride(dict(existing))
+        ride = ActiveRide(
+            rider_id=source["rider_identity_id"],
+            driver_id=source["driver_id"],
+            vehicle_id=source["vehicle_id"],
+            assignment_id=assignment_id,
+            ride_request_id=source["ride_request_id"],
+            dispatch_handoff_id=source["handoff_id"],
+            lifecycle_policy_version=lifecycle_policy_version,
+            source_assignment_version=source["handoff_version"],
+            state=ActiveRideState.DRIVER_ASSIGNED,
+            pickup_place_id=str(source["pickup_reference"]),
+            destination_place_id=str(source["destination_reference"]),
+            service_type="immediate_standard",
+            created_at=now,
+            updated_at=now,
+            last_sequence=1,
+        )
+        self._connection.execute(insert(active_rides).values(**ride.model_dump()))
+        self._append_event(
+            ride,
+            "active_ride.driver_assigned",
+            {
+                "state_from": None,
+                "state_to": ride.state.value,
+                "assignment_id": str(assignment_id),
+                "translation_key": "active_ride.driver_assigned",
+            },
+        )
+        self._checkpoint(ride)
+        return ride
+
     def get(self, ride_id: UUID, *, lock: bool = False) -> ActiveRide | None:
         query = select(active_rides).where(active_rides.c.ride_id == ride_id)
         if lock:
@@ -89,7 +181,11 @@ class PostgresActiveRideRepository:
         now: datetime,
     ) -> tuple[ActiveRide, bool]:
         request_hash = hashlib.sha256(
-            json.dumps(request_payload, sort_keys=True, separators=(",", ":")).encode()
+            json.dumps(
+                {"ride_id": str(ride_id), **request_payload},
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode()
         ).hexdigest()
         existing = (
             self._connection.execute(
@@ -132,7 +228,15 @@ class PostgresActiveRideRepository:
         )
         if result.rowcount != 1:
             raise ActiveRideConflict("stale_command")
-        self._append_event(changed, command_type, request_payload)
+        self._append_event(
+            changed,
+            command_type,
+            {
+                **request_payload,
+                "state_from": current.state.value,
+                "state_to": changed.state.value,
+            },
+        )
         self._connection.execute(
             insert(active_ride_idempotency_records).values(
                 actor_id=actor_id,
@@ -205,6 +309,33 @@ class PostgresActiveRideRepository:
             .limit(min(max(limit, 1), 100))
         ).mappings()
         return [RideEvent.model_validate(dict(row)) for row in rows]
+
+    def replay_canonical_state(self, ride_id: UUID) -> ActiveRideState:
+        rows = (
+            self._connection.execute(
+                select(active_ride_events)
+                .where(active_ride_events.c.ride_id == ride_id)
+                .order_by(active_ride_events.c.sequence)
+            )
+            .mappings()
+            .all()
+        )
+        if not rows:
+            raise ActiveRideConflict("ride_not_found")
+        expected_sequence = 1
+        state: ActiveRideState | None = None
+        for row in rows:
+            if row["sequence"] != expected_sequence:
+                raise ActiveRideConflict("event_stream_gap")
+            target = row["payload"].get("state_to")
+            if target is None:
+                raise ActiveRideConflict("event_state_missing")
+            state = ActiveRideState(target)
+            expected_sequence += 1
+        stored = self.get(ride_id)
+        if stored is None or stored.state is not state:
+            raise ActiveRideConflict("event_snapshot_mismatch")
+        return state
 
     def acknowledge(
         self, ride_id: UUID, role: ActorRole, sequence: int, *, now: datetime

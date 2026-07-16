@@ -1137,8 +1137,18 @@ active_rides = Table(
     Column("ride_id", UUID(as_uuid=True), primary_key=True),
     Column("rider_id", UUID(as_uuid=True), nullable=False),
     Column("driver_id", UUID(as_uuid=True)),
+    Column("vehicle_id", UUID(as_uuid=True)),
     Column("reservation_id", UUID(as_uuid=True)),
     Column("assignment_id", UUID(as_uuid=True)),
+    Column("ride_request_id", UUID(as_uuid=True)),
+    Column("dispatch_handoff_id", UUID(as_uuid=True)),
+    Column(
+        "lifecycle_policy_version",
+        String(63),
+        nullable=False,
+        server_default=text("'active_ride.v1'"),
+    ),
+    Column("source_assignment_version", Integer),
     Column("state", String(48), nullable=False),
     Column("pickup_place_id", String(128), nullable=False),
     Column("destination_place_id", String(128), nullable=False),
@@ -1155,6 +1165,18 @@ active_rides = Table(
 )
 Index("ix_active_rides_rider_state", active_rides.c.rider_id, active_rides.c.state)
 Index("ix_active_rides_driver_state", active_rides.c.driver_id, active_rides.c.state)
+Index(
+    "uq_active_rides_immediate_assignment",
+    active_rides.c.assignment_id,
+    unique=True,
+    postgresql_where=active_rides.c.dispatch_handoff_id.is_not(None),
+)
+Index(
+    "uq_active_rides_ride_request",
+    active_rides.c.ride_request_id,
+    unique=True,
+    postgresql_where=active_rides.c.ride_request_id.is_not(None),
+)
 
 active_ride_events = Table(
     "active_ride_events",

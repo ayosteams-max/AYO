@@ -9,6 +9,9 @@ Code = Annotated[str, Field(pattern=r"^[a-z][a-z0-9_.-]{1,62}$")]
 
 
 class ActiveRideState(StrEnum):
+    # Canonical Increment 6 lifecycle. Earlier states remain readable for the
+    # compatible Mission 19 prototype and are not valid inputs to the new handoff.
+    DRIVER_ASSIGNED = "driver_assigned"
     REQUEST_ACCEPTED = "request_accepted"
     SEARCHING = "searching"
     OFFERING = "offering"
@@ -28,6 +31,13 @@ class ActiveRideState(StrEnum):
     NO_DRIVER_AVAILABLE = "no_driver_available"
     OPERATIONAL_RECOVERY = "operational_recovery"
     OPERATIONAL_REVIEW = "operational_review"
+    PICKUP_CONFIRMED = "pickup_confirmed"
+    RIDE_IN_PROGRESS = "ride_in_progress"
+    DESTINATION_ARRIVED = "destination_arrived"
+    DRIVER_CANCELLED = "driver_cancelled"
+    RIDER_CANCELLED = "rider_cancelled"
+    SUPPORT_INTERRUPTED = "support_interrupted"
+    SYSTEM_INTERRUPTED = "system_interrupted"
 
 
 TERMINAL_STATES = frozenset(
@@ -35,6 +45,10 @@ TERMINAL_STATES = frozenset(
         ActiveRideState.COMPLETED,
         ActiveRideState.CANCELLED,
         ActiveRideState.NO_DRIVER_AVAILABLE,
+        ActiveRideState.DRIVER_CANCELLED,
+        ActiveRideState.RIDER_CANCELLED,
+        ActiveRideState.SUPPORT_INTERRUPTED,
+        ActiveRideState.SYSTEM_INTERRUPTED,
     }
 )
 
@@ -107,8 +121,13 @@ class ActiveRide(BaseModel):
     ride_id: UUID = Field(default_factory=uuid4)
     rider_id: UUID
     driver_id: UUID | None = None
+    vehicle_id: UUID | None = None
     reservation_id: UUID | None = None
     assignment_id: UUID | None = None
+    ride_request_id: UUID | None = None
+    dispatch_handoff_id: UUID | None = None
+    lifecycle_policy_version: Code = "active_ride.v1"
+    source_assignment_version: Annotated[int, Field(ge=1)] | None = None
     state: ActiveRideState
     pickup_place_id: Annotated[str, Field(min_length=8, max_length=128)]
     destination_place_id: Annotated[str, Field(min_length=8, max_length=128)]

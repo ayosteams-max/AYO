@@ -465,3 +465,38 @@ def test_dispatch_handoff_localization_migration_is_reversible(
     tables = set(inspect(postgres_engine).get_table_names(schema=AYO_SCHEMA))
     assert "immediate_dispatch_handoffs" not in tables
     assert "localization_preferences" not in tables
+
+
+def test_active_ride_lifecycle_migration_is_reversible(
+    postgres_engine, empty_database
+) -> None:
+    runner = MigrationRunner(postgres_engine)
+    runner.upgrade()
+    assert {
+        "ride_request_id",
+        "dispatch_handoff_id",
+        "lifecycle_policy_version",
+    }.issubset(
+        {
+            item["name"]
+            for item in inspect(postgres_engine).get_columns(
+                "active_rides", schema=AYO_SCHEMA
+            )
+        }
+    )
+    from alembic import command
+
+    config = alembic_config()
+    config.attributes["connection"] = postgres_engine.connect()
+    try:
+        command.downgrade(config, "20260716_0017")
+    finally:
+        config.attributes["connection"].close()
+    columns = {
+        item["name"]
+        for item in inspect(postgres_engine).get_columns(
+            "active_rides", schema=AYO_SCHEMA
+        )
+    }
+    assert "ride_request_id" not in columns
+    assert "dispatch_handoff_id" not in columns

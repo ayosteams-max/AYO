@@ -439,6 +439,20 @@ wording requires human review. See
 `IMPLEMENTATION_INCREMENT_5_DISPATCH_HANDOFF_LOCALIZATION.md`. No public route, provider,
 Active Ride, Pricing, Mission 20 or production feature is activated.
 
+### Increment 6 Active Ride lifecycle checkpoint
+
+Active Ride now accepts a one-way start only from an authoritative Immediate Dispatch
+assignment and owns the canonical post-assignment state machine, immutable sequenced
+timeline, optimistic commands, PostgreSQL locks, replay verification, recovery projection
+and transactional outbox. Explicit driver/rider cancellation and support/system
+interruption states record facts without financial or blame authority. Ride Request and
+Dispatch retain their existing responsibilities.
+
+Versioned completion and progress events preserve inactive, idempotent consumer seams for
+AYO Wallet/Ledger, AYO Status, AYO Family, Growth Engine, Driver Support Bonus and Trust
+Engine. These systems receive no activation or authority from the seam. See
+`IMPLEMENTATION_INCREMENT_6_ACTIVE_RIDE_LIFECYCLE.md`. Mission 20 remains disabled.
+
 # Authentication architecture requirements
 
 Authentication uses PostgreSQL as durable identity/session authority and the

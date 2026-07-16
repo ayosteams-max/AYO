@@ -555,6 +555,14 @@ review. No public route, map/ETA provider, Active Ride, Pricing, payment, notifi
 critical machine translation or Mission 20 behavior is activated. See
 `IMPLEMENTATION_INCREMENT_5_DISPATCH_HANDOFF_LOCALIZATION.md`.
 
+**Increment 6 checkpoint:** The canonical post-assignment Active Ride state machine,
+immutable timeline, optimistic/idempotent commands, PostgreSQL locking, replay/reconnect
+recovery and transactional outbox are implemented locally and awaiting CTO/CEO review.
+Future Wallet, Status, Family, Growth, Bonus and Trust consumers are documented as
+inactive event seams only. No fare, money, consequence, public route, future product or
+Mission 20 behavior is activated. See
+`IMPLEMENTATION_INCREMENT_6_ACTIVE_RIDE_LIFECYCLE.md`.
+
 **Shared gate:** Each engine requires a separately authorized research and architecture mission, Ethiopian legal/operational review, explicit policy and financial limits, privacy/retention approval, abuse controls, human-operations design and CTO/CEO approval. See `docs/AYO_FUTURE_TRUST_AND_AI_SUPPORT_ENGINES.md`.
 
 ## Post-launch expansion gate

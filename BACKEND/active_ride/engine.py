@@ -18,6 +18,15 @@ class ActiveRideConflict(Exception):
 
 
 ALLOWED_TRANSITIONS: dict[ActiveRideState, frozenset[ActiveRideState]] = {
+    ActiveRideState.DRIVER_ASSIGNED: frozenset(
+        {
+            ActiveRideState.DRIVER_EN_ROUTE,
+            ActiveRideState.DRIVER_CANCELLED,
+            ActiveRideState.RIDER_CANCELLED,
+            ActiveRideState.SUPPORT_INTERRUPTED,
+            ActiveRideState.SYSTEM_INTERRUPTED,
+        }
+    ),
     ActiveRideState.REQUEST_ACCEPTED: frozenset({ActiveRideState.SEARCHING}),
     ActiveRideState.SEARCHING: frozenset(
         {
@@ -47,15 +56,10 @@ ALLOWED_TRANSITIONS: dict[ActiveRideState, frozenset[ActiveRideState]] = {
             ActiveRideState.DRIVER_ARRIVED,
             ActiveRideState.REASSIGNING,
             ActiveRideState.CANCELLATION_PENDING,
-            ActiveRideState.OPERATIONAL_RECOVERY,
-        }
-    ),
-    ActiveRideState.DRIVER_ARRIVED: frozenset(
-        {
-            ActiveRideState.PICKUP_VERIFICATION_PENDING,
-            ActiveRideState.NO_SHOW_REVIEW,
-            ActiveRideState.REASSIGNING,
-            ActiveRideState.CANCELLATION_PENDING,
+            ActiveRideState.DRIVER_CANCELLED,
+            ActiveRideState.RIDER_CANCELLED,
+            ActiveRideState.SUPPORT_INTERRUPTED,
+            ActiveRideState.SYSTEM_INTERRUPTED,
             ActiveRideState.OPERATIONAL_RECOVERY,
         }
     ),
@@ -109,6 +113,45 @@ ALLOWED_TRANSITIONS: dict[ActiveRideState, frozenset[ActiveRideState]] = {
             ActiveRideState.OPERATIONAL_REVIEW,
             ActiveRideState.DRIVER_EN_ROUTE,
             ActiveRideState.IN_PROGRESS,
+        }
+    ),
+    ActiveRideState.DRIVER_ARRIVED: frozenset(
+        {
+            ActiveRideState.PICKUP_VERIFICATION_PENDING,
+            ActiveRideState.PICKUP_CONFIRMED,
+            ActiveRideState.NO_SHOW_REVIEW,
+            ActiveRideState.REASSIGNING,
+            ActiveRideState.CANCELLATION_PENDING,
+            ActiveRideState.DRIVER_CANCELLED,
+            ActiveRideState.RIDER_CANCELLED,
+            ActiveRideState.SUPPORT_INTERRUPTED,
+            ActiveRideState.SYSTEM_INTERRUPTED,
+            ActiveRideState.OPERATIONAL_RECOVERY,
+        }
+    ),
+    ActiveRideState.PICKUP_CONFIRMED: frozenset(
+        {
+            ActiveRideState.RIDE_IN_PROGRESS,
+            ActiveRideState.DRIVER_CANCELLED,
+            ActiveRideState.RIDER_CANCELLED,
+            ActiveRideState.SUPPORT_INTERRUPTED,
+            ActiveRideState.SYSTEM_INTERRUPTED,
+        }
+    ),
+    ActiveRideState.RIDE_IN_PROGRESS: frozenset(
+        {
+            ActiveRideState.DESTINATION_ARRIVED,
+            ActiveRideState.DRIVER_CANCELLED,
+            ActiveRideState.RIDER_CANCELLED,
+            ActiveRideState.SUPPORT_INTERRUPTED,
+            ActiveRideState.SYSTEM_INTERRUPTED,
+        }
+    ),
+    ActiveRideState.DESTINATION_ARRIVED: frozenset(
+        {
+            ActiveRideState.COMPLETED,
+            ActiveRideState.SUPPORT_INTERRUPTED,
+            ActiveRideState.SYSTEM_INTERRUPTED,
         }
     ),
 }

@@ -695,3 +695,12 @@ Supersedes / superseded by:
 - **Authority:** Ride Request owns validation and pre-assignment cancellation; Driver Trust owns eligibility evidence; Immediate Dispatch owns candidates, offers and assignment. Localization cannot alter domain state. AI has no assignment or critical-translation authority. Active Ride, Pricing and Mission 20 remain inactive.
 - **Alternatives:** Direct assignment by Ride Request and uncontrolled broadcast offers were rejected because they duplicate authority and create races. Hard-coded English/Amharic prose was rejected because it couples authoritative data to presentation and blocks safe global extension.
 - **Open gates:** Ethiopian dispatch timeouts, pickup-cost provider/policy, availability retention, destination disclosure, fatigue/commitment rules, approved initial languages, fallback order and human translation governance require leadership and local operational review.
+
+### IP-052 — Implementation Increment 6 Active Ride lifecycle foundation
+
+- **Date:** 2026-07-16
+- **Status:** Implemented locally under explicit CTO/CEO authorization; awaiting review. No automatic commit, push, public route or production activation is authorized.
+- **Decision:** Evolve the existing Active Ride authority with a canonical post-assignment state path, explicit cancellation/interruption states, source assignment lineage, immutable sequenced transition events, locked projections, ride-bound idempotency, replay validation and transactional outbox.
+- **Authority:** Ride Request owns the pre-dispatch request; Immediate Dispatch owns assignment; Active Ride alone owns post-assignment state. Completion is evidence for future consumers, not authorization for Pricing, Wallet/Ledger, Growth, Bonus, Family, Status or Trust action. AI has no state authority.
+- **Alternatives:** A second lifecycle aggregate was rejected because it would conflict with Mission 19 authority. Destructively replacing older readable states was rejected because it breaks existing consumers; new handoffs use only the canonical path while compatibility is retained.
+- **Open gates:** Ethiopian cancellation reasons, pickup confirmation evidence, interruption/resumption operations, event/location retention, Family consent, future consumer policies and load thresholds require separate approval.
