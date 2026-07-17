@@ -144,6 +144,7 @@ class FinancialTraceability(BaseModel):
     fare_calculation_id: UUID | None = None
     predecessor_fare_calculation_id: UUID | None = None
     ledger_transaction_id: UUID | None = None
+    ledger_journal_id: UUID | None = None
     wallet_projection_id: UUID | None = None
     settlement_instruction_id: UUID | None = None
 
@@ -163,7 +164,9 @@ class FinancialTraceability(BaseModel):
             if self.dispatch_handoff_id is None or self.assignment_id is None:
                 raise ValueError("Fare calculation trace requires Dispatch lineage")
             if self.fare_estimate_id is None:
-                raise ValueError("Fare calculation trace requires Fare Estimate lineage")
+                raise ValueError(
+                    "Fare calculation trace requires Fare Estimate lineage"
+                )
         if self.predecessor_fare_calculation_id is not None and (
             self.fare_calculation_id is None
             or self.predecessor_fare_calculation_id == self.fare_calculation_id
@@ -171,9 +174,14 @@ class FinancialTraceability(BaseModel):
             raise ValueError("Correction trace requires a distinct calculation")
         if self.ledger_transaction_id is not None and self.fare_calculation_id is None:
             raise ValueError("Ledger lineage requires fare calculation lineage")
+        if self.ledger_journal_id is not None and self.fare_calculation_id is None:
+            raise ValueError("Ledger lineage requires fare calculation lineage")
         if self.wallet_projection_id is not None and self.fare_calculation_id is None:
             raise ValueError("Wallet lineage requires fare calculation lineage")
-        if self.settlement_instruction_id is not None and self.fare_calculation_id is None:
+        if (
+            self.settlement_instruction_id is not None
+            and self.fare_calculation_id is None
+        ):
             raise ValueError("Settlement lineage requires fare calculation lineage")
         return self
 

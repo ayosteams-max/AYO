@@ -41,7 +41,10 @@ pytestmark = pytest.mark.integration
 NOW = datetime(2026, 7, 16, tzinfo=UTC)
 
 
-def subject(identity_id_or_type: UUID | IdentityType | None, identity_type: IdentityType | None = None):
+def subject(
+    identity_id_or_type: UUID | IdentityType | None,
+    identity_type: IdentityType | None = None,
+):
     if isinstance(identity_id_or_type, IdentityType):
         identity_type = identity_id_or_type
         identity_id = None
@@ -216,12 +219,27 @@ def complete_request_ride(composition, request):
     ride = lifecycle.start_from_assignment(assignment_id, now=NOW)
     service = subject(IdentityType.SERVICE)
     steps = (
-        (subject(driver.driver_id, IdentityType.DRIVER), LifecycleCommandType.DRIVER_EN_ROUTE),
-        (subject(driver.driver_id, IdentityType.DRIVER), LifecycleCommandType.DRIVER_ARRIVED),
+        (
+            subject(driver.driver_id, IdentityType.DRIVER),
+            LifecycleCommandType.DRIVER_EN_ROUTE,
+        ),
+        (
+            subject(driver.driver_id, IdentityType.DRIVER),
+            LifecycleCommandType.DRIVER_ARRIVED,
+        ),
         (service, LifecycleCommandType.PICKUP_CONFIRMED),
-        (subject(driver.driver_id, IdentityType.DRIVER), LifecycleCommandType.RIDE_STARTED),
-        (subject(driver.driver_id, IdentityType.DRIVER), LifecycleCommandType.DESTINATION_ARRIVED),
-        (subject(driver.driver_id, IdentityType.DRIVER), LifecycleCommandType.RIDE_COMPLETED),
+        (
+            subject(driver.driver_id, IdentityType.DRIVER),
+            LifecycleCommandType.RIDE_STARTED,
+        ),
+        (
+            subject(driver.driver_id, IdentityType.DRIVER),
+            LifecycleCommandType.DESTINATION_ARRIVED,
+        ),
+        (
+            subject(driver.driver_id, IdentityType.DRIVER),
+            LifecycleCommandType.RIDE_COMPLETED,
+        ),
     )
     version = 1
     for actor, kind in steps:

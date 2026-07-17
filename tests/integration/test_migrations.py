@@ -57,6 +57,13 @@ def test_upgrade_empty_database_matches_metadata_and_postgresql_17(
         "pricing_idempotency",
         "pricing_events",
         "pricing_outbox",
+        "ledger_books",
+        "ledger_accounts",
+        "ledger_journals",
+        "ledger_entries",
+        "ledger_idempotency",
+        "ledger_events",
+        "ledger_outbox",
         "active_ride_events",
         "active_ride_idempotency_records",
         "active_ride_projection_checkpoints",
@@ -526,3 +533,21 @@ def test_pricing_foundation_migration_is_reversible(
     tables = set(inspect(postgres_engine).get_table_names(schema=AYO_SCHEMA))
     assert "pricing_policies" not in tables
     assert "fare_estimates" not in tables
+
+
+def test_ledger_foundation_migration_is_reversible(
+    postgres_engine, empty_database
+) -> None:
+    runner = MigrationRunner(postgres_engine)
+    runner.upgrade()
+    from alembic import command
+
+    config = alembic_config()
+    config.attributes["connection"] = postgres_engine.connect()
+    try:
+        command.downgrade(config, "20260716_0019")
+    finally:
+        config.attributes["connection"].close()
+    tables = set(inspect(postgres_engine).get_table_names(schema=AYO_SCHEMA))
+    assert "ledger_books" not in tables
+    assert "ledger_journals" not in tables

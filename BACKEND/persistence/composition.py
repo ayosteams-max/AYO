@@ -22,6 +22,7 @@ from BACKEND.persistence.identity_repository import (
     PostgresIdentityRepository,
     PostgresRefreshTokenRepository,
 )
+from BACKEND.persistence.ledger_repository import PostgresLedgerRepository
 from BACKEND.persistence.localization_repository import PostgresLocalizationRepository
 from BACKEND.persistence.outbox_repository import PostgresOutboxRepository
 from BACKEND.persistence.pricing_repository import PostgresPricingRepository
@@ -126,6 +127,10 @@ class AyoPostgresUnitOfWork(SqlAlchemyUnitOfWork):
     def pricing(self) -> PostgresPricingRepository:
         return self.repository("pricing", PostgresPricingRepository)
 
+    @property
+    def ledger(self) -> PostgresLedgerRepository:
+        return self.repository("ledger", PostgresLedgerRepository)
+
 
 class PostgresRepositoryComposition:
     """Process-scoped factory for transaction-scoped repository sets."""
@@ -161,6 +166,7 @@ class PostgresRepositoryComposition:
             "handoff_dispatch": PostgresHandoffDispatchRepository,
             "localization": PostgresLocalizationRepository,
             "pricing": PostgresPricingRepository,
+            "ledger": PostgresLedgerRepository,
         }
 
     def unit_of_work(self) -> AyoPostgresUnitOfWork:

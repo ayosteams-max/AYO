@@ -64,6 +64,10 @@ PERMISSION_REGISTRY = MappingProxyType(
         "pricing.final.calculate": "Calculate a final fare from a completed canonical ride.",
         "pricing.breakdown.read_own": "Read an authorized role-safe pricing breakdown.",
         "pricing.trace.read": "Read an authorized immutable financial journey projection.",
+        "ledger.book.manage": "Create and archive immutable ledger books and accounts.",
+        "ledger.journal.post": "Post an immutable balanced ledger journal.",
+        "ledger.journal.compensate": "Post a compensating ledger journal linked to a predecessor.",
+        "ledger.trace.read": "Read immutable ledger traceability and replay projections.",
     }
 )
 

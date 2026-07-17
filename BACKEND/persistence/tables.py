@@ -2459,3 +2459,179 @@ pricing_outbox = Table(
     Column("attempt_count", Integer, nullable=False, server_default=text("0")),
     schema=AYO_SCHEMA,
 )
+
+ledger_books = Table(
+    "ledger_books",
+    metadata,
+    Column("book_id", UUID(as_uuid=True), primary_key=True),
+    Column("code", String(63), nullable=False, unique=True),
+    Column("description", String(240), nullable=False),
+    Column("base_currency", String(3), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("archived_at", DateTime(timezone=True)),
+    CheckConstraint("base_currency ~ '^[A-Z]{3}$'", name="ledger_book_currency_code"),
+    schema=AYO_SCHEMA,
+)
+
+ledger_accounts = Table(
+    "ledger_accounts",
+    metadata,
+    Column("account_id", UUID(as_uuid=True), primary_key=True),
+    Column(
+        "book_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.ledger_books.book_id"),
+        nullable=False,
+    ),
+    Column("code", String(63), nullable=False),
+    Column("name", String(160), nullable=False),
+    Column("account_class", String(24), nullable=False),
+    Column("normal_side", String(8), nullable=False),
+    Column("currency", String(3), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("archived_at", DateTime(timezone=True)),
+    CheckConstraint(
+        "account_class IN ('asset','liability','revenue','expense','equity','clearing')",
+        name="ledger_account_class_allowed",
+    ),
+    CheckConstraint(
+        "normal_side IN ('debit','credit')",
+        name="ledger_account_normal_side_allowed",
+    ),
+    CheckConstraint("currency ~ '^[A-Z]{3}$'", name="ledger_account_currency_code"),
+    UniqueConstraint("book_id", "code", name="uq_ledger_account_code_per_book"),
+    schema=AYO_SCHEMA,
+)
+Index("ix_ledger_account_book", ledger_accounts.c.book_id, ledger_accounts.c.code)
+
+ledger_journals = Table(
+    "ledger_journals",
+    metadata,
+    Column("journal_id", UUID(as_uuid=True), primary_key=True),
+    Column(
+        "book_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.ledger_books.book_id"),
+        nullable=False,
+    ),
+    Column("business_event_type", String(63), nullable=False),
+    Column("business_event_id", UUID(as_uuid=True), nullable=False),
+    Column("operation", String(63), nullable=False),
+    Column("idempotency_key", String(128), nullable=False),
+    Column("actor_identity_id", UUID(as_uuid=True), nullable=False),
+    Column("source_system", String(63), nullable=False),
+    Column("reason_code", String(63), nullable=False),
+    Column(
+        "traceability",
+        JSONB().with_variant(JSON(), "sqlite"),
+        nullable=False,
+    ),
+    Column(
+        "predecessor_ledger_journal_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.ledger_journals.journal_id"),
+    ),
+    Column("effective_at", DateTime(timezone=True), nullable=False),
+    Column("recorded_at", DateTime(timezone=True), nullable=False),
+    Column("correlation_id", UUID(as_uuid=True), nullable=False),
+    Column("causation_id", UUID(as_uuid=True), nullable=False),
+    Column("audit_reference", UUID(as_uuid=True), nullable=False),
+    UniqueConstraint(
+        "business_event_type",
+        "business_event_id",
+        "operation",
+        "idempotency_key",
+        name="uq_ledger_business_event_operation",
+    ),
+    schema=AYO_SCHEMA,
+)
+Index(
+    "ix_ledger_journal_event",
+    ledger_journals.c.business_event_type,
+    ledger_journals.c.business_event_id,
+)
+Index(
+    "ix_ledger_journal_book_time",
+    ledger_journals.c.book_id,
+    ledger_journals.c.recorded_at,
+)
+
+ledger_entries = Table(
+    "ledger_entries",
+    metadata,
+    Column("entry_id", UUID(as_uuid=True), primary_key=True),
+    Column(
+        "journal_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.ledger_journals.journal_id"),
+        nullable=False,
+    ),
+    Column(
+        "account_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.ledger_accounts.account_id"),
+        nullable=False,
+    ),
+    Column("side", String(8), nullable=False),
+    Column("amount_minor", BigInteger, nullable=False),
+    Column("currency", String(3), nullable=False),
+    Column("line_index", Integer, nullable=False),
+    Column("predecessor_entry_id", UUID(as_uuid=True)),
+    CheckConstraint("side IN ('debit','credit')", name="ledger_entry_side_allowed"),
+    CheckConstraint("amount_minor > 0", name="ledger_entry_positive_amount"),
+    CheckConstraint("line_index >= 1", name="ledger_entry_line_index_positive"),
+    CheckConstraint("currency ~ '^[A-Z]{3}$'", name="ledger_entry_currency_code"),
+    UniqueConstraint("journal_id", "line_index", name="uq_ledger_entry_line_index"),
+    schema=AYO_SCHEMA,
+)
+Index(
+    "ix_ledger_entries_account", ledger_entries.c.account_id, ledger_entries.c.currency
+)
+Index(
+    "ix_ledger_entries_journal",
+    ledger_entries.c.journal_id,
+    ledger_entries.c.line_index,
+)
+
+ledger_idempotency = Table(
+    "ledger_idempotency",
+    metadata,
+    Column("actor_id", UUID(as_uuid=True), primary_key=True),
+    Column("operation", String(63), primary_key=True),
+    Column("idempotency_key", String(128), primary_key=True),
+    Column("request_hash", String(64), nullable=False),
+    Column("response_reference", UUID(as_uuid=True), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    schema=AYO_SCHEMA,
+)
+
+ledger_events = Table(
+    "ledger_events",
+    metadata,
+    Column("event_id", UUID(as_uuid=True), primary_key=True),
+    Column("aggregate_type", String(32), nullable=False),
+    Column("aggregate_id", UUID(as_uuid=True), nullable=False),
+    Column("event_type", String(63), nullable=False),
+    Column("schema_version", Integer, nullable=False),
+    Column("safe_payload", JSONB().with_variant(JSON(), "sqlite"), nullable=False),
+    Column("replay_payload", JSONB().with_variant(JSON(), "sqlite"), nullable=False),
+    Column("occurred_at", DateTime(timezone=True), nullable=False),
+    Column("correlation_id", UUID(as_uuid=True), nullable=False),
+    Column("causation_id", UUID(as_uuid=True), nullable=False),
+    schema=AYO_SCHEMA,
+)
+
+ledger_outbox = Table(
+    "ledger_outbox",
+    metadata,
+    Column("message_id", UUID(as_uuid=True), primary_key=True),
+    Column("event_id", UUID(as_uuid=True), nullable=False, unique=True),
+    Column("event_type", String(63), nullable=False),
+    Column("safe_payload", JSONB().with_variant(JSON(), "sqlite"), nullable=False),
+    Column("occurred_at", DateTime(timezone=True), nullable=False),
+    Column("available_at", DateTime(timezone=True), nullable=False),
+    Column("published_at", DateTime(timezone=True)),
+    Column("attempt_count", Integer, nullable=False, server_default=text("0")),
+    CheckConstraint("attempt_count >= 0", name="ledger_outbox_nonnegative_attempts"),
+    schema=AYO_SCHEMA,
+)

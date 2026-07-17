@@ -17,8 +17,8 @@ from BACKEND.persistence.migrations import (
 def test_migration_history_has_one_expected_head() -> None:
     script = ScriptDirectory.from_config(alembic_config())
 
-    assert script.get_heads() == ["20260716_0019"]
-    assert expected_schema_revision() == "20260716_0019"
+    assert script.get_heads() == ["20260717_0020"]
+    assert expected_schema_revision() == "20260717_0020"
 
 
 def test_destructive_initial_downgrade_is_prohibited() -> None:

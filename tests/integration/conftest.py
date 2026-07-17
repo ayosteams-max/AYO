@@ -56,6 +56,13 @@ from BACKEND.persistence.tables import (
     immediate_dispatch_idempotency,
     immediate_dispatch_offers,
     immediate_dispatch_outbox,
+    ledger_accounts,
+    ledger_books,
+    ledger_entries,
+    ledger_events,
+    ledger_idempotency,
+    ledger_journals,
+    ledger_outbox,
     legacy_wallets,
     localization_pack_manifests,
     localization_preferences,
@@ -147,6 +154,13 @@ def postgres_engine():
 @pytest.fixture(autouse=True)
 def clean_postgres_tables(postgres_engine):
     with postgres_engine.begin() as connection:
+        connection.execute(delete(ledger_outbox))
+        connection.execute(delete(ledger_events))
+        connection.execute(delete(ledger_entries))
+        connection.execute(delete(ledger_journals))
+        connection.execute(delete(ledger_idempotency))
+        connection.execute(delete(ledger_accounts))
+        connection.execute(delete(ledger_books))
         connection.execute(delete(pricing_outbox))
         connection.execute(delete(pricing_events))
         connection.execute(delete(pricing_calculation_components))
