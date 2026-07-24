@@ -4,9 +4,9 @@
 
 AI, speech, telephony, messaging, email and external ticketing integrations require a separate evidence-based comparison and CEO/CTO approval. Measure queue outcomes, latency, escalation quality, language accuracy, privacy failures and cost before adding Redis, brokers, vector databases or provider-specific infrastructure.
 
-Version: 1.0  
-Adopted: 2026-07-14  
-Status: mandatory for every mission  
+Version: 1.0
+Adopted: 2026-07-14
+Status: mandatory for every mission
 Authority: subordinate only to `AYO_CONSTITUTION.md` and approved CEO decisions following required CTO review
 
 ## 1. Purpose
@@ -277,3 +277,528 @@ lifecycles, concurrency, rollback, outage and prohibited-data behavior. A missin
 answer is an unresolved design decision, not permission to choose a shortcut.
 
 Copy this checklist into each mission plan and link every artifact. A mission cannot be marked complete with a required row missing.
+
+## Governance reconciliation checkpoint — 2026-07-23
+
+The documentation-only Ride Request readiness review originally reached Step 3 and stopped
+because exact approvals were absent. Separate milestone approvals and Canonical Mobility
+Ownership approval were subsequently recorded on 2026-07-23. Governance readiness is now
+closed and ready for a separately authorized Ride Request implementation mission. This
+checkpoint records workflow application only; it does not alter the permanent process,
+authorize implementation, or approve production activation. See
+`GOVERNANCE_RECONCILIATION_RIDE_REQUEST_READINESS_2026-07-23.md`.
+
+## Ride Request and Service Area checkpoint — 2026-07-23
+
+Ride Request Increment 1 completed Steps 1–10 and received milestone-specific CTO and
+Founder approval on 2026-07-23 for PRE-PRODUCTION ONLY. Its former awaiting-review state
+is historical and the gate is closed.
+
+The Service Area & Ride Product Availability mission is currently documentation and
+architecture only:
+
+| Step | State |
+|---|---|
+| 1 — Research | Complete; repository and primary PostgreSQL/PostGIS evidence recorded |
+| 2 — Findings/recommendation | Complete; R1 supporting domain and PostGIS recommended |
+| 3 — CTO/Founder architecture approval | Pending |
+| 4 — Architecture | Proposed; not approved |
+| 5 — Risks/edge cases | Complete at architecture level |
+| 6–9 — Implementation through operations | Not authorized/not started |
+| 10 — Stop | Satisfied; awaiting CTO and Founder review |
+
+Architecture approval will not itself grant implementation authority.
+
+### Service Area approval closure
+
+The architecture and Increment 1 implementation authority were subsequently approved on
+2026-07-23 by CTO Architecture Review, Chief Technology Officer, and Ibrahim Hambentu
+Shibiru, Founder & CEO.
+
+| Step | Current state |
+|---|---|
+| 1 — Research | Complete |
+| 2 — Findings/recommendation | Complete |
+| 3 — CTO/Founder architecture approval | APPROVED |
+| 4 — Architecture | APPROVED |
+| 5 — Risks/edge cases | Complete for implementation entry |
+| 6–9 — Implementation through operations | Authorized for Increment 1 PRE-PRODUCTION only; not yet completed |
+| 10 — Stop | Required after Increment 1 technical gate |
+
+Production activation, later increments and real territory activation remain separate
+future gates. PostGIS dependency/environment certification must pass before dependent
+domain implementation.
+
+### Service Area Increment 1 completion checkpoint
+
+| Step | Current state |
+|---|---|
+| 1–5 — evidence, recommendation, approval, architecture and risks | Complete |
+| 6 — dependency certification | Complete for PostgreSQL 17/PostGIS PRE-PRODUCTION |
+| 7 — implementation | Complete for authorized Increment 1 |
+| 8 — verification | Focused, migration and quality evidence recorded in the CTO gate report |
+| 9 — documentation/operations | Complete for PRE-PRODUCTION review |
+| 10 — stop | Satisfied; awaiting CTO and Founder & CEO review |
+
+This checkpoint grants no production activation and no later-increment authority.
+
+### Request Access & Interaction Provenance architecture checkpoint
+
+| Step | Current state |
+|---|---|
+| 1 — Research/repository authority review | Complete |
+| 2 — Findings/recommendation | Complete; shared supporting capability plus immutable provenance recommended |
+| 3 — CTO/Founder architecture approval | PENDING |
+| 4 — Architecture | PROPOSED; not approved |
+| 5 — Risks/edge cases | Complete for architecture review |
+| 6–9 — Implementation through operations | NOT AUTHORIZED / not started |
+| 10 — Stop | Satisfied; awaiting CTO and Founder & CEO architecture review |
+
+This checkpoint creates no successor implementation authority.
+
+### Request Access & Interaction Provenance architecture approval closure
+
+Architecture governance was approved on 2026-07-23 by OpenAI ChatGPT, Project CTO
+(Technical Oversight), and Ibrahim Hambentu Shibiru, Founder & CEO.
+
+| Step | Current state |
+|---|---|
+| 1 — Research/repository authority review | Complete |
+| 2 — Findings/recommendation | Complete |
+| 3 — CTO/Founder architecture approval | APPROVED FOR PRE-PRODUCTION GOVERNANCE ONLY |
+| 4 — Architecture and ADR | APPROVED |
+| 5 — Risks, privacy, metadata and threat model | APPROVED for governance |
+| 6–9 — Implementation through operations | NOT AUTHORIZED / not started |
+| 10 — Stop | Satisfied after governance closure |
+
+The next implementation increment may be proposed as **Request Access & Interaction
+Provenance Increment 1**, but work cannot begin until a separate implementation
+authorization is recorded. Production activation remains separately prohibited.
+
+### Request Access & Interaction Provenance Increment 1 authorization closure
+
+Milestone-specific implementation authority was recorded on 2026-07-23 by OpenAI
+ChatGPT, Project CTO (Technical Oversight), and Ibrahim Hambentu Shibiru, Founder & CEO.
+
+| Step | Current state |
+|---|---|
+| 1-5 - evidence, recommendation, approval, architecture and risks | Complete; approved ADR remains authoritative |
+| 6-9 - implementation through operations | IMPLEMENTATION AUTHORIZED for Increment 1 PRE-PRODUCTION ONLY; not started by this closure |
+| 10 - stop | Required after the Increment 1 technical gate |
+
+Production activation, real channel runtimes, user interfaces and later increments
+remain unauthorized. This closure changes governance state only and preserves the
+earlier not-authorized checkpoint as historical chronology.
+
+### Request Access & Interaction Provenance Increment 1 completion checkpoint
+
+| Step | Current state |
+|---|---|
+| 1-5 - evidence, recommendation, approval, architecture and risks | Complete |
+| 6 - dependency and migration preparation | Complete for the PRE-PRODUCTION foundation |
+| 7 - implementation | Complete for authorized Increment 1 |
+| 8 - verification | INCOMPLETE; PostgreSQL integration, migration and backup/restore require configured test database |
+| 9 - documentation | Complete for technical review |
+| 10 - stop | Satisfied at the blocked certification gate |
+
+No production activation, real adapter runtime, business-domain integration or later
+increment is authorized by this checkpoint.
+
+### Enterprise Experience & Release Governance architecture checkpoint
+
+| Step | Current state |
+|---|---|
+| 1 - Research/repository authority review | Complete |
+| 2 - Findings/recommendation | Complete; existing-owner profile recommended |
+| 3 - CTO/Founder architecture approval | PENDING |
+| 4 - Architecture and ADR | PROPOSED |
+| 5 - Risks/edge cases | Complete for architecture review |
+| 6-9 - Implementation through operations | NOT AUTHORIZED / not started |
+| 10 - stop | Satisfied; awaiting CTO and Founder & CEO architecture review |
+
+The package rejects a new monolithic capability and creates no runtime, schema,
+migration, API, scheduler, feature flag, publication, targeting, channel or production
+authority.
+### Enterprise Authority Routing architecture refinement checkpoint
+
+| Step | Current state |
+|---|---|
+| 1 — Repository/evidence review | Complete |
+| 2 — Findings and recommendation | Complete; refine existing canonical owner |
+| 3 — CTO/Founder architecture approval | PENDING |
+| 4 — Architecture and ADR | PROPOSED |
+| 5 — Risks and boundaries | Complete for architecture review |
+| 6–9 — Implementation through operations | NOT AUTHORIZED / not started |
+| 10 — Stop | Satisfied; awaiting CTO and Founder & CEO review |
+
+This checkpoint creates no workflow, permissions, schema, migration, runtime or
+production authority.
+### Enterprise Initiative Orchestration Profile architecture checkpoint
+
+| Step | Current state |
+|---|---|
+| 1 — Repository and external evidence review | Complete |
+| 2 — Findings and recommendation | Complete; federated profile, no new owner |
+| 3 — CTO/Founder architecture approval | PENDING |
+| 4 — Architecture and ADR | PROPOSED |
+| 5 — Risks and boundaries | Complete for architecture review |
+| 6–9 — Implementation through operations | NOT AUTHORIZED / not started |
+| 10 — Stop | Satisfied; awaiting CTO and Founder & CEO review |
+
+No runtime, agent, workflow, schema, migration, product launch or production authority
+is created by this checkpoint.
+### Synthetic AYO Eat Addis initiative exercise checkpoint
+
+| Step | Current state |
+|---|---|
+| architecture inventory | Complete |
+| paper lifecycle simulation | Complete |
+| ownership/approval/evidence validation | PASS |
+| genuine gap analysis | Complete |
+| implementation or production | NOT AUTHORIZED / not started |
+| stop | Satisfied |
+
+The exercise proves coordination structure, not launch readiness. P2 architecture,
+domain evidence and all implementation/production gates remain open.
+### P2 AYO Eat architecture and launch-admission checkpoint
+
+| Step | Current state |
+|---|---|
+| 1 — Repository/external evidence review | Complete |
+| 2 — Recommendation | Complete; federated P2, one Commerce Order |
+| 3 — CTO/Founder architecture approval | PENDING |
+| 4 — Architecture and ADR | PROPOSED |
+| 5 — Launch risks/checklist | Complete for architecture review |
+| 6–9 — Implementation through operations | NOT AUTHORIZED / not started |
+| 10 — Stop | Satisfied; awaiting CTO and Founder & CEO review |
+
+No participant activation, Addis operating area, implementation or production authority
+is created.
+### P2 AYO Eat architecture approval and Increment 1 authorization closure
+
+Approval recorded on 2026-07-23 by OpenAI ChatGPT, Project CTO (Technical Oversight),
+and Ibrahim Hambentu Shibiru, Founder & CEO.
+
+| Step | Current state |
+|---|---|
+| 1–5 — evidence, architecture, risks and approvals | Complete; APPROVED |
+| 6–9 — Increment 1 implementation through verification | IMPLEMENTATION AUTHORIZED (PRE-PRODUCTION ONLY); not started by this closure |
+| 10 — stop | Required after Increment 1 technical gate |
+
+Authority is limited to Product Availability and Canonical Commerce Order Composition
+Foundation. Production and future increments remain unauthorized.
+
+### P2 AYO Eat Increment 1 technical checkpoint
+
+| Step | Current state |
+|---|---|
+| 1–5 — authority and frozen architecture | Complete |
+| 6 — implementation | Complete in authorized PRE-PRODUCTION scope |
+| 7 — focused verification | Complete; PostgreSQL certification pending configured PostgreSQL 17 URL |
+| 8 — security and operational review | Complete for technical gate |
+| 9 — CTO/Founder milestone review | PENDING |
+| 10 — stop | Satisfied; Increment 2 and production not started |
+
+The implementation record and CTO gate report preserve the exact exclusions. Technical
+completion does not activate an area, participant, API, release or production system.
+
+### P2 AYO Eat Increment 2 merchant decision architecture checkpoint
+
+| Step | Current state |
+|---|---|
+| 1 — repository and primary-source review | Complete |
+| 2 — findings and recommendation | Complete; evolve Merchant Order Management |
+| 3 — CTO and Founder architecture approval | PENDING |
+| 4 — architecture and ADR | PROPOSED |
+| 5 — risks and edge cases | Documented |
+| 6–9 — implementation through operations | NOT AUTHORIZED / not started |
+| 10 — stop | Satisfied; awaiting architecture review |
+
+### Courier Dispatch architecture and launch-admission checkpoint
+
+| Step | Current state |
+|---|---|
+| 1 — repository and primary-source review | Complete |
+| 2 — findings and recommendation | Complete; refine existing canonical owner |
+| 3 — CTO and Founder architecture approval | PENDING |
+| 4 — architecture and ADR | PROPOSED |
+| 5 — risks, edge cases and launch admission | Documented |
+| 6–9 — implementation through production operations | NOT AUTHORIZED / not started |
+| 10 — stop | Satisfied; awaiting architecture review |
+
+No runtime, schema, migration, API, test or production authority is created.
+
+### Courier Dispatch architecture approval and Increment 1 authorization closure
+
+Approval recorded on 2026-07-23 by OpenAI ChatGPT, Project CTO (Technical Oversight),
+and Ibrahim Hambentu Shibiru, Founder & CEO.
+
+| Step | Current state |
+|---|---|
+| 1–5 — research, architecture, risks and approvals | Complete; APPROVED |
+| 6–9 — Increment 1 implementation through verification | IMPLEMENTATION AUTHORIZED — PRE-PRODUCTION ONLY; not started by this closure |
+| 10 — stop | Satisfied for governance mission |
+
+Production and successor increments remain unauthorized. Implementation must remain
+inside the dedicated Increment 1 authorization record.
+
+### Courier Dispatch Increment 1 technical checkpoint
+
+| Step | Current state |
+|---|---|
+| 1–5 — approved architecture and risks | Complete |
+| 6 — bounded PRE-PRODUCTION implementation | Complete |
+| 7 — focused verification | Complete; full suite retains one unrelated fixture failure |
+| 8 — security/dependency review | Complete locally; PostgreSQL certification pending |
+| 9 — CTO/Founder implementation review | PENDING |
+| 10 — stop | Satisfied; Increment 2 and production not started |
+
+No new Merchant Acceptance capability is admitted. The package preserves existing
+Increment 20 authority and proposes the smallest additive successor only.
+
+### P2 AYO Eat Increment 2 architecture approval closure
+
+Approval was recorded on 2026-07-23 by OpenAI ChatGPT, Project CTO (Technical
+Oversight), and Ibrahim Hambentu Shibiru, Founder & CEO.
+
+| Step | Current state |
+|---|---|
+| 1–5 — evidence, architecture, risks and approvals | Complete; APPROVED |
+| 6–9 — Increment 2 implementation through verification | IMPLEMENTATION AUTHORIZED (PRE-PRODUCTION ONLY); not started by this closure |
+| 10 — stop | Satisfied for governance mission |
+
+Production and future increments remain unauthorized. Implementation must stop at the
+Increment 2 technical gate.
+
+### P2 AYO Eat Increment 2 technical checkpoint
+
+| Step | Current state |
+|---|---|
+| 1–5 — approved architecture and risks | Complete |
+| 6 — bounded PRE-PRODUCTION implementation | Complete |
+| 7 — focused verification | Complete; live PostgreSQL certification pending configured URL |
+| 8 — security and dependency review | Complete for local technical gate |
+| 9 — CTO/Founder implementation review | PENDING |
+| 10 — stop | Satisfied; Increment 3 and production not started |
+
+### P2 AYO Eat Increment 3 Preparation architecture checkpoint
+
+| Step | Current state |
+|---|---|
+| 1 — repository and primary-source review | Complete |
+| 2 — findings and recommendation | Complete; refine existing Preparation owner |
+| 3 — CTO and Founder architecture approval | PENDING |
+| 4 — architecture and ADR | PROPOSED |
+| 5 — risks, privacy and edge cases | Documented |
+| 6–9 — implementation through operations | NOT AUTHORIZED / not started |
+| 10 — stop | Satisfied; awaiting architecture review |
+
+No new Preparation domain, runtime, schema, migration, API, test claim or production
+authority is created by this checkpoint.
+
+### P2 AYO Eat Increment 3 architecture approval closure
+
+Approval recorded on 2026-07-23 by OpenAI ChatGPT, Project CTO (Technical Oversight),
+and Ibrahim Hambentu Shibiru, Founder & CEO.
+
+| Step | Current state |
+|---|---|
+| 1–5 — evidence, architecture, risks and approvals | Complete; APPROVED |
+| 6–9 — Increment 3 implementation through verification | IMPLEMENTATION AUTHORIZED (PRE-PRODUCTION ONLY); not started by this closure |
+| 10 — stop | Satisfied for governance mission |
+
+Production and future increments remain unauthorized. Implementation must stop at the
+Increment 3 technical gate.
+
+### P2 AYO Eat Increment 3 technical checkpoint
+
+| Step | Current state |
+|---|---|
+| 1–5 — approved architecture and risks | Complete |
+| 6 — bounded PRE-PRODUCTION implementation | Complete |
+| 7 — focused verification | Complete; full suite has one unrelated expired-quote failure |
+| 8 — security/dependency review | Complete; live PostgreSQL certification pending |
+| 9 — CTO/Founder implementation review | PENDING |
+| 10 — stop | Satisfied; Increment 4 and production not started |
+
+### Courier Pickup architecture and launch-admission checkpoint
+
+| Step | Current state |
+|---|---|
+| 1 — repository authority and implementation-history review | Complete |
+| 2 — external evidence and alternatives | Complete |
+| 3 — CTO and Founder architecture approval | PENDING |
+| 4 — architecture and ADR | PROPOSED |
+| 5 — risks, privacy, authority and edge cases | Documented |
+| 6–9 — implementation through operations | NOT AUTHORIZED / not started |
+| 10 — stop | Satisfied; awaiting architecture review |
+
+No new Pickup owner, runtime, schema, migration, API, test claim or production
+authority is created by this checkpoint.
+
+### Courier Pickup architecture approval closure
+
+Approval was recorded on 2026-07-24 by OpenAI ChatGPT, Project CTO (Technical
+Oversight), and Ibrahim Hambentu Shibiru, Founder & CEO.
+
+| Step | Current state |
+|---|---|
+| 1–5 — evidence, architecture, risks and approvals | Complete; APPROVED |
+| 6–9 — Increment 1 implementation through verification | IMPLEMENTATION AUTHORIZED — PRE-PRODUCTION ONLY; not started by this closure |
+| 10 — stop | Satisfied for governance mission |
+
+Production and successor increments remain unauthorized. Implementation must stop at
+the Increment 1 technical gate.
+
+### Courier Pickup Increment 1 technical checkpoint
+
+| Step | Current state |
+|---|---|
+| 1–5 — approved architecture and risks | Complete |
+| 6 — bounded PRE-PRODUCTION implementation | Complete |
+| 7 — focused verification | Complete; PostgreSQL certification pending |
+| 8 — security/dependency review | Complete; Bandit and dependency audit passed |
+| 9 — CTO/Founder implementation review | PENDING |
+| 10 — stop | Satisfied; Increment 2 and production not started |
+
+### Repository Quality Initiative planning checkpoint
+
+| Step | Current state |
+|---|---|
+| 1 — gate/configuration evidence | Complete |
+| 2 — remediation recommendation and matrices | Complete |
+| 3 — CTO and Founder approval | PENDING |
+| 4 — authoritative gate contract | PROPOSED; no tooling change |
+| 5 — risks and clean-worktree strategy | Documented |
+| 6–9 — remediation, PostgreSQL execution and certification | NOT AUTHORIZED / not started |
+| 10 — stop | Satisfied; awaiting Q0 governance review |
+
+The proposal preserves the 70% whole-backend branch gate and treats tests-inclusive
+MyPy as the stricter pending governance choice. It creates no runtime, schema,
+migration, CI publication, PostgreSQL execution, product or production authority.
+
+### Repository Quality Initiative Q0 contract checkpoint
+
+| Step | Current state |
+|---|---|
+| 1 — authority/configuration review | Complete |
+| 2 — canonical contract recommendation | Complete; `AYO-RQC-1` proposed |
+| 3 — CTO and Founder approval | PENDING |
+| 4 — CI/configuration alignment | NOT AUTHORIZED / not started |
+| 5 — gate evidence and responsibility maps | Complete |
+| 6–9 — Q1, remediation and certification | NOT AUTHORIZED / not started |
+| 10 — stop | Satisfied; awaiting contract decision |
+
+Q0 documents but does not resolve the MyPy/CI/certification contradiction. Existing
+tooling remains unchanged until a later approval closure. PostgreSQL execution,
+coverage/MyPy remediation, product work and production remain prohibited.
+
+### AYO-RQC-1 approval and Q1 authorization checkpoint
+
+| Step | Current state |
+|---|---|
+| 1–2 — contract evidence and recommendation | Complete |
+| 3 — CTO and Founder approval | APPROVED on 2026-07-24 |
+| 4 — AYO-RQC-1 | APPROVED |
+| 5 — Q1 implementation | AUTHORIZED — PRE-PRODUCTION ONLY; not started by this closure |
+| 6–9 — PostgreSQL, coverage/MyPy remediation and certification | NOT AUTHORIZED / not started |
+| 10 — stop | Satisfied; governance closure complete |
+
+Q1 may align the approved gate infrastructure and documentation only. Production and
+Q2–Q13 remain unauthorized.
+
+### AYO-RQC-1 control-decisions closure checkpoint
+
+| Step | Current state |
+|---|---|
+| 1–2 — control gap review and recommendation | Complete |
+| 3 — CTO and Founder approval | APPROVED on 2026-07-24 |
+| 4 — scanner family, evidence class, marker owner, branch policy and database baseline | APPROVED |
+| 5 — exact Gitleaks release and exact PostgreSQL/PostGIS OCI digest | RESOLVED from official sources on 2026-07-24 |
+| 6–9 — Q1 implementation and later remediation/certification | Q1 not started by this control-closure mission; subsequently implemented |
+| 10 — stop | Satisfied; partial control closure recorded |
+
+The controlling record is `AYO_RQC_1_CONTROL_DECISIONS_2026-07-24.md`. Gitleaks
+`v8.30.1` and the immutable OCI image-index digest for the repository-configured
+PostgreSQL 17/PostGIS 3.6 image were resolved from official sources. All Q1
+governance blockers are closed. No CI, configuration, runtime, database, test,
+schema, migration or product work occurred.
+
+### Q1 implementation checkpoint
+
+Q1 implemented the approved alignment on 2026-07-24. `pyproject.toml`, CI
+governance, validation commands, marker ownership, branch-administration policy and
+certification-evidence structure now represent AYO-RQC-1. It did not execute
+PostgreSQL or remediate MyPy or coverage. See
+`AYO_REPOSITORY_QUALITY_Q1_IMPLEMENTATION_2026-07-24.md`.
+
+Q2, product work and production remain unauthorized.
+
+### Q2 repository-wide MyPy remediation checkpoint
+
+Q2 was subsequently authorized and implemented on 2026-07-24. The authoritative
+`BACKEND tests` scope now reports zero MyPy errors across 436 files, reduced from
+291 errors across 34 files. Changes were limited to test typing and did not alter
+runtime behaviour, APIs, schemas, migrations, CI configuration or gate strictness.
+
+Q2 is awaiting CTO and Founder review. Coverage remediation, PostgreSQL
+certification, Q3, product work and production remain outside this checkpoint.
+See `AYO_REPOSITORY_QUALITY_Q2_MYPY_REMEDIATION_2026-07-24.md`.
+
+### Q3 repository-wide coverage checkpoint
+
+Q3 began on 2026-07-24 and added risk-focused tests without changing production
+behaviour or coverage governance. Whole-BACKEND combined branch coverage increased
+from 55.71% to 57.12%, below the mandatory 70.00% contract. The gate therefore
+remains open and Q3 is not complete.
+
+The checkpoint also records a production audit-allowlist incompatibility and 201
+PostgreSQL-dependent skips. Neither was silently bypassed. See
+`AYO_REPOSITORY_QUALITY_Q3_COVERAGE_REMEDIATION_2026-07-24.md`.
+
+### Q3 risk-focused continuation checkpoint
+
+The authorized continuation resolved the Eat Availability audit incompatibility
+through the existing Audit contract and added 21 risk-focused tests. Coverage rose
+from 57.12% to 58.12%; the 70.00% gate remains open.
+
+The audit allowlist was not expanded, the scheduled 500 ms characterization was
+not altered, and PostgreSQL/Engineering Certification did not begin. See
+`AYO_REPOSITORY_QUALITY_Q3_CONTINUATION_2026-07-24.md`.
+
+### Q3 continuation 2 checkpoint — 2026-07-24
+
+Fourteen risk-focused application tests increased whole-`BACKEND` combined
+line-and-branch coverage from 58.12% to 59.49%. The 70.00% gate remains open.
+MyPy, Ruff, Bandit and `git diff --check` passed. PostgreSQL-dependent tests
+remain skipped because `AYO_TEST_DATABASE_URL` is unavailable; no PostgreSQL
+certification was attempted or claimed. Q3 must stop for CTO and Founder review.
+
+### Q3 continuation 3 checkpoint — 2026-07-24
+
+Twelve risk-focused tests increased whole-`BACKEND` combined coverage from
+59.49% to 60.70% (+228 covered lines and +90 covered branches). MyPy, Ruff,
+Bandit and `git diff --check` passed. The 70.00% and PostgreSQL certification
+gates remain open; no PostgreSQL certification or product work began.
+
+### Q3 coverage feasibility checkpoint — 2026-07-24
+
+Assessment found that 2,440 further covered elements are required. Meaningful
+non-PostgreSQL work is likely to plateau at 66.42%, with an optimistic defensible
+ceiling of 68.89%. AYO-RQC-1 defines coverage and PostgreSQL as independent gates;
+the original Quality Initiative sequences the PostgreSQL baseline before broad
+coverage authoring. PostgreSQL remains unauthorized in this checkpoint. The next
+recommended gate is explicit authority for a disposable PostgreSQL baseline while
+Q3 remains open.
+
+### P2 AYO Eat Increment 4 readiness-to-handoff architecture checkpoint
+
+| Step | Current state |
+|---|---|
+| 1 — repository authority review | Complete |
+| 2 — recommendation | Complete; no new capability/runtime |
+| 3 — CTO and Founder architecture approval | PENDING |
+| 4 — profile and ADR | PROPOSED |
+| 5 — risks and boundary cases | Documented |
+| 6–9 — implementation through operations | NOT AUTHORIZED / not started |
+| 10 — stop | Satisfied; awaiting architecture review |

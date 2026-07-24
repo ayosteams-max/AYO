@@ -1,5 +1,28 @@
 # AYO Database Migration Standard
 
+## Repository Quality Contract
+
+AYO-RQC-1 is the authoritative certification contract. Migration certification uses
+the immutable PostgreSQL 17/PostGIS 3.6 image reference recorded in
+`AYO_RQC_1_CONTROL_DECISIONS_2026-07-24.md` and must prove one head, empty and
+approved-baseline upgrades, expected objects and grants, repeat upgrade, supported
+rollback/re-upgrade, failure recovery, least privilege, backup/restore and restart
+behavior. Required database-test skips are failures for certification.
+
+Q1 aligns this standard but does not execute or claim PostgreSQL certification.
+
+## Request Access & Interaction Provenance Increment 1
+
+Revision `20260723_0051` adds the domain-neutral source-adapter registry, optimistic
+channel-action capability declarations, hashed explicit continuity references and
+append-only interaction provenance. It follows Service Area revision `20260723_0050`.
+
+The revision is additive and does not alter Ride Request or historical business intent.
+Database triggers prohibit update/delete of adapter versions, continuity evidence and
+provenance records. Runtime rollback disables new Request Access command entry while
+preserving evidence; destructive downgrade is prohibited. Production activation is not
+approved.
+
 ## Mission 19 active ride revision
 
 Revision `20260716_0013` adds the reversible Active Ride aggregate, append-only ordered
@@ -151,6 +174,23 @@ environment configuration and must not be printed or committed.
 
 Revision `20260716_0010` adds only advisory marketplace tables: immutable rule versions, replayable decision explanations and simulation results. It is additive, contains no customer data conversion and does not alter dispatch or pricing tables.
 
+Revision `20260720_0028` adds one partial unique index over authentication method type and
+keyed lookup reference. It first fails if duplicate normalized authentication lookups exist,
+requiring reviewed identity reconciliation rather than automatic merging. Its downgrade is
+prohibited because dropping canonical identity uniqueness would reintroduce duplicate-account
+risk. Authentication remains disabled unless secure runtime dependencies are injected.
+
+Revision `20260720_0029` adds append-only booking route evidence and confirmation records.
+It preserves the provider evidence, Pricing-owned quote, and canonical ride-request binding
+without starting dispatch. Its downgrade is prohibited because deleting immutable booking
+evidence would violate the approved audit boundary.
+
+Revision `20260720_0030` adds durable worker capability sessions, a database-enforced one-active-
+earning-role invariant, and versioned Route Intelligence/decision reasons on canonical dispatch
+candidate and offer evidence. It preserves prior records through explicit legacy evidence labels.
+The revision is forward-only because deleting worker-session or dispatch-decision history would
+remove operational and fairness audit evidence.
+
 Upgrade in a disposable/approved environment:
 
 ```powershell
@@ -164,3 +204,128 @@ alembic downgrade 20260716_0009
 ```
 
 The downgrade drops simulation, decision and rule tables in dependency order. Production application, deployment and real-data use remain unauthorized.
+Revision `20260720_0031` adds immutable post-trip evidence packages, dual-party cash collection
+confirmations, private one-shot ratings, reusable preference signals, immutable receipts and the
+post-trip settlement/archive projection. Runtime receives no delete permission; history correction
+remains append-only. It does not activate a provider or production settlement.
+
+Revision `20260720_0032` adds the reusable Merchant Platform foundation: owner-bound merchant
+profiles, branches, staged verification evidence, configurable partner programmes, bounded
+enrolments, generic draft catalogue items, representative-assistance evidence, idempotency and a
+minimized outbox. It contains no order, delivery, payment, inventory or live-commerce state and is
+disabled unless explicit secure activation dependencies are supplied.
+
+Revision `20260720_0033` adds hierarchical merchant categories, universal typed catalogue items,
+provider-neutral media references, integer ETB base-price preparation, availability/visibility,
+tags/keywords, optimistic lifecycle state, idempotency and minimized outbox evidence. The Phase 1
+draft table is retained for audit/compatibility and receives no new Phase 2 writes. No customer
+publication, order, basket, checkout, payment, delivery, inventory or promotion state is added.
+## Increment 20 Phase 3 — Customer ordering
+
+Revision `20260720_0034` adds append-only canonical commerce orders, order-line and immutable
+evidence records, customer-scoped idempotency, and a safe transactional outbox. Runtime receives
+`SELECT, INSERT` only; Phase 3 provides no update/delete path. The migration also registers
+`ordering.create_own` and `ordering.read_own`. Production activation remains separately gated.
+## Increment 20 Phase 4 — Merchant order management
+
+Revision `20260721_0035` adds order versions, merchant/state indexing, immutable order timeline,
+separate rejection evidence and merchant-action idempotency. Existing orders receive a version-one
+creation event. Runtime receives narrowly scoped order state/version and idempotency-response update
+rights; there is no deletion path. The migration registers `merchant_orders.read_own` and
+`merchant_orders.decide_own`. Production activation remains separately prohibited.
+## Increment 20 Phase 5 — Merchant preparation
+
+Revision `20260721_0036` adds the current preparation projection, immutable preparation events,
+merchant preparation idempotency and bounded indexes/constraints. It registers
+`merchant_preparation.read_own` and `merchant_preparation.manage_own`. Runtime grants are restricted
+to the required select/insert/projection update and idempotency response operations. Production
+activation remains prohibited.
+
+Revision `20260721_0037` adds the independent Courier Dispatch request projection, immutable dispatch
+events, idempotency evidence, owner-scoped status permission and versioned policy evidence. It consumes
+Merchant Ready evidence without allowing Merchant Preparation to assign a courier. Runtime remains
+disabled and prohibited in production pending a separate activation approval.
+Revision `20260721_0038` adds the independent Courier Pickup projection, arrival timestamps, waiting
+duration, immutable events, idempotency evidence and owner/assigned-courier permissions. It does not
+implement pickup verification, parcel custody or delivery and remains disabled in production.
+Revision `20260721_0039` adds reusable custody records, hashed one-time pickup challenges, immutable
+custody events, idempotency evidence and least-privilege merchant/courier permissions. Production use
+remains prohibited.
+Revision `20260721_0040` adds universal delivery credentials, lifecycle evidence, idempotency, reminder
+evidence and provider-neutral notification intents. It introduces no settlement or production provider.
+Revision `20260721_0041` adds the disabled-by-default Field Operations foundation: verified partner
+operational profiles, configurable professional roles, hierarchical territories, time-bounded assignments,
+assistance cases, append-only activity/audit evidence and idempotency. It stores only opaque photo/QR/evidence
+references and grants no participant-account ownership, legal approval, financial, dispatch or AI authority.
+
+Revision `20260721_0042` evolves assistance cases into the canonical owner-confirmed, independently
+reviewed lifecycle. It adds optimistic state transitions, immutable case/review evidence, configurable
+conduct evidence, duplicate-subject protection and bounded review/quality indexes. Existing Phase 1 cases
+are mapped conservatively with migration evidence. No financial, incentive or production capability is added.
+## Increment 21 Phase 3 — Field Representative Performance
+
+Revision `20260721_0043` adds append-only performance evidence, readiness assertions, recommendation-only records, audit events and idempotency reservations. Runtime receives SELECT/INSERT only; no UPDATE or DELETE privilege is granted. Database checks preserve valid evidence ranges, time windows and the permanent `recommendation_only` authority boundary.
+
+## Persistence kernel revision 0044
+
+Revision `20260723_0044` adds the domain-neutral persistence backbone:
+purpose-scoped command idempotency, immutable domain events and their transactional
+outbox envelopes. Domain-event rows are append/read only for runtime. Outbox and
+idempotency lifecycle rows permit bounded updates but not deletion or truncation.
+The migration is intentionally forward-only after activation because destructive
+downgrade would erase command, event or delivery history.
+
+## 2026-07-23 PostgreSQL 17 certification
+
+The complete linear chain to `20260721_0043` was certified on a fresh PostgreSQL 17.10
+database. Empty upgrade, SQLAlchemy metadata parity, repeatability, advisory-lock
+concurrency, simulated failure recovery and revision-bounded historical downgrade tests
+passed. The migration suite contains 22 passing tests. A custom-format logical backup was
+restored into a disposable sibling database and the exact head was verified before the
+target was removed. A controlled fast database restart preserved version `17.10`, head
+`20260721_0043` and application readiness.
+
+Application startup does not run migrations. Use `python -m database.migrate` only as a
+controlled deployment job with the separately configured migrator identity. Historical
+reversibility tests stop at their target revisions and do not cross later forward-only
+migrations; later corrections use reviewed forward migrations.
+
+## Canonical Subject and Account compatibility revision 0045
+
+Revision `20260723_0045` adds pre-production canonical Subject, Account and explicit
+legacy-identity mapping persistence. It does not rename or delete `identities`, rewrite
+historical references, create credentials/sessions, or activate authentication. Accounts
+begin only as `pending_activation`. Runtime has no delete/truncate privilege; the
+migration is forward-only because mappings and their audit/event lineage are historical
+evidence. On 2026-07-23 PostgreSQL 17.10 certification passed: the 23-test migration suite
+reached head 0045 with exact metadata parity and zero skips; a controlled server restart
+preserved head, Subject, pending Account, mapping, audit, event and outbox evidence.
+
+## R1 Passenger Mobility Ride Request revision 0049
+
+Revision `20260723_0049` evolves the existing canonical Ride Request table in place.
+Legacy Increment 4 rows remain model version 1; R1 Passenger Mobility rows use model
+version 2 with canonical requester/passenger Subject references, validated location
+references, optional stops, schedule intent, passenger count, and intent-only
+preferences. The revision makes legacy-only columns nullable without deleting or
+rewriting history and installs Subject foreign keys plus model-shape constraints.
+
+The migration is forward-only because Ride Request, audit, event, outbox, and idempotency
+history is immutable enterprise evidence. The PostgreSQL 17.10 migration certification
+suite passed all 27 tests at head `20260723_0049`, including empty upgrade, metadata
+parity, upgrade from revision 0048, repeatability, locking, and failure recovery.
+# Courier Dispatch Increment 1 — revision `20260723_0055`
+
+Additive PRE-PRODUCTION revision `20260723_0055` extends the existing Courier Dispatch
+case with terminal states and actor/action idempotency, and adds independent offer,
+assignment and immutable decision-evidence tables. It preserves Phase 6 data and
+retains one linear migration head. Production migration execution is not approved.
+
+# Courier Pickup Increment 1 — revision `20260724_0056`
+
+Additive PRE-PRODUCTION revision `20260724_0056` evolves Courier Pickup from one record
+per order/dispatch to immutable assignment-scoped attempts. It adds the approved
+terminal state, policy/version, terminal reason, correlation/causation, immutable
+evidence and action-scoped idempotency while retaining legacy rows. It does not add
+tracking, routing, custody or delivery. Live PostgreSQL certification remains pending
+a configured `AYO_TEST_DATABASE_URL`; production execution is not approved.

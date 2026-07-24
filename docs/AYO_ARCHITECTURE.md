@@ -6,6 +6,11 @@ This architecture is subordinate to `AYO_CONSTITUTION.md` and must preserve a cr
 
 ## 1. Current architecture
 
+Revision `20260723_0045` adds PRE-PRODUCTION canonical Subject, Account and explicit
+legacy-identity mapping persistence. It preserves the mixed legacy `identities` authority
+and historical references; no credential, login, session, full-RBAC, business-participation
+migration or production activation is part of that revision.
+
 AYO currently has an early synchronous FastAPI prototype:
 
 ```text
@@ -15,32 +20,45 @@ HTTP request
   -> module-level Python dictionaries
 ```
 
-`BACKEND/main.py` always registers the legacy ride, driver-offer, ride-status and wallet routers. Mission 12 added an isolated typed immediate-dispatch domain core, and Mission 13 added PostgreSQL 17 persistence, transactional repositories, immutable audit writes, a transactional outbox, RBAC contracts and bounded recovery. Mission 14 can register the secure dispatch and internal-worker routers only through an explicit feature flag that defaults off and is prohibited in production configuration. Controlled activation requires explicit PostgreSQL, asymmetric-token-verifier, publisher and worker dependencies. Verified identity/session state and database RBAC are authoritative; token role claims are rejected. The outbox and recovery coordinators are scheduler-neutral, use bounded work and PostgreSQL locking, and are not started on import. No external identity, messaging or telemetry provider is connected. The in-memory dispatch repository and local publisher are test-only; the unsafe legacy `rides` path is not authoritative dispatch storage. `ayo_ai.py` remains disconnected from dispatch.
+Increment 19 Milestone 1 stops `BACKEND/main.py` from registering the legacy ride, driver-offer, ride-status and wallet routers. With no explicit secure activation, the default application exposes only root and health routes; obsolete process-local modules remain quarantined for later dependency-proven removal. Mission 12 added an isolated typed immediate-dispatch domain core, and Mission 13 added PostgreSQL 17 persistence, transactional repositories, immutable audit writes, a transactional outbox, RBAC contracts and bounded recovery. Mission 14 can register secure dispatch and internal-worker routers only through an explicit feature flag that defaults off and is prohibited in production configuration. Controlled activation requires explicit PostgreSQL, asymmetric-token-verifier, publisher and worker dependencies. Verified identity/session state and database RBAC are authoritative; token role claims are rejected. The outbox and recovery coordinators are scheduler-neutral, use bounded work and PostgreSQL locking, and are not started on import. No external identity, messaging or telemetry provider is connected. In-memory repositories and local publishers are test-only. `ayo_ai.py` remains disconnected from dispatch.
 
 Mission 15 adds an unregistered deterministic Marketplace Intelligence module. It consumes privacy-minimized aggregate snapshots, evaluates immutable configurable rules, persists replayable advisory decisions and simulations, and emits safe metrics/logs. It cannot assign drivers, change fares, block dispatch or invoke AI. Dispatch remains authoritative; marketplace failure degrades to no recommendation. No production scheduler, API or data source is connected.
 
 The repository has a locked Python environment, automated regression/contract tests, linting, security scanning and GitHub Actions CI. It now also contains an early Expo rider-interface prototype in `AYO-Mobile/`, including a provider-neutral destination-search seam; this is not a production client and has no authenticated persistence, live maps or provider connection. The system still has no deployed persistent database, external provider integrations, production mobile/web clients, background workers, deployment pipeline or production infrastructure. Existing product design documents remain aspirations rather than executable specifications unless explicitly identified as implemented.
 
+Increment 19 Milestone 2 adds a disabled-by-default canonical authentication runtime over
+the PostgreSQL identity/session foundations: normalized keyed contact lookup, Argon2id,
+short-lived asymmetric access tokens, rotating opaque refresh families, server revocation,
+rate limiting, audit, recovery preparation and secure mobile restoration. Contact delivery,
+contact verification completion, recovery completion, production keys and activation remain
+external approval and operations gates. Authentication identifies a subject; it does not
+grant a role, verify legal identity or authorize a ride.
+
+Increment 19 Milestone 3 extends that runtime with provider-neutral pending-contact
+activation and an executable guest-to-member mobile transition. A bounded, single-use
+local intent restores the exact internal path after verification but carries no booking or
+authorization authority. Mobile state distinguishes the shared Identity Session from
+capability-local participation and prevents simultaneous earning modes as a client guard;
+durable server enforcement remains mandatory before any worker mode is activated.
+
 ### Current strengths
 
-- Clear route/service separation for a prototype.
+- Explicit fail-closed route activation boundaries.
 - Input validation with Pydantic.
-- Basic ride-status transition checks.
-- Decimal use inside the wallet service.
+- Canonical ride lifecycle and financial foundations with typed authority boundaries.
 - Eligibility filtering and understandable dispatch code.
 
 ### Current constraints
 
 - Memory state disappears on restart and diverges across workers.
 - Mutable dictionaries provide no transactions, concurrency control or durable audit trail.
-- Financial completion is caller-controlled and non-atomic.
+- Canonical authenticated rider endpoints are not yet activated.
 - Dispatch timeouts and fallback candidates do not execute.
-- Internal dispatch fields are returned by the public status endpoint.
-- The provided virtual environment has no application dependencies.
+- No production public trip-status projection is active.
 
 ## 2. Approved initial architectural direction
 
-CTO review: approved 2026-07-15  
+CTO review: approved 2026-07-15
 CEO approval: approved 2026-07-15
 
 AYO begins as a modular monolith, not as separately deployed microservices. This is the smallest production architecture that preserves strong transactions, clean domain ownership, low operating cost and a credible scaling path while AYO proves one complete ride flow.
@@ -423,6 +441,18 @@ readiness, not assignment and does not invoke Dispatch. Configuration and Postgr
 authoritative; AI and clients cannot validate ownership or product eligibility. See
 `IMPLEMENTATION_INCREMENT_4_CANONICAL_RIDE_REQUEST.md`. No public route is activated.
 
+#### Approved enterprise ownership reconciliation — 2026-07-23
+
+R1 Passenger Mobility is the sole logical enterprise owner of canonical Ride Request.
+The Increment 4 module and persistence model are classified as the migration source: they
+remain the current PRE-PRODUCTION implementation evidence and must not be deleted,
+reinterpreted, or duplicated. P1 AYO Ride owns product experience/orchestration; Dispatch,
+Pricing, Route/Navigation, Trip execution, Tracking, Identity, Household, and Finance retain
+their specialist authorities. CTO Architecture Review and Ibrahim Hambentu Shibiru,
+Founder & CEO, approved this architecture on 2026-07-23 for PRE-PRODUCTION ONLY. It
+authorizes no code, schema, migration, runtime, or activation change. See
+`ADR_R1_MOBILITY_CANONICAL_RIDE_REQUEST_OWNERSHIP_2026-07-23.md`.
+
 ### Increment 5 Immediate Dispatch handoff and localization checkpoint
 
 A durable one-way handoff now carries an authoritative `READY_FOR_DISPATCH` Immediate
@@ -516,3 +546,165 @@ references and versioned signals, not raw invasive fingerprints. The determinist
 rules foundation must remain compatible with a future reviewed risk-scoring system;
 no AI or score may silently authenticate, authorize or block a person without
 approved policy and human/appeal safeguards.
+
+# Rider booking evidence boundary
+
+The Milestone 4 runtime composes existing authorities. Provider-neutral Route Intelligence
+returns normalized endpoints, accuracy, confidence, route geometry, distance, ETA, traffic,
+restriction and toll evidence. Service Zone independently validates claimed and normalized
+endpoints. Pricing creates the authoritative expiring quote. Authenticated confirmation stores
+an immutable evidence binding and invokes canonical Ride Request; success stops at
+`ready_for_dispatch`.
+
+Search/preview remain public under Explore Before Commitment. Confirmation requires the
+canonical Rider subject and `ride_request.create`. Client identity, safety verification,
+service zone, pricing policy, fare factors and totals are never authoritative. Stable
+idempotency and server expiry support safe weak-network retry. The waiting response explicitly
+states dispatch has not started. See
+`IMPLEMENTATION_INCREMENT_19_MILESTONE_4_COMPLETE_RIDER_BOOKING_RUNTIME.md`.
+
+# Canonical Immediate Dispatch runtime
+
+Milestone 5 extends the canonical request through `ready_for_dispatch → searching → offering →
+assigned`. AYO Route Intelligence supplies bounded pickup route/ETA/traffic/restriction evidence;
+Dispatch never contacts providers. Driver Trust and the durable Worker Session authority enforce
+driver/vehicle eligibility and one active earning capability. Only an authenticated, online Ride
+Driver session in the matching service zone is offer/accept eligible.
+
+Hard safety/role/freshness filters precede deterministic pickup-ETA-first scoring. Reliability,
+cancellation history, workload and fair-opportunity evidence are bounded, versioned secondary
+signals. PostgreSQL locks, versions, actor-scoped idempotency and unique indexes guarantee one
+exclusive offer and canonical assignment. Transactional outbox intents notify rider/driver while
+polling remains authoritative. The runtime stops before navigation and Active Ride.
+
+The legacy duplicate Dispatch ride-creation aggregate is not an authority for Milestone 4
+bookings. See `IMPLEMENTATION_INCREMENT_19_MILESTONE_5_INTELLIGENT_DRIVER_DISPATCH.md`.
+
+# Request Access & Interaction Provenance architecture
+
+The approved PRE-PRODUCTION governance architecture is indexed at
+`AYO_REQUEST_ACCESS_INTERACTION_PROVENANCE_ARCHITECTURE.md` with ADR
+`ADR_REQUEST_ACCESS_INTERACTION_PROVENANCE_2026-07-23.md`.
+
+It is a shared supporting capability for channel-adapter contracts, domain-owned
+channel-action declarations and immutable interaction provenance. It does not own
+Identity, delegation, Ride Request, availability or fulfilment. Architecture governance
+was approved on 2026-07-23 by OpenAI ChatGPT, Project CTO (Technical Oversight), and
+Ibrahim Hambentu Shibiru, Founder & CEO.
+
+The architecture-gate status was **APPROVED FOR PRE-PRODUCTION GOVERNANCE ONLY**, with
+implementation blocked pending separate authorization. That historical state is
+preserved.
+
+On 2026-07-23, OpenAI ChatGPT, Project CTO (Technical Oversight), and Ibrahim Hambentu
+Shibiru, Founder & CEO, separately authorized **Request Access & Interaction Provenance
+Increment 1** for PRE-PRODUCTION implementation. The approved ADR remains authoritative.
+Production activation and later increments are not approved. See
+`REQUEST_ACCESS_INTERACTION_PROVENANCE_INCREMENT_1_IMPLEMENTATION_AUTHORIZATION_2026-07-23.md`.
+
+Increment 1 is implemented in the modular monolith at additive revision
+`20260723_0051`. The shared component owns only typed adapter/capability contracts,
+explicit continuity and immutable interaction provenance. It does not alter Ride Request
+or another canonical business aggregate. Current state is **IMPLEMENTED - POSTGRESQL
+CERTIFICATION INCOMPLETE**; production and real channel activation remain prohibited.
+
+# Enterprise Experience & Release Governance architecture
+
+The proposed enterprise profile is indexed at
+`AYO_ENTERPRISE_EXPERIENCE_RELEASE_GOVERNANCE_ARCHITECTURE.md` with ADR
+`ADR_ENTERPRISE_EXPERIENCE_RELEASE_GOVERNANCE_2026-07-23.md`.
+
+It creates no new capability. Enterprise Change Management coordinates release plans;
+Knowledge, S9 Information Stewardship, Authority Routing, human authorities,
+Localization and owning Products/domains retain their existing responsibilities.
+Existing governed Intelligence remains advisory.
+
+Status: **READY FOR CTO AND FOUNDER & CEO ARCHITECTURE REVIEW**. Implementation and
+production activation are not authorized.
+
+# P2 AYO Eat Merchant Decision Lifecycle
+
+Architecture index entry:
+
+- package: `AYO_P2_EAT_INCREMENT_2_MERCHANT_DECISION_ARCHITECTURE.md`;
+- ADR: `ADR_P2_EAT_MERCHANT_DECISION_LIFECYCLE_2026-07-23.md`;
+- authorization:
+  `AYO_P2_EAT_INCREMENT_2_IMPLEMENTATION_AUTHORIZATION_2026-07-23.md`;
+- canonical owner: Merchant Order Management;
+- status: APPROVED on 2026-07-23;
+- implementation: AUTHORIZED for Increment 2 PRE-PRODUCTION ONLY; and
+- production/future increments: NOT AUTHORIZED.
+
+No separate Merchant Acceptance domain is admitted.
+
+# P2 AYO Eat Preparation Lifecycle refinement
+
+- package: `AYO_P2_EAT_INCREMENT_3_PREPARATION_ARCHITECTURE.md`;
+- ADR: `ADR_P2_EAT_PREPARATION_LIFECYCLE_2026-07-23.md`;
+- canonical owner: existing Preparation / Merchant Preparation;
+- decision: additive Preparation case consuming accepted Merchant Decision evidence,
+  while Universal Ordering retains the Commerce Order;
+- status: APPROVED on 2026-07-23; and
+- implementation: Increment 3 AUTHORIZED (PRE-PRODUCTION ONLY); production and future
+  increments NOT AUTHORIZED.
+
+No P2-specific Preparation capability is admitted.
+
+## Increment 3 approval closure
+
+- approved: 2026-07-23;
+- CTO: OpenAI ChatGPT, Project CTO (Technical Oversight);
+- Founder: Ibrahim Hambentu Shibiru, Founder & CEO;
+- architecture/ADR: APPROVED;
+- implementation: Increment 3 AUTHORIZED (PRE-PRODUCTION ONLY);
+- authorization:
+  `AYO_P2_EAT_INCREMENT_3_IMPLEMENTATION_AUTHORIZATION_2026-07-23.md`; and
+- production/future increments: NOT AUTHORIZED.
+
+Readiness remains separate from assignment, pickup, custody and delivery.
+
+Increment 3 is implemented in the modular monolith through additive revision
+`20260723_0054`. The canonical case consumes accepted Merchant Decision evidence and
+owns only Preparation state/evidence. Current state is **IMPLEMENTED IN PRE-PRODUCTION;
+POSTGRESQL CERTIFICATION INCOMPLETE**. Production and Increment 4 remain unauthorized.
+
+# P2 AYO Eat Readiness-to-Handoff profile
+
+- package: `AYO_P2_EAT_INCREMENT_4_READINESS_HANDOFF_ARCHITECTURE.md`;
+- ADR: `ADR_P2_EAT_READINESS_HANDOFF_BOUNDARY_2026-07-23.md`;
+- decision: no new capability; compose existing Preparation, Courier Dispatch,
+  Courier Pickup, Custody and Delivery authorities through versioned evidence;
+- status: APPROVED on 2026-07-24;
+- authorization:
+  `AYO_COURIER_PICKUP_INCREMENT_1_IMPLEMENTATION_AUTHORIZATION_2026-07-24.md`;
+- Increment 1: IMPLEMENTATION AUTHORIZED — PRE-PRODUCTION ONLY; and
+- production/successor increments: NOT AUTHORIZED.
+
+# Courier Dispatch refinement and launch admission
+
+- package: `AYO_COURIER_DISPATCH_ARCHITECTURE_LAUNCH_ADMISSION_PACKAGE.md`;
+- ADR: `ADR_COURIER_DISPATCH_REFINEMENT_2026-07-23.md`;
+- ownership/lifecycle/events:
+  `AYO_COURIER_DISPATCH_OWNERSHIP_LIFECYCLE_EVENT_MODEL.md`;
+- canonical owner: existing Courier Dispatch;
+- decision: refine offers, assignment recovery and pre-pickup cancellation without
+  absorbing Preparation, Pickup, Custody, Delivery or eligibility source facts;
+- status: APPROVED on 2026-07-23;
+- authorization:
+  `AYO_COURIER_DISPATCH_INCREMENT_1_IMPLEMENTATION_AUTHORIZATION_2026-07-23.md`;
+- Increment 1: IMPLEMENTATION AUTHORIZED — PRE-PRODUCTION ONLY; and
+- production/successor increments: NOT AUTHORIZED.
+
+Increment 1 is implemented additively at revision `20260723_0055`. Current technical
+state is **IMPLEMENTED IN PRE-PRODUCTION; POSTGRESQL CERTIFICATION PENDING**. This does
+not authorize production or Increment 2.
+
+# Courier Pickup refinement and launch admission
+
+- package: `AYO_COURIER_PICKUP_ARCHITECTURE_LAUNCH_ADMISSION_PACKAGE.md`;
+- ADR: `ADR_COURIER_PICKUP_REFINEMENT_2026-07-24.md`;
+- canonical owner: existing Courier Pickup;
+- decision: preserve its four-state post-assignment/pre-custody lifecycle and propose
+  assignment-attempt identity, append-only corrections and one terminal outcome;
+- status: READY FOR CTO AND FOUNDER & CEO ARCHITECTURE REVIEW; and
+- implementation/production: NOT AUTHORIZED.

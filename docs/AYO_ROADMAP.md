@@ -2,6 +2,13 @@
 
 Status: proposed dependency order. A mission starts only after explicit authorization. Product-policy values remain Founder/leadership decisions.
 
+Current approved conceptual direction: **AYO Enterprise Operations Platform**, including recommendation-only
+Customer Impact Intelligence and Customer Sentiment Intelligence. An explainable Enterprise Health Index
+is approved. Workforce Intelligence and Partner Intelligence are documented as additional independent
+conceptual contributors and are approved. Enterprise Risk Intelligence is documented as an additional
+forward-looking conceptual contributor for review. Detailed design, data collection, runtime work, provider selection, migration,
+deployment and production activation remain separately approval-gated.
+
 This roadmap is subordinate to `AYO_CONSTITUTION.md`. No mission or acceptance criterion may authorize a constitutional violation.
 
 ## Roadmap operating rules
@@ -28,6 +35,15 @@ This roadmap is subordinate to `AYO_CONSTITUTION.md`. No mission or acceptance c
 **Acceptance criteria:** Clean environment installs reproducibly; backend starts with documented command; CI runs deterministically; characterization tests pass; known defects are marked and not mistaken for approved behavior.
 
 **Dependencies:** None.
+
+**2026-07-23 certification:** application Engineering Runtime, namespaced safe
+configuration, structured lifecycle logging, startup/schema validation, separate
+liveness/readiness, graceful shutdown, PostgreSQL 17.10 migration/restart/restore and CI
+foundation gates are implemented and locally certified. Results: 463 passed, one
+authorized xfail, 74.41% branch coverage; 22 migration tests passed. Engineering Foundation
+and PostgreSQL Foundation were separately approved on 2026-07-23 by CTO Architecture
+Review and Ibrahim Hambentu Shibiru, Founder & CEO. PRE-PRODUCTION ONLY; no deployment or
+production activation is authorized.
 
 ## Mission 2 — Domain contracts and persistence seam
 
@@ -580,6 +596,1185 @@ behavior is activated. See `IMPLEMENTATION_INCREMENT_7_PRICING_FOUNDATION.md`.
 
 **Shared gate:** Each engine requires a separately authorized research and architecture mission, Ethiopian legal/operational review, explicit policy and financial limits, privacy/retention approval, abuse controls, human-operations design and CTO/CEO approval. See `docs/AYO_FUTURE_TRUST_AND_AI_SUPPORT_ENGINES.md`.
 
+**Increment 19 Milestone 1 checkpoint:** The CTO and Founder & CEO authorized Increment
+19 for the complete Immediate Standard rider journey. Milestone 1 removes the insecure
+legacy ride, offer, status and wallet routers from the default application and adds a
+fail-closed regression boundary. It activates no authentication, dispatch, payment,
+wallet, provider, migration, deployment or production behavior. Milestone 2 requires
+separate leadership review after the Milestone 1 technical gate. See
+`IMPLEMENTATION_INCREMENT_19_MILESTONE_1_SECURE_RUNTIME_BOUNDARY.md`.
+
+**Increment 19 Milestone 2 checkpoint:** Canonical Rider registration, password sign-in,
+short-lived asymmetric access tokens, durable rotating refresh sessions, replay response,
+current/all-device logout, enumeration-safe reset preparation, pending contact-verification
+architecture and secure mobile restoration are implemented locally behind explicit secure
+activation. Revision `20260720_0028` enforces canonical authentication lookup uniqueness.
+PostgreSQL CI, provider/key/recovery operations, physical-device verification and final
+CTO/Founder review remain open. No wallet, payment or dispatch work is included. See
+`IMPLEMENTATION_INCREMENT_19_MILESTONE_2_CANONICAL_AUTHENTICATION.md`.
+
+**Increment 19 Milestone 3 checkpoint:** Guest Ride/location exploration, protected-action
+intent preservation, canonical contact activation, exact return, shared Identity Session,
+capability-local exit, Settings-only account logout and the one-active-earning-mode client
+invariant are implemented locally. No worker capability is activated; durable server
+enforcement remains a prerequisite. PostgreSQL, provider, Amharic, physical-device,
+accessibility and network certification remain open. See
+`IMPLEMENTATION_INCREMENT_19_MILESTONE_3_IDENTITY_ACTIVATION_GUEST_EXPERIENCE.md`.
+
+**Increment 19 Milestone 4 implementation checkpoint:** AP-095 is approved and the bounded
+rider-booking runtime is implemented locally. Guest search/preview, server-authoritative route
+and service-area evidence, Pricing-owned quote, accessible review, authenticated idempotent
+confirmation, immutable booking evidence and canonical `ready_for_dispatch` now form one
+journey. Revision `20260720_0029` is the migration head. No Dispatch, matching, tracking,
+Payment or Wallet call occurs. Certification and leadership review remain open. See
+`IMPLEMENTATION_INCREMENT_19_MILESTONE_4_COMPLETE_RIDER_BOOKING_RUNTIME.md`.
+
+**Increment 19 Milestone 5 implementation checkpoint:** Canonical Immediate Dispatch is
+implemented locally from validated request through one accepted assignment. AP-095 route
+evidence, durable Ride Driver sessions, one-active-earning-role enforcement, multi-signal
+explainable ranking, exclusive offers, timeout/decline recovery, atomic assignment, minimized
+notification outbox and authoritative mobile status recovery are present. Revision
+`20260720_0030` is the migration head. PostgreSQL/RIE/provider/device/operations/legal
+certification and leadership review remain open. Navigation, trip execution and financial/future
+platform scope did not begin. See
+`IMPLEMENTATION_INCREMENT_19_MILESTONE_5_INTELLIGENT_DRIVER_DISPATCH.md`.
+
+**Increment 19 Milestone 6 implementation checkpoint:** The accepted assignment now enters the
+existing canonical Active Ride authority and progresses through approach, arrival, verified pickup,
+trip, destination and completion with versioned idempotent commands and event replay. The mobile
+rider status surface recovers after weak network and app foregrounding. No provider-direct routing,
+financial settlement, rating, earning or future-platform behavior is included. Certification and
+leadership review remain open. See
+`IMPLEMENTATION_INCREMENT_19_MILESTONE_6_DRIVER_ARRIVAL_LIVE_TRIP.md`.
+
+**Increment 19 Milestone 7 implementation checkpoint:** A completed canonical trip now enters
+the local post-trip authority: immutable evidence finalization, dual-party cash proof, private
+72-hour ratings, reusable preference signals, Pricing-authoritative financial breakdown,
+balanced Ride Ledger posting, settled-only Wallet projection, immutable receipts and archival.
+Revision `20260720_0031` is the migration head. Production adapters, PostgreSQL/device testing,
+financial/legal/operations certification and leadership approval remain open. No future AYO
+platform runtime or production activation began. See
+`IMPLEMENTATION_INCREMENT_19_MILESTONE_7_TRIP_COMPLETION_TRUST_FINANCIAL_SETTLEMENT.md`.
+
+**Increment 19 Milestone 4 decision gate:** The complete rider-booking product scope was
+authorized on 2026-07-20. Runtime work is paused before implementation because AP-083
+requires separate approval of purpose-specific route/ETA evidence and no provider is
+selected. `INCREMENT_19_MILESTONE_4_BOOKING_DECISION_GATE.md` recommends a provider-neutral
+server contract and a non-production Addis Ababa provider evaluation. No Dispatch, matching,
+tracking, Payment or Wallet work has begun.
+
 ## Post-launch expansion gate
 
+**Increment 20 Phase 1 implementation checkpoint:** The reusable Merchant Platform foundation is
+implemented locally with owner-bound profiles, multi-branch preparation, assisted onboarding,
+staged verification, configurable Founding Partner programmes, a generic preparation-only
+catalogue, deterministic success indicators, representative progress and an accessible mobile
+dashboard. Revision `20260720_0032` is the migration head. Orders, delivery, payments, inventory,
+live commerce and future-service activation remain absent. PostgreSQL/legal/sector/device/operations
+certification and leadership review remain open. See
+`IMPLEMENTATION_INCREMENT_20_PHASE_1_MERCHANT_PLATFORM_FOUNDATION.md`.
+
+**Increment 20 Phase 2 implementation checkpoint:** The reusable Universal Catalogue is implemented
+locally with hierarchical categories, typed items, provider-neutral media, integer ETB base-price
+preparation, reversible merchant lifecycle, bounded management search and explainable completion,
+media and Merchant Health scoring. Revision `20260720_0033` is the migration head. No public
+catalogue, ordering, basket, checkout, promotion, inventory, payment or delivery runtime is active.
+Certification and leadership review remain open. See
+`IMPLEMENTATION_INCREMENT_20_PHASE_2_UNIVERSAL_COMMERCE_CATALOGUE.md`.
+
 Express, Eat, Marketplace, Home or Pay planning may begin only after leadership confirms that the ride flow meets sustained reliability, safety, driver-earnings, support, security, financial-reconciliation and operational targets. Each expansion requires its own blueprint, state model, legal review and roadmap; shared platform capability does not erase product boundaries.
+
+## Strategic Intelligence research gate
+
+The **AYO Strategic Intelligence Platform** conceptual architecture is approved by the CTO and Founder & CEO.
+It uses a shared evidence-and-scenario core with permission-bounded strategic lenses, starting
+with governed manual practice. It is separate from Enterprise Operations and creates no prediction,
+decision, governance or execution authority. No detailed design, data collection, tooling, provider/model
+selection, runtime, migration, deployment or activation is authorized.
+
+The approved conceptual core includes the **Strategic Learning Engine**. It compares sealed decision-time
+expectations with later versioned outcome evidence, calibrates eligible forecasts, identifies possible
+repeated bias patterns and recommends process improvements without hindsight rewriting, personnel scoring,
+historical decision changes or new authority. Runtime and data activity remain prohibited.
+
+The Learning Engine includes approved conceptual **Strategic Assumption Management**: a governed registry of
+reusable, versioned assumptions with immutable decision-time links, evidence/confidence, review/expiry,
+drift, validation, retirement and historical comparison. Material change recommends review only. Detailed
+design, monitoring, automation and runtime remain separately prohibited and approval-gated.
+
+Approved conceptual **Strategic Dependency Intelligence** maps initiative prerequisites and assesses their
+criticality, readiness evidence, unknowns, gaps, reuse, sequencing, substitution and material change. It has
+no blocking, approval, provider-selection or execution authority. Detailed design, monitoring, automation,
+runtime and activation remain separately prohibited and approval-gated.
+
+Approved conceptual **Strategic Opportunity Intelligence** identifies and evaluates emerging possibilities
+through lawful horizon scanning, maturity/dependency analysis, scenario-linked opportunity windows, expiry
+awareness and cross-platform impact. It preserves visible uncertainty and unknowns and has no investment,
+provider-selection, governance or initiation authority. Detailed design, sources, monitoring, automation,
+runtime and activation remain separately prohibited and approval-gated.
+
+Approved conceptual **Strategic Resilience Intelligence** assesses long-horizon withstand, adaptation,
+recovery and transformation evidence across strategic domains, including dependency concentration,
+single/common-mode failure, redundancy trade-offs, recovery ranges, sustainability and scenario comparison.
+It remains distinct from risk, opportunity, current health and operational continuity and has no blocking,
+command or execution authority. Detailed design, monitoring, automation, runtime and activation remain
+separately prohibited and approval-gated.
+
+The approved conceptual **Strategic Decision Studio** orchestrates exact-version outputs from approved
+Strategic Intelligence capabilities into immutable, permission-preserving decision briefings. It consolidates
+evidence, alternatives, scenarios, assumptions, dependencies, opportunities, risks, resilience, learning and
+unknowns without performing analysis, suppressing conflict, approving, routing or executing. Detailed design,
+input contracts, tooling, runtime and activation remain separately prohibited and approval-gated.
+
+The approved conceptual **Enterprise Intelligence Council** coordinates independently governed enterprise
+perspectives for material cross-domain decisions, using the Strategic Decision Studio for immutable briefing
+composition. It exposes agreement, disagreement, counterevidence, missing perspectives and unknowns without
+creating artificial executives, votes, consensus, approval, routing or execution authority. Detailed design,
+coordination tooling, runtime and activation remain separately prohibited and approval-gated.
+
+Approved conceptual **Enterprise Intelligence Assurance** independently assesses intelligence quality,
+evidence integrity/freshness, coverage, calibration, consistency, translation, explainability, drift,
+availability, configuration, security, audit and version compatibility. Unknown quality remains visible and
+findings are recommendation-only; Assurance cannot generate, modify, suppress, repair, approve or execute.
+Detailed design, criteria, monitoring, tooling, runtime and activation remain separately prohibited and
+approval-gated.
+
+## Enterprise Intelligence Foundation completion gate
+
+The foundational Enterprise Intelligence architecture is recorded as enterprise-complete on CTO
+recommendation, pending CTO and Founder & CEO final sign-off. This closes routine foundational architecture
+expansion: future foundational additions require demonstrated legal, regulatory, operational or enterprise
+necessity and evidence that existing capabilities cannot solve the problem.
+
+Ordinary evolution proceeds through approved intelligence domains, strategic lenses, operational/product
+capabilities, shared enterprise infrastructure and separately approved implementation. This milestone
+authorizes no runtime, provider/model, data collection, migration, authority, execution, deployment or
+production activation. See `AYO_ENTERPRISE_INTELLIGENCE_FOUNDATION_COMPLETION.md`.
+
+If approved, the next recommended mission is **Strategic Intelligence Stage 0 — Evidence and Case Standard
+Detailed Design**: approve the six-class evidence taxonomy, strategic-case template, confidentiality tiers,
+lawful-source rules, scenario method, independent-challenge procedure, Ethiopian verification register and
+pilot-selection criteria. Stop again for CTO and Founder & CEO approval before any pilot. Later stages remain
+conditional on measured need: one reversible manual pilot; shared logical data/access contracts;
+outcome/calibration discipline; and only then separately evaluated AI assistance.
+
+## Enterprise Evidence Fabric research gate
+
+The approved conceptual direction is a federated evidence metadata/contracts/lineage control plane with
+domain-owned payloads and a manual first stage. It selects no database, graph,
+catalogue, provider, model or runtime and creates no truth, intelligence, governance or execution authority.
+
+The approved conceptual **Evidence Confidence Chain** explains each displayed confidence indicator through
+exact evidence, quality, freshness, coverage, uncertainty, missing/conflicting evidence and owning-method
+versions. It cannot calculate truth or alter confidence/conclusions. Detailed design/runtime remain gated.
+
+If approved, the next proposed mission is **Evidence Fabric Stage 0 Detailed Design**: approve the AYO evidence
+profile, manual immutable package manifest, ownership/stewardship, classification, reuse, retention/hold,
+exact-version and decision-reliance rules. Stop again before any pilot or implementation.
+
+## Enterprise Intelligence Isolation research gate
+
+Research recommends domain cells inside six sensitivity zones, with no implicit same-zone or upward trust and
+with partitioned Evidence Exchange, Assurance and security/audit planes. Public Intelligence is assumed
+compromisable. Cross-domain transfer is evidence-only; sessions, prompts, credentials, tool grants, provider
+threads and raw memory cannot cross.
+
+**Current gate:** the research and conceptual Isolation architecture are approved. Enterprise Intelligence
+Replaceability is also approved as a documentation-only principle: stable domain identities and versioned
+Evidence Exchange Contracts permit independent implementation evolution without shared prompts, memory,
+provider dependence or authority. No provider/model/infrastructure selection, detailed design, pilot, runtime,
+migration, deployment or activation is authorized.
+
+If approved, the next proposed mission is **Enterprise Intelligence Isolation Stage 0 Detailed Design**:
+approve the domain/cell inventory, classifications, permitted flow matrix, evidence-contract schema, memory
+taxonomy, administrative separation, incident/containment procedure and adversarial test thresholds. Stage 0
+must use manual diagrams/contracts and stop again before provider selection, proof of concept or implementation.
+
+## Enterprise Engineering Intelligence research gate
+
+Research recommends a federated Engineering Intelligence Platform with ten independent domains: Architecture;
+Code Quality & Maintainability; Security Engineering; Software Supply Chain & Dependency; Performance &
+Capacity; Reliability Engineering; Technical Debt; Upgrade & Obsolescence; Delivery & Verification; and AI
+Engineering. Engineering Learning and the Engineering Decision Studio are shared evidence/learning/orchestration
+capabilities, not approval authorities.
+
+**Current gate:** the research, federated architecture and domain catalogue are approved by CTO and Founder &
+CEO. The Enterprise Engineering Principles Engine is also approved as a documentation-only shared capability.
+No repository/data ingestion, employee monitoring, provider/model/tool selection, detailed design, runtime,
+migration, code generation, deployment or production access is authorized.
+
+If approved, the next proposed mission is **Engineering Intelligence Stage 0 — Manual Evidence Standard and
+Baseline**: approve domain ownership, engineering evidence/ADR/debt/recommendation templates, classifications,
+current-state truth rules, individual-scoring prohibition, manual review workflow and baseline success measures.
+Stop again before automation, repository integration, telemetry collection or provider selection.
+
+## Enterprise Intelligence Experience Layer research gate
+
+Research recommends federated Experience Contracts with a shared presentation policy, invariant disclosure core,
+Authorization-bound views, approved Localization, accessibility adaptation and presentation-only preferences.
+The Layer cannot generate/summarize intelligence independently, centralize raw domain data, inherit cross-domain
+permissions, alter uncertainty or decide notification delivery.
+
+**Current gate:** research and the federated conceptual Experience Layer are approved. No UI/prototype,
+user-data collection, preference store, repository/domain integration, voice or translation provider, model,
+runtime, API, migration, deployment or production activation is authorized.
+
+If approved, the next proposed mission is **Experience Layer Stage 0 — Manual Contract and Inclusive Research
+Standard**: approve the Experience Contract, invariant-core checklist, persona/task matrix, view-grant boundary,
+terminology/dual-language rules, proposed accessibility baseline, synthetic examples and user-research plan.
+Stop again before UI design, prototyping, provider selection or implementation.
+
+## Enterprise Operating System Foundation completion and mission transition
+
+The CTO and Founder & CEO approve the seven-part Enterprise Operating System Foundation as architecturally
+complete. This milestone is documentation-only and does
+not mean the architecture is implemented, legally certified, operationally ready or production active.
+
+**Foundational-addition gate:** no new enterprise foundation without demonstrated necessity and evidence that
+the Constitution, Governance, Evidence, Intelligence, Isolation, Engineering Intelligence or Experience
+foundations—and reasonable bounded extensions—cannot support the requirement.
+
+**Mission transition:** routine work moves to Customer Value Engineering through authorized Product,
+Operational, Experience, Intelligence-domain, Platform-service and Engineering Implementation missions. The
+priority order is visible participant value, reliability, safety, speed, simplicity, trust, marketplace health,
+business sustainability and operational excellence.
+
+The permanent Enterprise Single Responsibility Principle now governs lower-layer evolution: one primary purpose,
+owner and authority ceiling per logical component; contract-based collaboration; no authority aggregation; and
+architecture review for unrelated responsibilities. It does not mandate microservices or authorize refactoring.
+
+**Current stop gate:** Enterprise Operating System sign-off is complete. Do not begin a Customer Value
+Engineering mission until explicitly authorized. Existing Stage 0, detailed-design, provider, implementation,
+deployment and activation gates remain intact.
+
+## Customer Value Engineering Framework research gate
+
+**Current status:** the permanent review framework is approved by the CTO and Founder & CEO. This approval does
+not authorize tooling, workflow automation, runtime changes, deployment or production activation.
+
+The proposal uses a non-compensable lawful/constitutional/safety/security/privacy/financial/authority gate and
+an evidence-based Customer Value Case. It avoids a universal score, preserves unknowns and counterevidence, and
+produces one of four reasoned recommendations: Build now, Research further, Defer or Reject. Build now advances
+only to the next existing approval gate.
+
+If approved, the next proposed mission is **Customer Value Engineering Stage 0 — Manual Value Case Standard**:
+approve the case template, accountable owners, proportional review depth, evidence-quality rules, measurement
+and retirement criteria, emergency/legal integration and review service levels using synthetic examples. Stop
+again before workflow tooling, automated enforcement, data collection, runtime integration or implementation.
+
+**Customer Moments refinement:** an optional product-design lens is proposed for CTO and Founder & CEO review.
+It asks whether an initiative could create an honest, meaningful positive experience without making such a
+moment a score, gate or substitute for Customer Value. No implementation is authorized.
+
+## Customer Experience Architecture research gate
+
+**Current status:** the federated conceptual architecture is approved by CTO and Founder & CEO. No UI,
+prototype, runtime, provider, data collection, migration, deployment or production activation is authorized.
+
+The recommendation is one invariant AYO Experience Contract with bounded product journeys, shared relationship
+and recovery guidance, semantic consistency and whole-journey evidence. It rejects both a universal centralized
+journey and fully fragmented product experiences.
+
+If approved, the next proposed mission is **Customer Experience Stage 0 — Manual Experience Contract and
+Representative Research Standard**: define a manual product contract, journey-evidence template, research
+coverage standard, recovery taxonomy, exception record and synthetic Ride/Eat/Pay examples. Stop again before
+UI design, prototyping, tooling, production research/data collection, provider selection or implementation.
+
+**Confidence Before Convenience refinement:** approved by CTO and Founder & CEO. It prioritizes truthful facts,
+unknowns and next steps over optimistic reassurance or convenience when uncertainty is material. It creates no
+runtime, score, authority or remedy entitlement.
+
+## Evidence-First Investigation principle gate
+
+**Current status:** approved as a permanent enterprise principle by CTO and Founder & CEO. Documentation only;
+no evidence collection, monitoring, investigation workflow, schema, runtime, provider, migration, deployment or
+production activation is authorized.
+
+If approved, any later operationalization must begin with separately approved, domain-owned evidence profiles
+and sufficiency standards. A future Stage 0 may manually compare synthetic Ride, Commerce and Fraud profiles,
+privacy/retention controls and urgent-safety exceptions. Do not begin that work without explicit authorization.
+
+### Investigation Hypothesis Management conceptual gate
+
+A future recommendation-only Enterprise Investigation Intelligence capability is approved conceptually by CTO
+and Founder & CEO. It maintains competing hypotheses, maps evidence/counterevidence, exposes confidence and
+unknowns, preserves retirement history and links reasoning to the investigation timeline. It cannot determine
+guilt, innocence, sufficiency or findings. No implementation or detailed-design mission is authorized.
+
+## Enterprise Investigation Platform research gate
+
+**Current status:** the federated conceptual architecture is approved by CTO and Founder & CEO. No detailed
+design, code, case data, AI model/provider, schema, migration, deployment or production activation is authorized.
+
+Recommended option C uses shared investigation contracts and independently governed, isolated domain cells.
+Decision, remedy, appeal, safety, employment, financial and legal authority remain in owning domains. If approved,
+the next proposed mission is **Stage 0 — Manual Domain Profile and Authority Standard** using synthetic Ride,
+Commerce and specialist cases. Stop before case data, UI/API, models/providers or implementation.
+
+### Root Cause Intelligence conceptual gate
+
+A post-outcome, recommendation-only organizational learning capability is approved by CTO and Founder & CEO. It
+may analyze multiple causes, contributing factors, systemic patterns and recurrence but cannot alter cases,
+assign blame, recommend discipline or authorize corrective action. No analysis method, data pipeline, case-data
+reuse, detailed design or implementation is authorized.
+
+### Permanent Investigation architecture refinement gate
+
+Public wording, Investigation Services abstraction, expiring case custody, immutable interaction evidence,
+evidence-based approval, independent Authority Routing, Least Knowledge and Root Cause boundaries are approved
+by CTO and Founder & CEO. Documentation only; no workflow, identity, access, audit, schema, migration,
+runtime, provider, deployment or activation is authorized.
+
+## Growth and Executive Intelligence architecture record
+
+**Status:** Enterprise Growth Intelligence, Executive Intelligence, the Executive Dashboard, conflict visibility
+and Internal/External Naming are approved permanent conceptual architecture. Documentation only; no data
+collection, model/provider, campaign, media, spending, outreach, dashboard, executive queue, schema, migration,
+deployment or production activation is authorized.
+
+Any future mission must separately justify a bounded Growth capability or manual Executive briefing contract.
+Do not begin detailed design or implementation from this record.
+
+## Enterprise Intelligence Governance Framework gate
+
+**Current status:** the permanent portfolio governance framework, canonical Registry, lifecycle standard and
+proposal/portfolio review standard are approved by CTO and Founder & CEO. This is not an Intelligence domain and
+creates no runtime, registry service, workflow, schema, model/provider, data access, migration, deployment or
+activation.
+
+The next proposed mission is **Registry Stage 0 — Ownership and Metadata Reconciliation**: leadership
+designates role-based business owners/technical stewards and validates canonical entries manually. Stop before
+building a registry service, workflow, APIs, schemas or Intelligence implementation.
+
+## Enterprise Knowledge Management architecture gate
+
+**Current status:** permanent Knowledge Management, Knowledge Discovery, Architecture Traceability,
+Architectural Integrity and Knowledge Principles are approved by CTO and Founder & CEO. They create no
+Intelligence, authority, search/indexing service, graph, model/provider, schema, migration, deployment or
+activation.
+
+If approved, any next mission should manually reconcile a small synthetic traceability manifest and ownership
+model. Do not begin discovery tooling, indexing, repository migration or implementation without authorization.
+
+## Enterprise Architecture Health and completion gate — approved
+
+**Current status:** Architecture Health, deliberate Evolution, permanent architecture principles and the
+Foundational Enterprise Architecture Completion milestone are approved as Enterprise Foundation v1.0.
+Documentation only; no monitoring, observability, telemetry, score engine, automated conformance, runtime,
+schema, provider, migration, deployment or production activation.
+
+Architecture Health is multi-dimensional and non-authoritative. Completion is architectural—not implementation,
+legal readiness or production certification.
+
+## Enterprise Business Capability Map Version 1.0 — approved
+
+**Current status:** Version 1.0 and its Capability Governance Standard are approved as the master navigation,
+ownership and planning-metadata taxonomy above Enterprise Foundation v1.0. Lifecycle, business-dependency,
+strategic-importance and roadmap metadata preserve Single Responsibility and contract-based independence.
+
+The proposed permanent Capability Admission Rule awaits CTO and Founder & CEO review. Do not begin registry
+population, detailed capability design, registry implementation, product features, runtime, schema, provider
+selection, migration, deployment or production activation.
+
+## Executive Assistance conceptual architecture gate
+
+**Current status:** proposed shared enterprise business capability with five bounded assistants. It reuses
+approved Enterprise Intelligence, Governance, Authority Routing, Knowledge, Evidence and Experience capabilities
+and creates no new Intelligence domain.
+
+Capability lifecycle is Proposed, roadmap position Future and strategic classification Strategic; Governance
+admission and CTO/Founder & CEO architecture approval remain required. Do not begin detailed design, runtime
+assistant work, UI, calendar/email integration, signature handling, schemas, models/providers, migration,
+deployment or production activation.
+
+**Architecture review:** the Executive Assistants conceptual architecture is approved. Capability Admission and
+advancement beyond conceptual maturity remain gated.
+
+## Enterprise Continuity & Succession Governance gate
+
+**Current status:** proposed bounded Enterprise Governance capability. It separates Founder Personal, Enterprise
+Legacy, Legal Continuity and Emergency Activation layers; makes continuity activation non-automatic and
+multi-party; separates authority transition from identity/Vault access; and limits every release by role and
+purpose.
+
+Capability lifecycle is Proposed, roadmap Future and strategic importance Mission Critical; these are planning
+metadata only. Await Governance admission and CTO/Founder & CEO review. Do not begin Vault, cryptography, identity,
+secret/signature storage, automatic activation, schemas, models/providers, migration, deployment or production
+activation.
+
+## Enterprise Risk business-domain architecture gate
+
+**Current status:** first Enterprise Business Domain architecture approved. C6 is narrowed from `Enterprise Risk,
+Assurance & Internal Review` to `Enterprise Risk`; proposed C9 Assurance & Internal Review remains reserved for
+separate future Capability Admission and is not designed.
+
+C6 capability identity and detailed architecture are Approved, roadmap Planned and strategic importance Mission
+Critical. Permanent Appetite, Capacity, cross-risk relationship, Opportunity Risk and Executive Risk Brief
+refinements await CTO and Founder & CEO review. Do not begin taxonomy/register population, risk engine, scoring,
+AI, provider, schema, integration, migration, deployment or production activation.
+
+## Enterprise Resilience corporate-stewardship gate
+
+**Current status:** approved C10 Corporate Stewardship capability with lifecycle Approved, roadmap Future and
+strategic importance Mission Critical. It coordinates preparedness, recovery-objective references, critical
+dependencies, readiness, exercises and cross-domain recovery awareness without owning incident command or
+execution.
+
+C10 Capability Admission and conceptual architecture are approved. Do not begin runtime, resilience engine,
+disaster-recovery implementation, infrastructure, backup/failover, monitoring, scoring, AI, provider, schema,
+integration, migration, deployment or production activation.
+
+## Enterprise Decision Management corporate-stewardship gate
+
+**Current status:** approved C11 with lifecycle Approved, roadmap Future and strategic importance Strategic. It
+coordinates the context of significant decisions across proposal, preparation, evidence, participation, approval
+references, implementation tracking, outcome review, learning and supersession/retirement.
+
+C11 Capability Admission and conceptual architecture are approved. Do not begin runtime, decision/approval
+workflow engine, automatic approval/implementation, project-management system, scoring, AI, provider, schema,
+integration, migration, deployment or production activation.
+
+## Enterprise Policy Management corporate-stewardship gate
+
+**Current status:** approved C12 with lifecycle Approved, roadmap Future and strategic importance Strategic. It
+coordinates policy preparation, ownership, versions, approval references, communication readiness,
+effectiveness/applicability, review, supersession and retirement without creating policy authority or enforcement.
+
+Capability Admission and conceptual architecture are approved. Do not begin runtime, policy/enforcement engine, automatic
+approval/enforcement, legal interpretation, contract replacement, scoring, AI, provider, schema, integration,
+migration, deployment or production activation.
+
+## Enterprise Finance reusable-business architecture gate
+
+**Current status:** R6 capability identity, detailed Enterprise Finance architecture and bounded financial-awareness
+refinements are approved by CTO and Founder & CEO. Roadmap position **Planned** and strategic importance **Mission
+Critical** are planning metadata only and grant no implementation or production authority.
+
+Do not begin runtime, ledger, Wallet, payment-provider, banking, accounting-system, risk/scoring/AI engine, schema,
+integration, migration, deployment or production activation. Conceptual approval does not authorize implementation
+or financial execution.
+
+## Enterprise Marketplace reusable-business architecture gate
+
+**Current status:** R7 Enterprise Marketplace refinement, detailed conceptual architecture, Liquidity, Network
+Effects and Marketplace Health refinements are approved by CTO and Founder & CEO. Roadmap position **Planned** and
+strategic importance **Mission Critical** are planning metadata only.
+
+Do not begin runtime, dispatch/matching/ranking, reservation, pricing, ordering, payment, settlement, logistics,
+trust, investigation, analytics/scoring/AI engine, provider, schema, integration, migration, deployment or
+production activation. Conceptual approval does not authorize implementation or execution.
+
+## Enterprise Trust reusable-business architecture gate
+
+**Current status:** R13 Capability Admission, conceptual architecture, contextual Trust Relationships, Trust
+Building, Trust Explanation and Executive Trust Brief refinements are approved by CTO and Founder & CEO. Roadmap
+position **Planned** and strategic importance **Strategic** are planning metadata only.
+
+Do not begin runtime, trust scoring/ranking, identity provider, identity/verification implementation, investigation,
+Fraud/Safety/Compliance operation, AI/analytics engine, provider, schema, integration, migration, deployment or
+production activation. Conceptual approval does not authorize implementation or execution.
+
+## Enterprise Logistics reusable-business architecture gate
+
+**Current status:** R5 Enterprise Logistics refinement and conceptual architecture approved by CTO and Founder &
+CEO. Roadmap position **Planned** and strategic importance **Mission Critical** are planning metadata only.
+
+Do not begin runtime, Dispatch/matching/assignment, routing/optimization, Navigation, Maps/provider, Fleet/Driver/
+Delivery Management, Marketplace matching, Pricing, Payment, Settlement, analytics/AI engine, schema, integration,
+migration, deployment or production activation. Conceptual approval does not authorize implementation or execution.
+
+## Enterprise Resource reusable-business architecture gate
+
+**Current status:** R14 Capability Admission and conceptual architecture approved by CTO and Founder & CEO. Roadmap
+position **Planned** and strategic importance **Mission Critical** are planning metadata only.
+
+Do not begin runtime, Workforce/HR/Fleet implementation, scheduling, Dispatch, Logistics execution, Marketplace
+matching, Trust/Finance action, scoring/optimization/AI engine, provider, schema, integration, migration, deployment
+or production activation. Conceptual approval does not authorize implementation or execution.
+
+## Enterprise Identity shared-enterprise architecture gate
+
+**Current status:** admitted S1 identity and detailed Enterprise Identity refinement approved by CTO and Founder &
+CEO. Roadmap position **Shared Enterprise Standard** and strategic importance **Mission Critical** are
+planning metadata only.
+
+Do not begin runtime, Authentication, Authorization/access control, login, IdP, proofing/verification, Workforce,
+Customer/Partner Management, Trust/Fraud/Investigation, agent/AI execution, provider, schema, integration, migration,
+deployment or production activation. Conceptual approval does not authorize implementation.
+
+## Enterprise Agreement reusable-business architecture gate
+
+**Current status:** R15 Capability Admission and conceptual architecture approved by CTO and Founder & CEO.
+Roadmap position **Future** and strategic importance **Strategic** are planning metadata only.
+
+Do not begin runtime, contract generation/drafting, legal advice/interpretation, approval/signature execution,
+signature storage, policy/decision replacement, financial action, provider, schema, integration, migration,
+deployment or production activation. Conceptual approval does not authorize implementation.
+
+## Enterprise Obligation reusable-business architecture gate
+
+**Current status:** R16 Capability Admission and conceptual architecture approved by CTO and Founder & CEO.
+Roadmap position **Future** and strategic importance **Strategic** are planning metadata only.
+
+Do not begin runtime, workflow/compliance/legal engine, legal interpretation, breach determination, automated
+fulfilment/reminder, provider, schema, integration, migration, deployment or production activation. Conceptual
+approval does not authorize implementation.
+
+## AYO Ride enterprise product architecture gate
+
+**Current status:** P1 product identity retained; proposed enterprise product architecture awaiting CTO and Founder
+& CEO review. Proposed roadmap position **Reference Enterprise Product** and strategic importance **Mission
+Critical** are planning metadata only.
+
+Do not begin runtime, mobile UI, backend, API, schema, migration, provider, deployment or production activation.
+Preserve all certified Ride behavior. Architecture approval would authorize documentation only; detailed journeys,
+contracts, UX and implementation require separate missions.
+
+## AYO Ride Product Excellence Blueprint gate
+
+**Current status:** P1 Product Excellence Blueprint approved by CTO and Founder & CEO. Permanent global/local
+adaptation, Memorable Customer Moments, Invisible Friction, Confidence Moments and Human Moments refinements are
+recorded for CTO review. This remains stewardship guidance within P1, not a new capability or approval of the
+proposed P1 enterprise product architecture.
+
+Do not begin detailed product design, UI, runtime workflow, API, schema, provider, pricing, dispatch, safety response,
+payment, integration, migration, deployment or production activation. If approved, the next recommended mission is
+Ethiopia-first field discovery and baseline measurement for pickup certainty, weak-network continuity, driver offer
+clarity, accessibility and recovery; it must stop before detailed design.
+
+## Enterprise Product Framework architecture gate
+
+**Current status:** shared architecture framework approved by CTO and Founder & CEO for documentation only. Roadmap
+position **Enterprise Product Standard** and strategic importance **Mission Critical** are planning metadata only.
+
+Do not implement a runtime framework, universal workflow, UI, backend, API, schema, provider, migration, deployment
+or production activation. Product architectures inherit the approved framework while each product still requires
+its own Customer Value and architecture gates.
+
+## Explainable Decision Experience Standard gate
+
+**Current status:** Product Experience Standard approved by CTO and Founder & CEO. Permanent change-condition,
+available-options, next-update and net-information-gain refinements are recorded for CTO review. It remains a
+refinement of the approved Product Framework, not a capability, Decision Management replacement, AI explanation
+system or authority.
+
+Do not create reason catalogues, disclosure policies, review rights, runtime, AI, UI, API, schema, provider,
+integration, migration, deployment or production activation. Approval would authorize documentation only. Any later
+domain profile requires its authoritative owner, qualified local review and a separate detailed-design gate.
+
+## Enterprise Communication Excellence Standard gate
+
+**Current status:** reusable Product Experience Standard approved by CTO and Founder & CEO. Permanent Communication
+Memory, Conversation Continuity, Silence Awareness and participant-knowledge refinements are recorded for CTO review.
+No capability, engine, Intelligence domain or Governance layer is admitted.
+
+Do not implement messaging, notification, preference or template services; channels; campaigns; telemetry; AI; UI;
+API; schema; provider; integration; migration; deployment or production activation. Approval would authorize
+documentation only.
+
+## Expectation Excellence Standard gate
+
+**Current status:** reusable Product Excellence Standard approved by CTO and Founder & CEO. Permanent Promise
+Escalation, Positive Surprise, Promise Budget and confidence principles are recorded for CTO review. No capability,
+engine, Intelligence domain or Governance layer is admitted.
+
+Do not create estimates, promises, SLAs, queue/ETA or prediction engines, expectation stores, messaging/notification,
+UI, API, schema, provider, integration, migration, deployment or production activation. Approval would authorize
+documentation only.
+
+## Enterprise Product Portfolio architecture gate
+
+**Current status:** C1 refinement and permanent Product Family, independence, sunset, Product Health and cross-product
+journey refinements approved by CTO and Founder & CEO. Roadmap position **Enterprise Portfolio Standard** and
+strategic importance **Strategic** are planning metadata only.
+
+Do not begin runtime, product admission, investment allocation, retirement execution, workflow, scoring/ranking,
+roadmap mutation, UI, API, schema, provider, migration, deployment or production activation. Approval would authorize
+documentation only. Approval authorizes no portfolio runtime or operation.
+
+## Enterprise Data Governance capability-admission gate
+
+**Current status:** standalone admission rejected by the assessment; S9 Data and Information Stewardship refinement
+approved by the CTO and Founder & CEO on 2026-07-22. Roadmap position **Shared Enterprise Standard** and
+strategic importance **Mission Critical** are planning metadata only. Required business owner, technical steward and
+governance accountability are **Unassigned — mandatory before Development**.
+
+Do not create a separate capability or begin runtime, database/catalogue, consent/retention/deletion service,
+analytics/AI/model training, access control, provider, schema, migration, integration, deployment or production
+activation. Approval authorizes conceptual S9 refinement documentation only.
+
+## Enterprise Capital and Financing capability-admission gate
+
+**Current status:** standalone Enterprise Capital capability and Capital Intelligence domain rejected by the
+assessment; proposed R6 Enterprise Finance Capital and Financing Coordination refinement awaiting CTO and Founder &
+CEO review. Proposed roadmap position **Shared Enterprise Standard** and strategic importance **Mission Critical** are
+planning metadata only. Business owner, technical owner and governance accountability are **Unassigned — mandatory
+before Development**.
+
+Do not begin fundraising, investor outreach, valuation, negotiation, agreement/signature activity, borrowing,
+securities issuance, ownership transfer, runtime, model, schema, provider, integration, migration, deployment or
+production activation. Approval would authorize conceptual R6 refinement documentation only.
+
+## Enterprise Customer Recovery capability-admission gate
+
+**Current status:** standalone capability rejected by the assessment; S4 Customer Recovery Coordination refinement
+approved by the CTO and Founder & CEO on 2026-07-22. Roadmap position **Shared Enterprise Standard** and
+strategic importance **Strategic** are planning metadata only. Business owner, technical owner and governance
+accountability are **Unassigned — mandatory before Development**.
+
+Do not begin support operations, refund or compensation rules, automated recovery, AI, schema, provider, integration,
+migration, deployment or production activation. Approval would authorize conceptual S4 refinement documentation only.
+
+## Customer Recovery & Resolution Standard gate
+
+**Current status:** approved normative refinement of approved S4 Customer Recovery Coordination and the Enterprise
+Product Framework. No new capability is admitted. Roadmap position **Shared
+Enterprise Product Standard** and strategic importance **Mission Critical** are planning metadata only. Business
+owner, technical owner and governance accountability remain **Unassigned - mandatory before Development**.
+
+Do not begin support workflows, compensation or refund policy, dispute processing, automation, messaging, UI, API,
+schema, provider, integration, migration, deployment or production activation. Approval would authorize the standard
+as documentation only.
+
+## Enterprise Transparency Standard gate
+
+**Current status:** approved reusable Product Excellence Standard. No new
+capability, engine, service, governance layer or Intelligence domain is admitted. Roadmap position **Shared Enterprise
+Product Standard** and strategic importance **Mission Critical** are planning metadata only. Business owner,
+technical owner and governance accountability are **Unassigned - mandatory before Development**.
+
+Do not begin disclosure automation, access control, privacy/security implementation, incident publication, messaging,
+UI, API, schema, provider, integration, migration, deployment or production activation. Approval would authorize the
+standard as documentation only.
+
+## Enterprise Data Lifecycle Standard gate
+
+**Current status:** approved normative standard under approved S9 Data and Information Stewardship. No new capability,
+service, engine, governance layer, orchestration or Intelligence domain is
+admitted. Roadmap position **Shared Enterprise Standard** and strategic importance **Mission Critical** are planning
+metadata only. Business owner, technical owner and governance accountability are **Unassigned - mandatory before
+Development**.
+
+Do not begin database, storage, backup, restore, retention, deletion, sanitization, archive, IAM, privacy/security,
+API, schema, ETL, provider, integration, migration, deployment or production work. Approval would authorize
+documentation only.
+
+## Enterprise Change & Evolution Standard gate
+
+**Current status:** proposed normative standard under approved Enterprise Change Management; awaiting CTO and Founder
+& CEO review. No new capability, engine, service, governance layer, orchestration, Intelligence domain or deployment
+mechanism is admitted. Roadmap position **Shared Enterprise Standard** and strategic importance **Mission Critical**
+are planning metadata only. Business owner, technical owner and governance accountability are **Unassigned -
+mandatory before Development**.
+
+Do not begin release, CI/CD, feature-flag, API/event migration, data migration, rollout, rollback, infrastructure,
+provider, integration, deployment or production work. Approval would authorize documentation only.
+
+## Protected Work Cell Operating Standard gate
+
+**Current status:** standalone capability and cell-specific Intelligence domains rejected by the assessment;
+cross-cutting Protected Work Cell Operating Standard and permanent access-governance refinements approved by the CTO
+and Founder & CEO on 2026-07-22. Permanent quality refinements and the Enterprise Improvement Loop are approved. The
+Idea Lifecycle refinement is approved. Proposed Enterprise Humility and Origin Attribution principles await CTO
+review. Roadmap position **Enterprise Operating Standard**
+and strategic importance **Mission Critical** are planning metadata only.
+Business steward, technical steward and governance accountability are **Unassigned — mandatory before Development**.
+
+Do not create departments, operational authorities, worker accounts, roles, permissions, portals, case systems,
+assistants, staffing automation, employee scores, surveillance, schemas, providers, integrations, migrations,
+deployment or production activation. Approval authorizes conceptual standard documentation only.
+
+## Canonical Subject & Account compatibility gate
+
+**Current status:** bounded compatibility implementation and PostgreSQL 17.10 certification approved on 2026-07-23
+by CTO Architecture Review and Ibrahim Hambentu Shibiru, Founder & CEO. Revision `20260723_0045` is PRE-PRODUCTION
+and inactive. The legacy reference inventory
+classifies 110 references; 19 remain explicitly ambiguous and unmigrated. Certification evidence: 152 PostgreSQL
+integration tests and 23 migration tests passed with zero skips; the full suite passed 485 tests with one authorized
+xfail and 74.83% branch coverage.
+
+Approved successors may rely on canonical Subject/Account compatibility. Credentials,
+authentication, sessions, MFA, KYC, onboarding, full RBAC, bulk identity migration,
+deployment, and production activation retain their own gates.
+# 2026-07-23 persistence-kernel increment
+
+The persistence, audit, idempotency and transactional-outbox foundation at revision
+`20260723_0044` was approved on 2026-07-23 by CTO Architecture Review and Ibrahim Hambentu
+Shibiru, Founder & CEO. PRE-PRODUCTION ONLY. It introduces no business domain or runtime
+activation; every consuming implementation retains its own approval gate.
+# Identity & Access Increment 1 gate (2026-07-23)
+
+The canonical Account-native credential, authentication, session, platform RBAC and generic ownership foundation at migration `20260723_0046` was approved on 2026-07-23 by CTO Architecture Review and Ibrahim Hambentu Shibiru, Founder & CEO. PRE-PRODUCTION ONLY; production activation and later identity increments remain separately gated.
+
+Identity & Access Increment 2 administrative security and recovery at migration `20260723_0047` was approved on 2026-07-23 by CTO Architecture Review and Ibrahim Hambentu Shibiru, Founder & CEO. PRE-PRODUCTION ONLY; MFA, delivery, federation, KYC, onboarding, and production activation remain separately gated.
+
+Customer Profile & Household Foundation Increment 1 at migration `20260723_0048` was approved on 2026-07-23 by CTO Architecture Review and Ibrahim Hambentu Shibiru, Founder & CEO. It owns profile preferences, trusted household relationships, intended-passenger relationship validation, and emergency-contact references only. PRE-PRODUCTION ONLY; Ride implementation retains its own gate, while emergency workflows, notifications, shared payments, and production activation remain unapproved.
+
+## Ride Request governance readiness gate — 2026-07-23
+
+The original documentation reconciliation correctly found no approval records and blocked
+Ride Request. On 2026-07-23, separate approvals were recorded for every prerequisite
+milestone through revision `20260723_0048` and for Canonical Mobility Ownership. The prior
+blocker remains historical chronology.
+
+Status: **READY FOR SEPARATE RIDE REQUEST IMPLEMENTATION AUTHORIZATION.** This readiness
+does not itself authorize code, schema changes, migrations, Dispatch, Pricing, Driver,
+Payments, Trips, deployment, or production activation. See
+`GOVERNANCE_RECONCILIATION_RIDE_REQUEST_READINESS_2026-07-23.md` and
+`RIDE_REQUEST_READINESS_REPORT_2026-07-23.md`.
+
+### Canonical Mobility ownership recommendation — 2026-07-23
+
+R1 Passenger Mobility is approved as the one long-term enterprise owner of canonical Ride
+Request. Increment 4 is approved as the migration source: preserve its
+current PRE-PRODUCTION behavior, identifiers, migrations, events, and downstream lineage
+until a separately approved compatibility increment exists. P1 AYO Ride remains
+experience/orchestration only. Dispatch, Pricing, Route/Navigation, Trip execution,
+Tracking, Identity, Household, and Finance retain specialist authority.
+
+CTO Architecture Review and Ibrahim Hambentu Shibiru, Founder & CEO, approved the ADR on
+2026-07-23 for PRE-PRODUCTION architecture authority. The ownership gate is closed. Ride
+Request implementation still requires its separate normal authorization. No dual writes,
+parallel aggregate, migration, schema change, runtime change, or production activation is
+authorized by this governance closure.
+
+### Enterprise governance finalization — 2026-07-23
+
+Eight separate milestone approvals, their identities, dates, PRE-PRODUCTION conditions,
+certification references, and successor gates are consolidated in
+`ENTERPRISE_GOVERNANCE_FINALIZATION_RIDE_AUTHORIZATION_2026-07-23.md`. The repository is
+the authoritative readiness source. Ride Request is **READY FOR SEPARATE IMPLEMENTATION
+AUTHORIZATION**; this status is not implementation or production authority.
+
+### Historical Ride Request Increment 1 completion checkpoint — 2026-07-23
+
+The separately authorized Increment 1 implementation is complete at migration
+`20260723_0049` and is **AWAITING CTO AND FOUNDER REVIEW**. R1 Passenger Mobility evolves
+the approved Increment 4 migration source in place as model version 2; it does not create
+a second Ride Request authority. Scope is limited to passenger travel intent, canonical
+Subject ownership, active Household passenger authorization, validated location
+references, preferences, immediate/scheduled intent, lifecycle, concurrency,
+idempotency, audit, and transactional outbox events.
+
+PRE-PRODUCTION ONLY. Dispatch, Driver, Pricing, ETA, routing, navigation, tracking, Trip,
+Payments, Wallet, notifications, messaging, production activation, and every successor
+Passenger Mobility capability remain unapproved. The next step is CTO review followed by
+Founder approval; no successor implementation may begin.
+
+This paragraph preserves the status at technical completion. The later approval-closure
+record below is the current authority.
+
+### Ride Request Increment 1 approval closure — 2026-07-23
+
+CTO Architecture Review (Chief Technology Officer) and Ibrahim Hambentu Shibiru
+(Founder & CEO) approved R1 Passenger Mobility Ride Request Increment 1 on 2026-07-23.
+Status is **APPROVED — PRE-PRODUCTION ONLY**. Production activation is NOT APPROVED.
+Approval has no expiry and remains effective until properly superseded or revoked.
+
+The approval includes revision `20260723_0049` and compatible private/on-demand passenger
+intent only. It does not automatically govern public/fixed-route bus, scheduled coach,
+seat-based transit, school-route transport, Freight, Delivery or Infrastructure.
+Historical awaiting-review entries above remain chronology, not an open gate.
+
+Successor: Service Area & Ride Product Availability Architecture Decision Package.
+
+### Service Area architecture package — 2026-07-23
+
+The architecture package recommends an R1 Passenger Mobility supporting domain, a
+provider-neutral boundary contract backed by PostGIS after dependency certification,
+separate immutable Ride Request availability evidence, and customer-safe disclosure.
+
+Architecture state: **READY FOR CTO AND FOUNDER ARCHITECTURE APPROVAL**.
+Implementation state: **NOT READY / NOT AUTHORIZED**.
+No real territory, PostGIS extension, schema, migration, API, UI or production capability
+is activated.
+
+### Service Area architecture approval closure — 2026-07-23
+
+CTO Architecture Review, Chief Technology Officer, and Ibrahim Hambentu Shibiru,
+Founder & CEO, approved the R1 Passenger Mobility Service Area & Ride Product Availability
+architecture and PostGIS dependency direction on 2026-07-23.
+
+Current state: **APPROVED — PRE-PRODUCTION INCREMENT 1 IMPLEMENTATION AUTHORIZED**.
+Production activation is **NOT APPROVED**. Expiry is None; approval remains effective
+until properly superseded or revoked through approved repository governance.
+
+Authority is limited to Service Area & Ride Product Availability Increment 1. No later
+increment, production deployment or real operating territory is authorized. PostGIS must
+pass the approved dependency and environment certification before dependent domain work.
+The earlier ready-for-approval state remains historical chronology.
+
+### Service Area Increment 1 technical gate — 2026-07-23
+
+The authorized PRE-PRODUCTION implementation is complete at migration
+`20260723_0050`. PostgreSQL 17/PostGIS, immutable versioned geometry, the explicit
+Service Area lifecycle, four private/on-demand product configurations, pickup-only
+availability evaluation, immutable evidence, authorization, idempotency, concurrency,
+audit and outbox integration are implemented.
+
+Current state: **IMPLEMENTATION COMPLETE — AWAITING CTO AND FOUNDER & CEO REVIEW**.
+No operating territory or production capability is active. Later increments remain
+unauthorized.
+
+### Request Access & Interaction Provenance architecture package — 2026-07-23
+
+The historical “Booking Access” proposal is refined into a reusable shared supporting
+capability. It proposes channel-adapter contracts, domain-owned channel-action capability
+declarations and immutable interaction provenance that references canonical aggregates
+without becoming their state.
+
+Architecture state: **READY FOR CTO AND FOUNDER & CEO ARCHITECTURE REVIEW**.
+Implementation state: **NOT READY / NOT AUTHORIZED**.
+Production activation: **NOT APPROVED**.
+
+Dependencies are Service Area Increment 1 approval closure, ADR approval, retention and
+professional-review disposition, and a separate milestone-specific PRE-PRODUCTION
+implementation authorization. No Voice, SMS, USSD, telephony, notification, UI, schema,
+migration or runtime work may begin from this package.
+
+### Request Access & Interaction Provenance approval closure — 2026-07-23
+
+OpenAI ChatGPT, Project CTO (Technical Oversight), and Ibrahim Hambentu Shibiru,
+Founder & CEO, approved the architecture package and ADR on 2026-07-23.
+
+Architecture state: **APPROVED FOR PRE-PRODUCTION GOVERNANCE ONLY**.
+Implementation state: **NOT AUTHORIZED**.
+Production activation: **NOT APPROVED**.
+
+Approved permanent principles are channel-neutral canonical requests, adapter-to-command
+translation, immutable interaction provenance, explicit cross-channel continuity,
+domain-owned channel capability declarations, no probabilistic request merging and no
+promise of universal feature availability.
+
+Next proposed milestone: **Request Access & Interaction Provenance Increment 1**.
+It requires separate milestone-specific implementation authority before any runtime,
+schema, migration, API or test work.
+
+### Request Access & Interaction Provenance Increment 1 authorization closure - 2026-07-23
+
+OpenAI ChatGPT, Project CTO (Technical Oversight), and Ibrahim Hambentu Shibiru,
+Founder & CEO, authorized Request Access & Interaction Provenance Increment 1 on
+2026-07-23.
+
+Current state: **IMPLEMENTATION AUTHORIZED (PRE-PRODUCTION ONLY)**.
+Production activation: **NOT APPROVED**.
+
+Authority is limited to the canonical foundation, immutable interaction provenance,
+explicit continuity references, the approved metadata model, security boundaries,
+audit, idempotency, transactional outbox and implementation documentation. It excludes
+all channel runtimes and user interfaces, Ride Request lifecycle changes, Dispatch,
+Pricing, Routing, Payments and every later increment.
+
+The approved ADR remains authoritative. This authorization remains effective until
+superseded by a newer approved repository governance decision. The preceding
+not-authorized state is preserved as historical chronology.
+
+### Request Access & Interaction Provenance Increment 1 technical gate - 2026-07-23
+
+The authorized domain-neutral PRE-PRODUCTION foundation is implemented at migration
+`20260723_0051`. It includes typed immutable provenance, explicit hashed continuity,
+registered adapter versions, optimistic channel-action declarations, authorization,
+idempotency, immutable audit and transactional outbox integration.
+
+Current state: **IMPLEMENTED - POSTGRESQL CERTIFICATION INCOMPLETE**.
+Production activation, real channel runtimes, business-domain integration and Increment
+2 remain unauthorized.
+
+## Enterprise Experience & Release Governance architecture gate
+
+The architecture review recommends no new capability or engine. It proposes an
+**Enterprise Experience & Release Governance Profile** under Enterprise Change
+Management, coordinating Knowledge, S9 Information Stewardship, Authority Routing,
+Localization, Product/domain execution and existing advisory Intelligence.
+
+Architecture state: **READY FOR CTO AND FOUNDER & CEO ARCHITECTURE REVIEW**.
+Implementation state: **NOT READY / NOT AUTHORIZED**.
+Production activation: **NOT APPROVED**.
+
+No scheduler, feature flag, publication, notification, targeting, UI, channel, content,
+schema, migration or runtime work may begin from this package.
+# Enterprise Authority Routing architecture refinement gate — proposed
+
+**Current status:** the existing Constitutional Authority Routing capability is
+canonical and approved. A review-only refinement package now proposes explicit action
+purposes, ownership boundaries, delegation, escalation and emergency-authority
+semantics. It is ready for CTO and Founder & CEO architecture review.
+
+Do not implement a router, workflow, permission engine, schema, migration or production
+configuration. After architecture approval, qualified Ethiopian legal review,
+authority-matrix approval and a separate PRE-PRODUCTION implementation authorization
+remain mandatory.
+# Enterprise Initiative Orchestration Profile architecture gate — proposed
+
+**Current status:** review-ready architecture package. The proposed profile coordinates
+existing owners and explicitly rejects a new Enterprise Intelligence Orchestration
+capability, universal AI agent or workflow authority.
+
+Next, CTO and Founder & CEO architecture review may authorize a manual synthetic
+cross-domain exercise. Do not implement an agent, workflow, schema, migration, API,
+provider integration, product launch or production configuration. Any future tooling
+requires demonstrated need and separate PRE-PRODUCTION authorization.
+# Synthetic AYO Eat Addis initiative validation — complete
+
+The documentation-only exercise validated the federated enterprise coordination path
+and found no need for a new orchestrator. AYO Eat remains **BLOCKED / NOT AUTHORIZED**
+because detailed P2 architecture, Addis product availability/delivery coverage,
+food-specific merchant requirements, qualified Ethiopian reviews and production
+activation are absent.
+
+Recommended next architecture mission: **P2 AYO Eat Architecture and Launch Admission
+Package**. Do not begin implementation, merchant activation, geographic rollout or
+production configuration.
+# P2 AYO Eat architecture and launch-admission gate — proposed
+
+**Current status:** review-ready package defining P2 ownership, one canonical Universal
+Commerce Order, federated fulfilment stages, Universal Access, availability, event
+boundaries and an Addis launch checklist.
+
+Do not implement, migrate, expose APIs, onboard real participants, activate an area or
+launch production. Architecture approval, qualified local review and separately
+recorded PRE-PRODUCTION Increment 1 authority remain mandatory.
+# P2 AYO Eat architecture approval and Increment 1 authority — 2026-07-23
+
+OpenAI ChatGPT, Project CTO (Technical Oversight), and Ibrahim Hambentu Shibiru,
+Founder & CEO, approved the P2 AYO Eat architecture on 2026-07-23.
+
+Current state: **IMPLEMENTATION AUTHORIZED (PRE-PRODUCTION ONLY)** for **P2 AYO Eat
+Increment 1 — Product Availability and Canonical Commerce Order Composition
+Foundation**.
+
+Production, Addis launch, later increments and all excluded operational capabilities
+remain **NOT AUTHORIZED**. The earlier proposed gate remains historical chronology.
+
+# P2 AYO Eat Increment 1 technical gate — 2026-07-23
+
+Current state: **IMPLEMENTED IN PRE-PRODUCTION; AWAITING CTO AND FOUNDER REVIEW**.
+
+The approved Product Availability and Canonical Commerce Order Composition Foundation
+is implemented through additive migration `20260723_0052`. PostgreSQL 17 certification
+remains required in a configured database environment. This technical completion does
+not authorize Increment 2, Addis launch, participants, production configuration or any
+excluded operational capability.
+
+# P2 AYO Eat Increment 2 merchant decision architecture gate — proposed
+
+Current state: **READY FOR CTO AND FOUNDER & CEO ARCHITECTURE REVIEW**.
+
+The recommended successor is an additive evolution of existing Merchant Order
+Management, named **Merchant Decision Lifecycle**. No separate Merchant Acceptance
+domain is admitted. Implementation, migration, production and later capabilities remain
+**NOT AUTHORIZED** pending milestone-specific repository approval.
+
+# P2 AYO Eat Increment 2 approval and implementation authority — 2026-07-23
+
+OpenAI ChatGPT, Project CTO (Technical Oversight), and Ibrahim Hambentu Shibiru,
+Founder & CEO, approved the Merchant Order Management — Merchant Decision Lifecycle
+architecture on 2026-07-23.
+
+Current state: **IMPLEMENTATION AUTHORIZED (PRE-PRODUCTION ONLY)** for Increment 2.
+Production and future increments are NOT AUTHORIZED. The preceding proposed gate remains
+historical chronology. The authorization is controlled by
+`AYO_P2_EAT_INCREMENT_2_IMPLEMENTATION_AUTHORIZATION_2026-07-23.md`.
+
+# P2 AYO Eat Increment 2 technical gate — 2026-07-23
+
+Current state: **IMPLEMENTED IN PRE-PRODUCTION; AWAITING CTO AND FOUNDER REVIEW**.
+
+Additive migration `20260723_0053` implements the authorized Merchant Decision
+Lifecycle foundation. PostgreSQL 17 execution remains pending a configured certification
+database. Production, Increment 3 and every excluded capability remain unauthorized.
+
+# P2 AYO Eat Increment 3 Preparation architecture gate — proposed
+
+Current state: **READY FOR CTO AND FOUNDER & CEO ARCHITECTURE REVIEW**.
+
+The proposal refines the existing canonical Preparation capability; it creates no
+P2-specific owner. The smallest proposed lifecycle is `pending_preparation ->
+preparing -> ready_for_pickup`, with `unable_to_prepare` as its failure and append-only
+readiness correction. Overdue is observation evidence, not a terminal state.
+
+Implementation, migrations, APIs, production and later increments remain **NOT
+AUTHORIZED** pending milestone-specific repository approval.
+
+# P2 AYO Eat Increment 3 approval and implementation authority — 2026-07-23
+
+OpenAI ChatGPT, Project CTO (Technical Oversight), and Ibrahim Hambentu Shibiru,
+Founder & CEO, approved the Canonical Preparation Lifecycle architecture on 2026-07-23.
+
+Current state: **IMPLEMENTATION AUTHORIZED (PRE-PRODUCTION ONLY)** for Increment 3.
+Production, Increment 4 and every excluded capability remain NOT AUTHORIZED. The
+preceding proposed gate remains historical chronology. The controlling record is
+`AYO_P2_EAT_INCREMENT_3_IMPLEMENTATION_AUTHORIZATION_2026-07-23.md`.
+
+# P2 AYO Eat Increment 3 technical gate — 2026-07-23
+
+Current state: **IMPLEMENTED IN PRE-PRODUCTION; AWAITING CTO AND FOUNDER REVIEW**.
+
+Additive migration `20260723_0054` implements the authorized canonical Preparation
+case and evidence foundation. Live PostgreSQL certification remains required in a
+configured database environment. Production, Increment 4 and excluded capabilities
+remain unauthorized.
+
+# P2 AYO Eat Increment 4 readiness-to-handoff architecture gate — proposed
+
+Current state: **READY FOR CTO AND FOUNDER & CEO ARCHITECTURE REVIEW**.
+
+Repository evidence shows no missing owner and no justified runtime increment.
+Preparation, Courier Dispatch, Courier Pickup, Custody and Delivery already partition
+the boundary through immutable events. Implementation and production are NOT
+AUTHORIZED. A later compatibility change requires demonstrated need and separate
+authority.
+
+# Courier Dispatch architecture and launch admission gate — proposed
+
+Current state: **READY FOR CTO AND FOUNDER & CEO ARCHITECTURE REVIEW**.
+
+The proposal refines canonical Courier Dispatch. It preserves
+`waiting_for_courier -> courier_offered -> courier_assigned` and proposes explicit
+offer decline/expiry/revocation, pre-pickup release/reassignment, Dispatch cancellation
+and exhaustion evidence. It creates no new Dispatch owner.
+
+Implementation and production remain **NOT AUTHORIZED**. Before implementation,
+governance must certify source authorities for courier eligibility facts and grant a
+bounded PRE-PRODUCTION increment. Production requires launch-admission evidence and
+named-territory approval.
+
+# Courier Dispatch Increment 1 approval and implementation authority — 2026-07-23
+
+OpenAI ChatGPT, Project CTO (Technical Oversight), and Ibrahim Hambentu Shibiru,
+Founder & CEO, approved the canonical Courier Dispatch refinement on 2026-07-23.
+
+Current state: **IMPLEMENTATION AUTHORIZED — PRE-PRODUCTION ONLY** for Increment 1.
+The bounded scope covers readiness admission, independent offer outcomes, assignment,
+append-only reassignment, Dispatch cancellation/unfulfilled outcomes, fail-closed
+source-evidence eligibility, deterministic versioned policy, concurrency,
+idempotency, audit, outbox and PostgreSQL certification work.
+
+Production, Increment 2 and later work remain **NOT AUTHORIZED**. The preceding
+proposed gate remains historical chronology.
+
+# Courier Dispatch Increment 1 technical gate — 2026-07-23
+
+Current state: **IMPLEMENTED IN PRE-PRODUCTION; AWAITING CTO AND FOUNDER REVIEW**.
+
+Additive migration `20260723_0055` implements the authorized Dispatch case, independent
+offer and assignment attempts, immutable evidence, fail-closed eligibility,
+deterministic policy, concurrency, idempotency, audit and outbox. PostgreSQL 17
+certification remains required in a configured database environment. Production,
+Increment 2 and excluded capabilities remain unauthorized.
+
+# Courier Pickup architecture and launch admission gate — proposed
+
+Current state: **READY FOR CTO AND FOUNDER & CEO ARCHITECTURE REVIEW**.
+
+The proposal refines existing canonical Courier Pickup. It preserves
+`courier_assigned -> travelling_to_merchant -> arrived_at_merchant ->
+waiting_for_pickup`, adds assignment-scoped attempts and proposes one
+`pickup_attempt_ended_before_custody` outcome with append-only corrections.
+
+Implementation and production remain **NOT AUTHORIZED**. A future increment requires
+milestone-specific approval and must preserve all adjacent canonical owners.
+
+# Courier Pickup Increment 1 approval and implementation authority — 2026-07-24
+
+OpenAI ChatGPT, Project CTO (Technical Oversight), and Ibrahim Hambentu Shibiru,
+Founder & CEO, approved the Courier Pickup refinement on 2026-07-24.
+
+Current state: **IMPLEMENTATION AUTHORIZED — PRE-PRODUCTION ONLY** for Increment 1.
+The bounded scope covers assignment-scoped attempts, the approved four-state
+lifecycle, one pre-custody terminal outcome, closed taxonomy, arrival,
+acknowledgement/waiting evidence, corrections, policy, concurrency, idempotency, audit,
+outbox, additive migration and PostgreSQL certification work.
+
+Production, Increment 2 and successors remain **NOT AUTHORIZED**. The preceding
+proposed gate is preserved as historical chronology.
+
+# Courier Pickup Increment 1 technical gate — 2026-07-24
+
+Current state: **IMPLEMENTED IN PRE-PRODUCTION; AWAITING CTO AND FOUNDER REVIEW**.
+
+Additive migration `20260724_0056` implements assignment-scoped attempts, immutable
+evidence/corrections, the approved policy/taxonomy, concurrency, idempotency, audit and
+outbox. Live PostgreSQL certification remains required in a configured environment.
+Production, Increment 2 and excluded capabilities remain unauthorized.
+
+# Repository Quality Initiative Q1 implementation — 2026-07-24
+
+Current state: **IMPLEMENTED — PRE-PRODUCTION ALIGNMENT ONLY**.
+
+Q1 aligned the authoritative MyPy scope, CI gate terminology and immutable pins,
+marker and branch governance, canonical validation commands and certification
+evidence structure. It did not remediate repository-wide MyPy or coverage and did
+not execute PostgreSQL certification.
+
+Q2, Custody, Delivery, product work and production remain **NOT AUTHORIZED**.
+
+# Repository Quality Initiative Q2 implementation — 2026-07-24
+
+Current state: **IMPLEMENTED — PRE-PRODUCTION STATIC-TYPING REMEDIATION;
+AWAITING CTO AND FOUNDER REVIEW**.
+
+Repository-wide MyPy for `BACKEND + tests` is now clean: zero errors across 436
+files, from an initial 291 errors across 34 files. Q2 changed test typing only and
+did not begin coverage remediation, PostgreSQL certification, Q3, Custody,
+Delivery, product work or production activation.
+
+# Repository Quality Initiative Q3 coverage checkpoint — 2026-07-24
+
+Current state: **IN PROGRESS — COVERAGE GATE OPEN; CTO AND FOUNDER REVIEW
+REQUIRED**.
+
+Meaningful tests raised whole-BACKEND combined branch coverage from 55.71% to
+57.12%. The mandatory 70.00% threshold is not met. Engineering certification and
+PostgreSQL certification were not begun; production and product successors remain
+prohibited.
+
+# Repository Quality Initiative Q3 continuation — 2026-07-24
+
+Current state: **OPEN — 58.12% WHOLE-BACKEND COMBINED BRANCH COVERAGE**.
+
+The continuation resolved the audit-contract incompatibility without expanding
+Audit authority and added 21 risk-focused tests. The governed 70.00% gate,
+PostgreSQL certification and Engineering Certification remain open. No product or
+production capability was activated.
+
+# Repository Quality Initiative Q0 closure and Q1 authorization — 2026-07-24
+
+`AYO-RQC-1` is **APPROVED** by **OpenAI ChatGPT, Project CTO (Technical
+Oversight)** and **Ibrahim Hambentu Shibiru, Founder & CEO**.
+
+Q1 is **IMPLEMENTATION AUTHORIZED (PRE-PRODUCTION ONLY)** for authoritative gate,
+quality-document, CI-governance, Engineering Workflow, validation-command and
+certification-evidence alignment.
+
+PostgreSQL execution, coverage remediation, MyPy cleanup, production, Custody,
+Delivery and Q2–Q13 remain **NOT AUTHORIZED**. Earlier proposed and review-ready
+states remain historical chronology.
+
+# Repository Quality Initiative Q3 continuation 2 — 2026-07-24
+
+Current state: **OPEN — 59.49% WHOLE-BACKEND COMBINED BRANCH COVERAGE**.
+
+Fourteen risk-focused tests covered the six authorized application targets.
+The governed 70.00% coverage gate, PostgreSQL certification and Engineering
+Certification remain open. No product capability or production activation was
+started.
+
+# Repository Quality Initiative Q3 continuation 3 — 2026-07-24
+
+Current state: **OPEN — 60.70% WHOLE-BACKEND COMBINED BRANCH COVERAGE**.
+
+Twelve deterministic risk-focused tests covered Identity, Payments, Settlement,
+Field Operations and bounded persistence contracts. The 70.00% coverage gate,
+PostgreSQL certification and Engineering Certification remain open. Production
+and successor initiatives remain prohibited.
+
+# Repository Quality Initiative Q3 feasibility assessment — 2026-07-24
+
+Current state: **OPEN — 60.70% WHOLE-BACKEND COMBINED BRANCH COVERAGE**.
+
+The remaining exact gap is 2,440 covered elements. The likely meaningful
+non-PostgreSQL ceiling is 66.42%, and the optimistic defensible ceiling is 68.89%.
+The evidence does not support requiring Q3 to reach 70% before the separately
+mandatory PostgreSQL baseline. PostgreSQL execution remains blocked pending
+explicit authorization; no certification or remediation began.
