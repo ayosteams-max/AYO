@@ -50,7 +50,7 @@ def _score_payload(score: DispatchScore) -> dict[str, Any]:
     return score.model_dump(mode="json")
 
 
-def _ride_from_row(row: Mapping[str, Any]) -> DispatchRide:
+def _ride_from_row(row: Mapping[Any, Any]) -> DispatchRide:
     return DispatchRide(
         ride_id=row["ride_id"],
         rider_id=row["rider_identity_id"],
@@ -81,7 +81,7 @@ def _ride_from_row(row: Mapping[str, Any]) -> DispatchRide:
     )
 
 
-def _offer_from_row(row: Mapping[str, Any]) -> DriverOffer:
+def _offer_from_row(row: Mapping[Any, Any]) -> DriverOffer:
     payload = dict(row["score_snapshot"])
     payload["trust_score"] = Decimal(str(payload["trust_score"]))
     return DriverOffer(

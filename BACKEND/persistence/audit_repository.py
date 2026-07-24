@@ -19,7 +19,7 @@ def _event_values(event: AuditEvent) -> dict[str, Any]:
     return event.model_dump(mode="python")
 
 
-def _row_to_event(row: Mapping[str, Any]) -> AuditEvent:
+def _row_to_event(row: Mapping[Any, Any]) -> AuditEvent:
     return AuditEvent.model_validate(dict(row))
 
 
@@ -44,7 +44,7 @@ class PostgresAuditEventRepository:
                 )
                 return _row_to_event(row)
 
-            row = (
+            inserted_row = (
                 self._connection.execute(
                     postgres_insert(audit_events)
                     .values(**values)
@@ -61,8 +61,8 @@ class PostgresAuditEventRepository:
                 .mappings()
                 .one_or_none()
             )
-            if row is not None:
-                return _row_to_event(row)
+            if inserted_row is not None:
+                return _row_to_event(inserted_row)
 
             existing = (
                 self._connection.execute(

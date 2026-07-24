@@ -16,15 +16,15 @@ from BACKEND.persistence.tables import (
 )
 
 
-def _permission(row: Mapping[str, Any]) -> Permission:
+def _permission(row: Mapping[Any, Any]) -> Permission:
     return Permission.model_validate(dict(row))
 
 
-def _role(row: Mapping[str, Any]) -> Role:
+def _role(row: Mapping[Any, Any]) -> Role:
     return Role.model_validate(dict(row))
 
 
-def _assignment(row: Mapping[str, Any]) -> RoleAssignment:
+def _assignment(row: Mapping[Any, Any]) -> RoleAssignment:
     return RoleAssignment.model_validate(dict(row))
 
 

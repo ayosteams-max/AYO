@@ -77,8 +77,24 @@ class EligibleDriverInput(BaseModel):
     pickup_accessible: bool = True
     conflicting_commitment: bool = False
     eligibility_policy_version: str
+    authenticated_session_active: bool = True
+    earning_capability: str = "ride_driver"
+    fatigue_eligible: bool = True
+    temporary_restrictions_clear: bool = True
+    traffic_evidence_fresh: bool = True
+    pickup_confidence_bps: int = Field(default=10000, ge=0, le=10000)
+    active_workload_count: int = Field(default=0, ge=0, le=20)
+    reliability_bps: int = Field(default=5000, ge=0, le=10000)
+    cancellation_history_bps: int = Field(default=0, ge=0, le=10000)
+    opportunity_deficit_bps: int = Field(default=0, ge=0, le=10000)
+    route_evidence_id: str = Field(
+        default="legacy.pre_ap095", min_length=8, max_length=128
+    )
+    route_observed_at: datetime | None = None
 
-    @field_validator("eligibility_expires_at", "availability_observed_at")
+    @field_validator(
+        "eligibility_expires_at", "availability_observed_at", "route_observed_at"
+    )
     @classmethod
     def utc(cls, value: datetime) -> datetime:
         if value.tzinfo is None or value.utcoffset() is None:
@@ -98,6 +114,8 @@ class HandoffOffer(BaseModel):
     expires_at: datetime
     dispatch_policy_version: str
     pickup_cost_seconds: int
+    route_evidence_id: str = Field(min_length=8, max_length=128)
+    decision_reason_codes: tuple[str, ...] = Field(min_length=3, max_length=16)
 
     @field_validator("created_at", "expires_at")
     @classmethod
@@ -121,6 +139,8 @@ def rank_candidates(
         age = (now - item.availability_observed_at).total_seconds()
         if not (
             item.account_active
+            and item.authenticated_session_active
+            and item.earning_capability == "ride_driver"
             and item.eligibility_status == "eligible"
             and item.eligibility_expires_at > now
             and item.vehicle_approved
@@ -129,15 +149,54 @@ def rank_candidates(
             and item.availability == "available"
             and 0 <= age <= max_age_seconds
             and item.pickup_accessible
+            and item.fatigue_eligible
+            and item.temporary_restrictions_clear
+            and item.traffic_evidence_fresh
+            and item.pickup_confidence_bps >= 5000
+            and 0
+            <= (
+                now - (item.route_observed_at or item.availability_observed_at)
+            ).total_seconds()
+            <= max_age_seconds
             and not item.conflicting_commitment
         ):
             continue
         result.append(item)
+
+    def effective_cost(item: EligibleDriverInput) -> int:
+        reliability_penalty = (10000 - item.reliability_bps) * 10 // 10000
+        cancellation_penalty = item.cancellation_history_bps * 10 // 10000
+        workload_penalty = min(item.active_workload_count * 5, 15)
+        fairness_credit = item.opportunity_deficit_bps * 20 // 10000
+        return max(
+            0,
+            item.pickup_cost_seconds
+            + reliability_penalty
+            + cancellation_penalty
+            + workload_penalty
+            - fairness_credit,
+        )
+
     return sorted(
         result,
         key=lambda x: (
+            effective_cost(x),
             x.pickup_cost_seconds,
             not x.heading_consistent,
             str(x.driver_id),
         ),
     )
+
+
+def decision_reason_codes(item: EligibleDriverInput) -> tuple[str, ...]:
+    reasons = ["pickup_eta_primary", "safety_eligible", "ride_driver_online"]
+    if item.opportunity_deficit_bps:
+        reasons.append("bounded_fair_opportunity")
+    if item.reliability_bps != 5000:
+        reasons.append("bounded_reliability_evidence")
+    if item.cancellation_history_bps:
+        reasons.append("bounded_cancellation_history")
+    if item.active_workload_count:
+        reasons.append("active_workload_considered")
+    reasons.extend(("route_intelligence_evidence", "policy_versioned"))
+    return tuple(reasons)

@@ -38,7 +38,7 @@ def _ride_values(ride: Ride) -> dict[str, Any]:
     }
 
 
-def _row_to_ride(row: Mapping[str, Any]) -> Ride:
+def _row_to_ride(row: Mapping[Any, Any]) -> Ride:
     return Ride(
         ride_id=row["public_ride_id"],
         rider_name=row["rider_name"],

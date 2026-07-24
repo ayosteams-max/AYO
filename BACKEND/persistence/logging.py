@@ -1,5 +1,6 @@
 import json
 import logging
+import sys
 from datetime import datetime, timezone
 from typing import Any
 
@@ -18,6 +19,20 @@ class StructuredJsonFormatter(logging.Formatter):
         if isinstance(fields, dict):
             payload.update(fields)
         return json.dumps(payload, separators=(",", ":"), default=str)
+
+
+def configure_structured_logging(level: str = "INFO") -> None:
+    """Configure one process-wide JSON handler without duplicating handlers."""
+
+    root = logging.getLogger()
+    for handler in root.handlers:
+        if isinstance(handler.formatter, StructuredJsonFormatter):
+            root.setLevel(level)
+            return
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(StructuredJsonFormatter())
+    root.addHandler(handler)
+    root.setLevel(level)
 
 
 def database_event(

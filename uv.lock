@@ -86,6 +86,7 @@ source = { virtual = "." }
 dependencies = [
     { name = "argon2-cffi" },
     { name = "fastapi" },
+    { name = "geoalchemy2" },
     { name = "psycopg", extra = ["binary"] },
     { name = "pydantic" },
     { name = "pydantic-settings" },
@@ -112,6 +113,7 @@ migration = [
 requires-dist = [
     { name = "argon2-cffi", specifier = ">=25.1,<26" },
     { name = "fastapi", specifier = ">=0.139,<0.140" },
+    { name = "geoalchemy2", specifier = ">=0.18,<0.19" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.3,<3.4" },
     { name = "pydantic", specifier = ">=2.13,<3" },
     { name = "pydantic-settings", specifier = ">=2.14,<3" },
@@ -359,6 +361,19 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/35/94/00f2059e4835eace3ae8fde680b932c496f8ec7bdc99168dfa53fb2e6b79/filelock-3.29.7.tar.gz", hash = "sha256:5b481979797ae69e72f0b389d89a80bdd585c260c5b3f1fb9c0a5ba9bb3f195d", size = 71521, upload-time = "2026-07-08T05:46:58.716Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/60/02/be4a57b60c7149b55b9e3b3c13f609cd8eb5307c751f22bd8fb8d262e75b/filelock-3.29.7-py3-none-any.whl", hash = "sha256:987db6f789a3a2a59f55081801b2b3697cb97e2a736b5f1a9e99b559285fbc51", size = 46036, upload-time = "2026-07-08T05:46:57.53Z" },
+]
+
+[[package]]
+name = "geoalchemy2"
+version = "0.18.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "packaging" },
+    { name = "sqlalchemy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ec/9d/02d54b0d61a2f331044ea7b4216ee1c98a8ad3a69906dfc3967c51501623/geoalchemy2-0.18.4.tar.gz", hash = "sha256:5719e2bb040d5c406d5d03425fec87997ce9351843b053ca11373a0f5a31971b", size = 239766, upload-time = "2026-03-02T14:48:48.43Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/56/92/60ee150773376aa9b542dcd44660e4ae9f5f14e690c8795be476156de598/geoalchemy2-0.18.4-py3-none-any.whl", hash = "sha256:89e6680dcbb6b8d8c784dcaa889e48ab2783aa42487ee5730fdbd7a7c7ddf6ec", size = 81097, upload-time = "2026-03-02T14:48:47.456Z" },
 ]
 
 [[package]]

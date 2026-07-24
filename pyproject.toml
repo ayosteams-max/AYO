@@ -13,6 +13,7 @@ dependencies = [
     "pyjwt[crypto]>=2.13,<3",
     "sqlalchemy>=2.0.51,<2.1",
     "uvicorn[standard]>=0.51,<0.52",
+    "geoalchemy2>=0.18,<0.19",
 ]
 
 [dependency-groups]
@@ -55,6 +56,13 @@ pythonpath = ["."]
 markers = [
     "integration: requires an external PostgreSQL 17 test database",
     "audit: requires an external PostgreSQL 17 audit test database",
+    "persistence_kernel: requires PostgreSQL 17 persistence-kernel storage",
+    "identity_compatibility: requires PostgreSQL 17 canonical subject/account compatibility storage",
+    "identity_access: requires PostgreSQL 17 account-native identity/access storage",
+    "customer_profile: requires PostgreSQL 17 customer profile/household storage",
+    "passenger_mobility: requires PostgreSQL 17 R1 Passenger Mobility storage",
+    "service_area: R1 Passenger Mobility Service Area Increment 1",
+    "request_access: Request Access & Interaction Provenance Increment 1",
     "known_defect: characterization of a confirmed defect intentionally left unfixed",
     "migration: requires an empty disposable PostgreSQL 17 migration database",
     "session_persistence: requires PostgreSQL 17 session and rate-limit storage",
@@ -75,7 +83,7 @@ exclude_dirs = ["tests", ".venv"]
 
 [tool.mypy]
 python_version = "3.13"
-files = ["BACKEND"]
+files = ["BACKEND", "tests"]
 explicit_package_bases = true
 namespace_packages = true
 mypy_path = ["."]

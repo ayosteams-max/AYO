@@ -16,11 +16,46 @@ from BACKEND.persistence.tables import (
 )
 from BACKEND.ride_request.models import (
     DestinationDefinition,
+    MobilityRideRequestState,
+    PassengerMobilityRideRequest,
     PickupDefinition,
     RideRequest,
     ServiceZone,
     ValidationDecision,
 )
+
+_LEGACY_FIELDS = frozenset(RideRequest.model_fields)
+
+
+def _legacy_request(row: Any) -> RideRequest:
+    return RideRequest.model_validate(
+        {key: value for key, value in dict(row).items() if key in _LEGACY_FIELDS}
+    )
+
+
+def _mobility_request(row: Any) -> PassengerMobilityRideRequest:
+    values = dict(row)
+    return PassengerMobilityRideRequest.model_validate(
+        {
+            "request_id": values["request_id"],
+            "model_version": values["mobility_model_version"],
+            "client_request_id": values["client_request_id"],
+            "requester_subject_id": values["requester_subject_id"],
+            "passenger_subject_id": values["passenger_subject_id"],
+            "state": values["state"],
+            "pickup_reference": values["pickup_reference"],
+            "destination_reference": values["destination_reference"],
+            "stop_references": tuple(values["stop_references"] or ()),
+            "schedule_intent": values["schedule_intent"],
+            "scheduled_for": values["scheduled_for"],
+            "passenger_count": values["passenger_count"],
+            "preferences": values["ride_preferences"] or {},
+            "version": values["version"],
+            "created_at": values["created_at"],
+            "updated_at": values["updated_at"],
+            "expires_at": values["expires_at"],
+        }
+    )
 
 
 class ConcurrentRideRequestChange(RuntimeError):
@@ -49,7 +84,7 @@ class PostgresRideRequestRepository:
             .mappings()
             .one_or_none()
         )
-        return None if row is None else RideRequest.model_validate(dict(row))
+        return None if row is None else _legacy_request(row)
 
     def find_zone(
         self, *, latitude: float, longitude: float, at: Any
@@ -163,7 +198,7 @@ class PostgresRideRequestRepository:
         )
         self.append_event(request, "ride_request.created", at=request.created_at)
         self.append_event(request, "pickup.recorded", at=request.created_at)
-        return RideRequest.model_validate(dict(row))
+        return _legacy_request(row)
 
     def save(
         self, request: RideRequest, *, expected_version: int, event_type: str
@@ -188,7 +223,7 @@ class PostgresRideRequestRepository:
         )
         if row is None:
             raise ConcurrentRideRequestChange("Ride request changed concurrently")
-        saved = RideRequest.model_validate(dict(row))
+        saved = _legacy_request(row)
         self.append_event(saved, event_type, at=saved.updated_at)
         return saved
 
@@ -226,4 +261,100 @@ class PostgresRideRequestRepository:
                 created_at=at,
                 attempt_count=0,
             )
+        )
+
+    def create_mobility(
+        self, request: PassengerMobilityRideRequest
+    ) -> PassengerMobilityRideRequest:
+        values = {
+            "request_id": request.request_id,
+            "client_request_id": request.client_request_id,
+            "mobility_model_version": request.model_version,
+            "requester_subject_id": request.requester_subject_id,
+            "passenger_subject_id": request.passenger_subject_id,
+            "state": request.state.value,
+            "pickup_reference": request.pickup_reference,
+            "destination_reference": request.destination_reference,
+            "stop_references": list(request.stop_references),
+            "schedule_intent": request.schedule_intent.value,
+            "scheduled_for": request.scheduled_for,
+            "passenger_count": request.passenger_count,
+            "ride_preferences": request.preferences.model_dump(mode="json"),
+            "version": request.version,
+            "created_at": request.created_at,
+            "updated_at": request.updated_at,
+            "expires_at": request.expires_at,
+        }
+        row = (
+            self._connection.execute(
+                insert(canonical_ride_requests)
+                .values(**values)
+                .returning(canonical_ride_requests)
+            )
+            .mappings()
+            .one()
+        )
+        return _mobility_request(row)
+
+    def get_mobility(
+        self, request_id: UUID, *, lock: bool = False
+    ) -> PassengerMobilityRideRequest | None:
+        statement = select(canonical_ride_requests).where(
+            canonical_ride_requests.c.request_id == request_id,
+            canonical_ride_requests.c.mobility_model_version == 2,
+        )
+        if lock:
+            statement = statement.with_for_update()
+        row = self._connection.execute(statement).mappings().one_or_none()
+        return None if row is None else _mobility_request(row)
+
+    def save_mobility(
+        self,
+        request: PassengerMobilityRideRequest,
+        *,
+        expected_version: int,
+    ) -> PassengerMobilityRideRequest:
+        row = (
+            self._connection.execute(
+                update(canonical_ride_requests)
+                .where(
+                    canonical_ride_requests.c.request_id == request.request_id,
+                    canonical_ride_requests.c.mobility_model_version == 2,
+                    canonical_ride_requests.c.version == expected_version,
+                )
+                .values(
+                    state=request.state.value,
+                    version=request.version,
+                    updated_at=request.updated_at,
+                )
+                .returning(canonical_ride_requests)
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if row is None:
+            raise ConcurrentRideRequestChange("Ride Request changed concurrently")
+        return _mobility_request(row)
+
+    def has_active_mobility_request(
+        self, requester_subject_id: UUID, *, excluding: UUID | None = None
+    ) -> bool:
+        statement = select(canonical_ride_requests.c.request_id).where(
+            canonical_ride_requests.c.mobility_model_version == 2,
+            canonical_ride_requests.c.requester_subject_id == requester_subject_id,
+            canonical_ride_requests.c.state.in_(
+                [
+                    MobilityRideRequestState.DRAFT.value,
+                    MobilityRideRequestState.VALIDATED.value,
+                    MobilityRideRequestState.SUBMITTED.value,
+                ]
+            ),
+        )
+        if excluding is not None:
+            statement = statement.where(
+                canonical_ride_requests.c.request_id != excluding
+            )
+        return (
+            self._connection.execute(statement.limit(1)).scalar_one_or_none()
+            is not None
         )

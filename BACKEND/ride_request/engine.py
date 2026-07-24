@@ -5,6 +5,8 @@ from math import asin, cos, radians, sin, sqrt
 from BACKEND.ride_request.models import (
     Coordinate,
     DestinationDefinition,
+    MobilityRideRequestState,
+    PassengerMobilityRideRequest,
     PickupDefinition,
     PickupSafetyStatus,
     RideRequest,
@@ -51,6 +53,50 @@ TRANSITIONS = {
     RideRequestState.CANCELLED: frozenset(),
     RideRequestState.EXPIRED: frozenset(),
 }
+
+MOBILITY_TRANSITIONS = {
+    MobilityRideRequestState.DRAFT: frozenset(
+        {
+            MobilityRideRequestState.VALIDATED,
+            MobilityRideRequestState.WITHDRAWN,
+            MobilityRideRequestState.EXPIRED,
+        }
+    ),
+    MobilityRideRequestState.VALIDATED: frozenset(
+        {
+            MobilityRideRequestState.SUBMITTED,
+            MobilityRideRequestState.WITHDRAWN,
+            MobilityRideRequestState.EXPIRED,
+        }
+    ),
+    MobilityRideRequestState.SUBMITTED: frozenset(
+        {
+            MobilityRideRequestState.WITHDRAWN,
+            MobilityRideRequestState.EXPIRED,
+        }
+    ),
+    MobilityRideRequestState.WITHDRAWN: frozenset(),
+    MobilityRideRequestState.EXPIRED: frozenset(),
+}
+
+
+def transition_mobility_request(
+    request: PassengerMobilityRideRequest,
+    target: MobilityRideRequestState,
+    *,
+    at: datetime,
+) -> PassengerMobilityRideRequest:
+    if target not in MOBILITY_TRANSITIONS[request.state]:
+        raise ValueError("Invalid Passenger Mobility Ride Request transition")
+    if at.tzinfo is None or at.utcoffset() is None:
+        raise ValueError("Transition timestamp must be timezone-aware")
+    return request.model_copy(
+        update={
+            "state": target,
+            "updated_at": at.astimezone(UTC),
+            "version": request.version + 1,
+        }
+    )
 
 
 def transition(

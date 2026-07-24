@@ -32,7 +32,19 @@ TABLES = (
 def upgrade() -> None:
     bind = op.get_bind()
     for name in TABLES:
-        metadata.tables[f"ayo.{name}"].create(bind)
+        table = metadata.tables[f"ayo.{name}"]
+        future_constraints = [
+            constraint
+            for constraint in table.foreign_key_constraints
+            if constraint.referred_table.fullname == "ayo.canonical_subjects"
+        ]
+        for constraint in future_constraints:
+            table.constraints.remove(constraint)
+        try:
+            table.create(bind)
+        finally:
+            for constraint in future_constraints:
+                table.append_constraint(constraint)
     permissions = sa.table(
         "permissions",
         sa.column("permission_id", sa.Uuid()),
