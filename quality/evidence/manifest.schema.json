@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ayo.example/governance/ayo-rqc-1-evidence-manifest.schema.json",
+  "title": "AYO-RQC-1 certification evidence manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract",
+    "commit_sha",
+    "workflow_run",
+    "classification",
+    "tool_versions",
+    "commands",
+    "artifacts",
+    "gate_results",
+    "review"
+  ],
+  "properties": {
+    "contract": {
+      "const": "AYO-RQC-1"
+    },
+    "commit_sha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "workflow_run": {
+      "type": "string",
+      "minLength": 1
+    },
+    "classification": {
+      "const": "ENGINEERING_CERTIFICATION_EVIDENCE"
+    },
+    "tool_versions": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "commands": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["command", "exit_code"],
+        "properties": {
+          "command": {
+            "type": "string"
+          },
+          "exit_code": {
+            "type": "integer"
+          }
+        }
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "sha256"],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        }
+      }
+    },
+    "gate_results": {
+      "type": "object",
+      "additionalProperties": {
+        "enum": ["PASS", "FAIL", "NOT_APPLICABLE_APPROVED"]
+      }
+    },
+    "review": {
+      "type": "object",
+      "required": ["project_cto_status", "founder_status", "production_status"],
+      "properties": {
+        "project_cto_status": {
+          "type": "string"
+        },
+        "founder_status": {
+          "type": "string"
+        },
+        "production_status": {
+          "const": "NOT_APPROVED"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,77 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Non-secret client storage-key constants in two named domain modules"
+condition = "AND"
+regexTarget = "line"
+paths = [
+  '''(^|/)AYO-Mobile/domain/guest-experience\.ts$''',
+  '''(^|/)AYO-Mobile/domain/ordering\.ts$''',
+]
+regexes = [
+  '''^\s*const (INTENT_KEY|KEY)\s*=\s*['"][^'"]+['"];\s*$''',
+]
+
+[[allowlists]]
+description = "Architecture prose where provider terminology is not a credential"
+condition = "AND"
+regexTarget = "line"
+paths = [
+  '''(^|/)docs/AYO_DECISION_LOG\.md$''',
+  '''(^|/)docs/AYO_GLOBAL_LOCALIZATION_CULTURAL_TRANSLATION_ARCHITECTURE\.md$''',
+]
+regexes = [
+  '''(?i)no runtime.*provider.*production activation''',
+  '''(?i)documentation only.*provider.*production activation''',
+]
+
+[[allowlists]]
+description = "Deterministic non-secret idempotency fixtures in named integration tests"
+condition = "AND"
+regexTarget = "line"
+paths = [
+  '''(^|/)tests/integration/test_customer_profile_household_increment_1\.py$''',
+  '''(^|/)tests/integration/test_dispatch_handoff_localization\.py$''',
+  '''(^|/)tests/integration/test_intelligent_driver_dispatch\.py$''',
+  '''(^|/)tests/integration/test_passenger_mobility_ride_request\.py$''',
+]
+regexes = [
+  '''^\s*idempotency_key\s*=\s*["'][^"']+["'],?\s*$''',
+]
+
+[[allowlists]]
+description = "Deterministic non-secret idempotency fixtures in named unit tests"
+condition = "AND"
+regexTarget = "line"
+paths = [
+  '''(^|/)tests/test_courier_pickup_increment1\.py$''',
+  '''(^|/)tests/test_q3_continuation3_identity_finance_coverage\.py$''',
+  '''(^|/)tests/test_q3_mobility_application_coverage\.py$''',
+]
+regexes = [
+  '''^\s*idempotency_key\s*=\s*["'][^"']+["'],?\s*$''',
+]
+
+[[allowlists]]
+description = "Non-secret reservation API prose in the committed scheduled-rides architecture record"
+condition = "AND"
+regexTarget = "line"
+paths = [
+  '''(^|/)docs/MISSION_16_SCHEDULED_RIDES_PREDISPATCH_ARCHITECTURE\.md$''',
+]
+regexes = [
+  '''^- `POST /api/v1/reservations`: authenticated rider, idempotency key, pickup/destination place references,''',
+]
+
+[[allowlists]]
+description = "Two deterministic non-secret Dispatch idempotency fixtures in one named test"
+condition = "AND"
+regexTarget = "line"
+paths = [
+  '''(^|/)tests/test_immediate_dispatch\.py$''',
+]
+regexes = [
+  '''^\s*create\(dispatch, key=["'][^"']+["']\)\s*$''',
+  '''^\s*key=["'][^"']+["'],\s*$''',
+]
