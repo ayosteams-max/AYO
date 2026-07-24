@@ -38,7 +38,7 @@ NOW = datetime(2026, 7, 16, 12, tzinfo=UTC)
 def rules(**overrides) -> MarketplaceRuleSet:
     values = {"version": "marketplace.v1", "effective_at": NOW}
     values.update(overrides)
-    return MarketplaceRuleSet(**values)
+    return MarketplaceRuleSet.model_validate(values)
 
 
 def snapshot(**overrides) -> MarketplaceSnapshot:
@@ -66,7 +66,7 @@ def snapshot(**overrides) -> MarketplaceSnapshot:
         "sample_size": 100,
     }
     values.update(overrides)
-    return MarketplaceSnapshot(**values)
+    return MarketplaceSnapshot.model_validate(values)
 
 
 def test_healthy_market_is_scored_and_explained_deterministically() -> None:

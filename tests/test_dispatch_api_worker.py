@@ -1,4 +1,6 @@
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
+from typing import cast
 from uuid import UUID, uuid4
 
 from fastapi import FastAPI
@@ -20,6 +22,7 @@ from BACKEND.dispatch.models import (
 )
 from BACKEND.dispatch.worker import DispatchRecoveryWorker
 from BACKEND.identity.models import IdentityType
+from BACKEND.persistence.composition import PostgresRepositoryComposition
 from BACKEND.rate_limit.models import RateLimitDecision
 from BACKEND.routes.dispatch import create_dispatch_router
 
@@ -96,7 +99,7 @@ class FakeApplication:
                 driver_id=DRIVER_ID,
                 pickup_eta_seconds=60,
                 effective_eta_seconds=60,
-                trust_score="0.5000",
+                trust_score=Decimal("0.5000"),
                 neutral_reputation=True,
                 fairness_credit_seconds=0,
                 reliability_penalty_seconds=0,
@@ -143,7 +146,7 @@ def client_for(
     app = FastAPI()
     app.state.authorization_enforcer = AllowingEnforcer()
     app.state.dispatch_rate_limiter = limiter or AllowingRateLimiter()
-    app.include_router(create_dispatch_router(application))
+    app.include_router(create_dispatch_router(cast(DispatchApplication, application)))
     app.add_middleware(AuthorizationContextMiddleware, resolver=FixedResolver(subject))
     return TestClient(app)
 
@@ -255,17 +258,29 @@ class FakeComposition:
         return FakeUnit(self.repository)
 
 
+class RecoveryMemoryDispatchRepository(InMemoryDispatchRepository):
+    def list_searching_ride_ids(self, *, limit: int) -> list[UUID]:
+        del limit
+        return []
+
+    def abandon_expired_searches(self, *, now: datetime, limit: int) -> int:
+        del now, limit
+        return 0
+
+
 def test_application_and_worker_are_bounded_transaction_entry_points() -> None:
-    repository = InMemoryDispatchRepository()
-    repository.list_searching_ride_ids = lambda limit: []
-    repository.abandon_expired_searches = lambda now, limit: 0
+    repository = RecoveryMemoryDispatchRepository()
     policy = DispatchPolicy(version="dispatch.v1")
-    application = DispatchApplication(FakeComposition(repository), policy)
+    application = DispatchApplication(
+        cast(PostgresRepositoryComposition, FakeComposition(repository)),
+        policy,
+    )
     command = CreateRideCommand.model_validate(command_payload())
     ride, created = application.create_ride(
         rider_id=RIDER_ID,
         idempotency_key="network-retry-key-0001",
         command=command,
+        now=NOW,
     )
     assert created
     assert application.recover_ride(RIDER_ID) == ride

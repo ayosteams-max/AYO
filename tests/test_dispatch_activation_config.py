@@ -1,7 +1,10 @@
+from types import SimpleNamespace
+from typing import cast
+
 import pytest
 
 from BACKEND.config.settings import AppEnvironment, Settings
-from BACKEND.main import DispatchActivation, create_app
+from BACKEND.main import CanonicalDispatchActivation, DispatchActivation, create_app
 from BACKEND.observability import InMemoryMetricsSink
 
 
@@ -34,17 +37,46 @@ def test_production_dispatch_activation_is_configuration_blocked() -> None:
         )
 
 
+def test_canonical_dispatch_requires_secure_dependencies_and_registers_only_canonical_routes() -> (
+    None
+):
+    with pytest.raises(RuntimeError, match="canonical dispatch"):
+        create_app(configuration(CANONICAL_DISPATCH_ENABLED=True))
+    activation = cast(
+        CanonicalDispatchActivation,
+        SimpleNamespace(
+            application=None,
+            worker_sessions=None,
+            subject_resolver=None,
+            authorization_enforcer=None,
+            rate_limiter=None,
+            metrics=InMemoryMetricsSink(),
+        ),
+    )
+    app = create_app(
+        configuration(CANONICAL_DISPATCH_ENABLED=True),
+        canonical_dispatch=activation,
+    )
+    paths = set(app.openapi()["paths"])
+    assert "/api/mobile/dispatch/driver-mode" in paths
+    assert "/api/mobile/dispatch/offers/current" in paths
+    assert "/api/dispatch/rides" not in paths
+
+
 def test_controlled_test_activation_registers_public_and_internal_routes() -> None:
-    activation = DispatchActivation(
-        application=None,
-        subject_resolver=None,
-        authorization_enforcer=None,
-        rate_limiter=None,
-        recovery_coordinator=None,
-        outbox_worker=None,
-        recovery_health=None,
-        outbox_health=None,
-        metrics=InMemoryMetricsSink(),
+    activation = cast(
+        DispatchActivation,
+        SimpleNamespace(
+            application=None,
+            subject_resolver=None,
+            authorization_enforcer=None,
+            rate_limiter=None,
+            recovery_coordinator=None,
+            outbox_worker=None,
+            recovery_health=None,
+            outbox_health=None,
+            metrics=InMemoryMetricsSink(),
+        ),
     )
     app = create_app(configuration(DISPATCH_ENABLED=True), dispatch=activation)
     paths = set(app.openapi()["paths"])

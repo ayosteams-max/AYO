@@ -9,7 +9,11 @@ from BACKEND.persistence.config import DatabaseSettings
 from BACKEND.persistence.engine import create_postgres_engine
 from BACKEND.persistence.errors import RepositoryConfigurationError
 from BACKEND.persistence.health import DatabaseHealthChecker
-from BACKEND.persistence.logging import StructuredJsonFormatter, database_event
+from BACKEND.persistence.logging import (
+    StructuredJsonFormatter,
+    configure_structured_logging,
+    database_event,
+)
 from BACKEND.persistence.unit_of_work import SqlAlchemyUnitOfWork
 
 
@@ -48,6 +52,26 @@ def test_structured_database_log_contains_only_supplied_safe_fields():
     assert payload["event"] == "ride.get"
     assert payload["duration_ms"] == 1.234
     assert "secret" not in payload
+
+
+def test_structured_logging_configuration_is_idempotent():
+    root = logging.getLogger()
+    original_handlers = list(root.handlers)
+    original_level = root.level
+    try:
+        root.handlers = []
+        configure_structured_logging("WARNING")
+        configure_structured_logging("INFO")
+        structured = [
+            handler
+            for handler in root.handlers
+            if isinstance(handler.formatter, StructuredJsonFormatter)
+        ]
+        assert len(structured) == 1
+        assert root.level == logging.INFO
+    finally:
+        root.handlers = original_handlers
+        root.setLevel(original_level)
 
 
 def test_generic_unit_of_work_rolls_back_and_validates_composition():

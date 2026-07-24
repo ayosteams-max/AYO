@@ -41,7 +41,7 @@ def case(**changes) -> SupportCase:
         "updated_at": now,
         "retention_classification": RetentionClassification.ROUTINE_SUPPORT,
     }
-    return SupportCase(**(values | changes))
+    return SupportCase.model_validate(values | changes)
 
 
 def test_case_contract_and_lifecycle_are_bounded() -> None:
@@ -114,9 +114,12 @@ def test_messages_reject_secrets_and_keep_internal_visibility() -> None:
         "content": "Restricted operational note",
         "created_at": datetime.now(UTC),
     }
-    assert SupportMessage(**values).visibility is MessageVisibility.INTERNAL_NOTE
+    assert (
+        SupportMessage.model_validate(values).visibility
+        is MessageVisibility.INTERNAL_NOTE
+    )
     with pytest.raises(ValidationError, match="prohibited sensitive"):
-        SupportMessage(**(values | {"content": "OTP: 123456"}))
+        SupportMessage.model_validate(values | {"content": "OTP: 123456"})
 
 
 def test_event_metadata_is_allowlisted() -> None:
@@ -127,9 +130,9 @@ def test_event_metadata_is_allowlisted() -> None:
         "correlation_id": uuid4(),
         "occurred_at": datetime.now(UTC),
     }
-    assert SupportCaseEvent(**values).safe_metadata == {}
+    assert SupportCaseEvent.model_validate(values).safe_metadata == {}
     with pytest.raises(ValidationError, match="prohibited field"):
-        SupportCaseEvent(**(values | {"safe_metadata": {"phone": "secret"}}))
+        SupportCaseEvent.model_validate(values | {"safe_metadata": {"phone": "secret"}})
 
 
 def test_ai_interaction_forbids_reasoning_and_naive_time() -> None:
@@ -143,8 +146,8 @@ def test_ai_interaction_forbids_reasoning_and_naive_time() -> None:
         "safe_outcome_category": "follow_up_required",
         "created_at": datetime.now(UTC),
     }
-    assert SupportAIInteraction(**values).model_reference is None
+    assert SupportAIInteraction.model_validate(values).model_reference is None
     with pytest.raises(ValidationError):
-        SupportAIInteraction(**(values | {"chain_of_thought": "private"}))
+        SupportAIInteraction.model_validate(values | {"chain_of_thought": "private"})
     with pytest.raises(ValidationError, match="timezone-aware"):
-        SupportAIInteraction(**(values | {"created_at": datetime.now()}))
+        SupportAIInteraction.model_validate(values | {"created_at": datetime.now()})

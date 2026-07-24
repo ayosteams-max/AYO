@@ -22,7 +22,7 @@ def session_record(**changes) -> SessionRecord:
         "expires_at": now + timedelta(hours=1),
     }
     values.update(changes)
-    return SessionRecord(**values)
+    return SessionRecord.model_validate(values)
 
 
 def rate_policy() -> RateLimitPolicy:

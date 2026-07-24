@@ -240,7 +240,9 @@ def fixture_app():
         alt_text_en="Blue Main Gate sign",
         alt_text_am="የዋናው በር ምልክት",
         verified_at=NOW,
-        expires_at=NOW + timedelta(days=1),
+        # Keep this route-activation fixture valid independently of wall-clock date.
+        # Expiry behavior is covered separately with explicitly expired records.
+        expires_at=NOW + timedelta(days=3650),
     )
     point = NamedPickupPoint(
         pickup_point_id=uuid4(),
@@ -262,7 +264,7 @@ def fixture_app():
         provenance_code="operations.verified",
         confidence_bps=9500,
         observed_at=NOW,
-        expires_at=NOW + timedelta(days=1),
+        expires_at=NOW + timedelta(days=3650),
         named_pickup_points=(point,),
     )
     walking = WalkingGuidance(
