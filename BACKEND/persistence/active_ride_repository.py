@@ -168,6 +168,30 @@ class PostgresActiveRideRepository:
         row = self._connection.execute(query).mappings().one_or_none()
         return None if row is None else _ride(dict(row))
 
+    def get_for_ride_request(self, ride_request_id: UUID) -> ActiveRide | None:
+        row = (
+            self._connection.execute(
+                select(active_rides).where(
+                    active_rides.c.ride_request_id == ride_request_id
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        return None if row is None else _ride(dict(row))
+
+    def get_for_assignment(self, assignment_id: UUID) -> ActiveRide | None:
+        row = (
+            self._connection.execute(
+                select(active_rides).where(
+                    active_rides.c.assignment_id == assignment_id
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        return None if row is None else _ride(dict(row))
+
     def command_transition(
         self,
         *,

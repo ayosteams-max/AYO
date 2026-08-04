@@ -1,0 +1,1 @@
+"""Universal commerce catalogue foundation."""
