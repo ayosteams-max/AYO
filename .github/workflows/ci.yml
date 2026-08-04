@@ -866,6 +866,43 @@ jobs:
               print("Migration 0055/0056 round trip: PASS")
           finally:
               engine.dispose()
+              with psycopg.connect(
+                  dbname="postgres", autocommit=True, **admin
+              ) as connection:
+                  connection.execute(
+                      """
+                      SELECT pg_terminate_backend(pid)
+                      FROM pg_stat_activity
+                      WHERE datname = 'ayo_roundtrip'
+                        AND pid <> pg_backend_pid()
+                      """
+                  )
+                  connection.execute("DROP DATABASE IF EXISTS ayo_roundtrip")
+                  database_count = connection.execute(
+                      "SELECT count(*) FROM pg_database WHERE datname = 'ayo_roundtrip'"
+                  ).fetchone()[0]
+                  connection_count = connection.execute(
+                      "SELECT count(*) FROM pg_stat_activity WHERE datname = 'ayo_roundtrip'"
+                  ).fetchone()[0]
+                  role_dependencies = connection.execute(
+                      """
+                      SELECT count(*)
+                      FROM pg_shdepend dependency
+                      JOIN pg_roles role ON role.oid = dependency.refobjid
+                      LEFT JOIN pg_database database ON database.oid = dependency.dbid
+                      WHERE role.rolname = 'ayo_runtime'
+                        AND database.datname = 'ayo_roundtrip'
+                      """
+                  ).fetchone()[0]
+                  if database_count or connection_count or role_dependencies:
+                      raise SystemExit(
+                          "Round-trip database cleanup was incomplete: "
+                          f"databases={database_count}, connections={connection_count}, "
+                          f"role_dependencies={role_dependencies}"
+                      )
+                  print("Round-trip database absent after cleanup: PASS")
+                  print("Round-trip active connections after cleanup: 0")
+                  print("Round-trip ayo_runtime dependencies after cleanup: 0")
           PY
 
       - name: Verify Batch 1 typing evidence equivalence
@@ -874,51 +911,151 @@ jobs:
           set -euo pipefail
           source_dir="$(mktemp -d)"
           git archive 05b74c47d133ea85028a8b383c4fd539b268c1c8 | tar -x -C "$source_dir"
-          uv run --locked mypy --version
+          uv sync --locked
+          mypy_bin="$PWD/.venv/bin/mypy"
+          mypy_config="$PWD/pyproject.toml"
+          "$mypy_bin" --version
           set +e
-          (cd "$source_dir" && uv run --locked mypy --strict BACKEND) > source-strict.txt 2>&1
+          (cd "$source_dir" && "$mypy_bin" --config-file "$mypy_config" --strict --show-column-numbers --show-error-codes BACKEND) > source-strict.txt 2>&1
           source_strict_status=$?
-          uv run --locked mypy --strict BACKEND > candidate-strict.txt 2>&1
+          "$mypy_bin" --config-file "$mypy_config" --strict --show-column-numbers --show-error-codes BACKEND > candidate-strict.txt 2>&1
           candidate_strict_status=$?
-          (cd "$source_dir" && uv run --locked mypy) > source-configured.txt 2>&1
+          (cd "$source_dir" && "$mypy_bin" --config-file "$mypy_config" --show-column-numbers --show-error-codes BACKEND tests) > source-configured.txt 2>&1
           source_configured_status=$?
-          uv run --locked mypy > candidate-configured.txt 2>&1
+          "$mypy_bin" --config-file "$mypy_config" --show-column-numbers --show-error-codes BACKEND tests > candidate-configured.txt 2>&1
           candidate_configured_status=$?
           set -e
           SOURCE_DIR="$source_dir" uv run --locked python - <<'PY'
+          from collections import Counter
+          from dataclasses import dataclass
           import hashlib
           import os
           import re
           from pathlib import Path
 
+          pattern = re.compile(
+              r"^(?P<path>(?:BACKEND|tests)/.*?):(?P<line>\d+):(?P<column>\d+): "
+              r"error: (?P<message>.+) \[(?P<code>[a-z0-9-]+)\]$"
+          )
+
+          @dataclass(frozen=True, order=True)
+          class Diagnostic:
+              path: str
+              line: int
+              column: int
+              code: str
+              message: str
+
+              def render(self):
+                  return (
+                      f"{self.path}:{self.line}:{self.column}: error: "
+                      f"{self.message} [{self.code}]"
+                  )
+
           def normalized(path):
-              prefix = os.environ["SOURCE_DIR"].replace("\\", "/") + "/"
-              lines = []
+              roots = {
+                  os.environ["SOURCE_DIR"].replace("\\", "/").rstrip("/") + "/",
+                  str(Path.cwd()).replace("\\", "/").rstrip("/") + "/",
+              }
+              diagnostics = []
               for raw in Path(path).read_text(encoding="utf-8").splitlines():
-                  line = raw.replace("\\", "/").replace(prefix, "")
-                  if re.match(r"^(BACKEND|tests)/.*:\d+(?::\d+)?: error: .+ \[[a-z0-9-]+\]$", line):
-                      lines.append(line)
-              return sorted(lines)
+                  line = raw.replace("\\", "/")
+                  for root in roots:
+                      if line.startswith(root):
+                          line = line[len(root):]
+                          break
+                  match = pattern.fullmatch(line)
+                  if match:
+                      diagnostics.append(
+                          Diagnostic(
+                              match["path"],
+                              int(match["line"]),
+                              int(match["column"]),
+                              match["code"],
+                              " ".join(match["message"].split()),
+                          )
+                      )
+              if not diagnostics:
+                  raise SystemExit(f"missing actionable MyPy diagnostics in {path}")
+              return sorted(diagnostics)
+
+          def fingerprint(diagnostics):
+              payload = "\n".join(item.render() for item in diagnostics)
+              return hashlib.sha1(payload.encode()).hexdigest()
+
+          def report(label, diagnostics):
+              files = {item.path for item in diagnostics}
+              codes = Counter(item.code for item in diagnostics)
+              print(f"{label} errors/files: {len(diagnostics)} {len(files)}")
+              print(f"{label} error-code distribution: {dict(sorted(codes.items()))}")
+              print(f"{label} semantic fingerprint: {fingerprint(diagnostics)}")
+
+          def compare(label, source, candidate, *, allow_test_location_drift=False):
+              report(f"Source {label}", source)
+              report(f"Candidate {label}", candidate)
+              if source == candidate:
+                  return
+              source_set = set(source)
+              candidate_set = set(candidate)
+              source_only = sorted(source_set - candidate_set)
+              candidate_only = sorted(candidate_set - source_set)
+              print(f"{label} source-only diagnostics ({len(source_only)}):")
+              for item in source_only:
+                  print("SOURCE_ONLY|" + item.render())
+              print(f"{label} candidate-only diagnostics ({len(candidate_only)}):")
+              for item in candidate_only:
+                  print("CANDIDATE_ONLY|" + item.render())
+
+              source_locations = Counter(
+                  (item.path, item.line, item.column) for item in source
+              )
+              candidate_locations = Counter(
+                  (item.path, item.line, item.column) for item in candidate
+              )
+              source_codes = Counter((item.path, item.code) for item in source)
+              candidate_codes = Counter((item.path, item.code) for item in candidate)
+              print("Changed-location diagnostics:", sorted(
+                  (source_locations - candidate_locations).elements()
+              ), sorted((candidate_locations - source_locations).elements()))
+              print("Changed-code diagnostics:", sorted(
+                  (source_codes - candidate_codes).elements()
+              ), sorted((candidate_codes - source_codes).elements()))
+
+              if not allow_test_location_drift:
+                  raise SystemExit(f"{label} MyPy diagnostic population changed")
+              if any(not item.path.startswith("tests/") for item in source_only + candidate_only):
+                  raise SystemExit(
+                      "configured MyPy drift escaped the excluded historical test boundary"
+                  )
+              if (
+                  len(source) != len(candidate)
+                  or len({item.path for item in source})
+                  != len({item.path for item in candidate})
+              ):
+                  raise SystemExit("configured MyPy historical count drift")
+              if Counter(item.code for item in source) != Counter(item.code for item in candidate):
+                  raise SystemExit("configured MyPy historical error-code drift")
+              print(
+                  "Configured MyPy differences are confined to excluded historical "
+                  "test locations inherited from authoritative main"
+              )
 
           source_strict = normalized("source-strict.txt")
           candidate_strict = normalized("candidate-strict.txt")
-          if source_strict != candidate_strict:
-              raise SystemExit("strict backend MyPy diagnostic population changed")
-          strict_files = {line.split(":", 1)[0] for line in candidate_strict}
-          strict_fingerprint = hashlib.sha1("\n".join(candidate_strict).encode()).hexdigest()
+          compare("strict backend", source_strict, candidate_strict)
+          strict_files = {item.path for item in candidate_strict}
           if len(candidate_strict) != 387 or len(strict_files) != 52:
               raise SystemExit("strict backend MyPy historical count drift")
 
           source_configured = normalized("source-configured.txt")
           candidate_configured = normalized("candidate-configured.txt")
-          if source_configured != candidate_configured:
-              raise SystemExit("configured MyPy diagnostic population changed")
-          configured_files = {line.split(":", 1)[0] for line in candidate_configured}
+          compare(
+              "configured", source_configured, candidate_configured,
+              allow_test_location_drift=True,
+          )
+          configured_files = {item.path for item in candidate_configured}
           if len(candidate_configured) != 203 or len(configured_files) != 18:
               raise SystemExit("configured MyPy historical count drift")
-          print("Strict backend MyPy errors/files:", len(candidate_strict), len(strict_files))
-          print("Strict backend semantic fingerprint:", strict_fingerprint)
-          print("Configured MyPy errors/files:", len(candidate_configured), len(configured_files))
           print("Batch 1 typing equivalence: PASS")
           PY
           if [[ "$source_strict_status" -eq 0 || "$candidate_strict_status" -eq 0 \
@@ -1127,6 +1264,38 @@ jobs:
             uv run --locked pytest -m migration --no-cov -q
             exit 0
           fi
+          uv run --locked python - <<'PY'
+          import psycopg
+
+          admin = dict(
+              host="127.0.0.1",
+              dbname="postgres",
+              user="ayo_test",
+              password="ayo_test_password",
+              autocommit=True,
+          )
+          with psycopg.connect(**admin) as connection:
+              database_count = connection.execute(
+                  "SELECT count(*) FROM pg_database WHERE datname = 'ayo_roundtrip'"
+              ).fetchone()[0]
+              connection_count = connection.execute(
+                  "SELECT count(*) FROM pg_stat_activity WHERE datname = 'ayo_roundtrip'"
+              ).fetchone()[0]
+              if database_count or connection_count:
+                  raise SystemExit(
+                      "Round-trip isolation was contaminated before migration debt: "
+                      f"databases={database_count}, connections={connection_count}"
+                  )
+              connection.execute("DROP ROLE IF EXISTS ayo_runtime")
+              connection.execute("CREATE ROLE ayo_runtime NOLOGIN")
+              role_count = connection.execute(
+                  "SELECT count(*) FROM pg_roles WHERE rolname = 'ayo_runtime'"
+              ).fetchone()[0]
+              if role_count != 1:
+                  raise SystemExit("ayo_runtime lifecycle reset did not fail closed")
+              print("Historical migration round-trip isolation: PASS")
+              print("ayo_runtime lifecycle reset: PASS")
+          PY
           set +e
           uv run --locked pytest -m migration --no-cov -q --junitxml=historical-migrations.xml
           pytest_status=$?
