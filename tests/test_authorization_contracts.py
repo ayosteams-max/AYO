@@ -22,6 +22,14 @@ from BACKEND.authorization.registry import (
 )
 from BACKEND.identity.models import IdentityType
 
+RECONCILED_PRODUCTION_PERMISSIONS = {
+    "courier_dispatch.admit",
+    "courier_dispatch.manage",
+    "eat.availability.manage",
+    "merchant_orders.admit_decision",
+    "merchant_orders.expire_decisions",
+}
+
 
 def test_permission_and_role_codes_are_bounded_and_registry_is_immutable() -> None:
     now = datetime.now(UTC)
@@ -44,6 +52,16 @@ def test_permission_and_role_codes_are_bounded_and_registry_is_immutable() -> No
         )
     with pytest.raises(ValidationError, match="timezone-aware"):
         Role(code="rider", description="Invalid time.", created_at=datetime.now())
+
+
+def test_permission_registry_contains_exact_reconciled_production_inventory() -> None:
+    assert len(PERMISSION_REGISTRY) == 180
+    assert len(PERMISSION_REGISTRY) == len(set(PERMISSION_REGISTRY))
+    assert set(PERMISSION_REGISTRY) >= RECONCILED_PRODUCTION_PERMISSIONS
+    assert all(
+        list(PERMISSION_REGISTRY).count(code) == 1
+        for code in RECONCILED_PRODUCTION_PERMISSIONS
+    )
 
 
 def test_role_assignment_lifecycle_is_explicit_and_timezone_safe() -> None:
