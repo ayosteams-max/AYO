@@ -934,8 +934,14 @@ jobs:
         run: |
           set -euo pipefail
           scanner_version="$(uv tool run --from 'detect-secrets==1.5.0' detect-secrets --version)"
-          uv tool run --from 'detect-secrets==1.5.0' detect-secrets scan \
-            --all-files --exclude-files '^\.git/' > candidate-secrets.json
+          scan_root="$(mktemp -d)"
+          git archive HEAD | tar -x -C "$scan_root"
+          (
+            cd "$scan_root"
+            uv tool run --from 'detect-secrets==1.5.0' detect-secrets scan \
+              --all-files --exclude-files '^\.git/'
+          ) > candidate-secrets.json
+          rm -rf "$scan_root"
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             git show "$GITHUB_SHA:.secrets.baseline" > reviewed-secrets-baseline.json
           else
