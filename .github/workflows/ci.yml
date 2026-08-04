@@ -91,6 +91,24 @@ jobs:
           echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
           /usr/lib/postgresql/17/bin/pg_dump --version | grep -Eq '^pg_dump \(PostgreSQL\) 17(\.|$)'
 
+      - name: Initialize and verify canonical migration head
+        env:
+          AYO_DATABASE_URL: ${{ env.AYO_TEST_DATABASE_URL }}
+          AYO_DATABASE_SSL_MODE: disable
+        run: |
+          uv run --locked python database/migrate.py
+          uv run --locked python -c "
+          from BACKEND.persistence.config import DatabaseSettings
+          from BACKEND.persistence.engine import create_postgres_engine
+          from BACKEND.persistence.migrations import SchemaVersionReadinessChecker
+          engine = create_postgres_engine(DatabaseSettings(application_name='ayo-ci-schema-readiness'))
+          readiness = SchemaVersionReadinessChecker(engine).check()
+          engine.dispose()
+          print(f'CI migration head: current={readiness.current_revision} expected={readiness.expected_revision}')
+          if not readiness.ready or readiness.current_revision != readiness.expected_revision:
+              raise SystemExit('CI database is not at the canonical migration head')
+          "
+
       - name: Certify PostgreSQL backup and restore
         run: uv run --locked python database/certify_restore.py
 
