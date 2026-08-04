@@ -910,11 +910,19 @@ jobs:
         run: |
           set -euo pipefail
           source_dir="$(mktemp -d)"
+          mypy_root="$(mktemp -d)"
+          mypy_environment="$mypy_root/.venv"
           git archive 05b74c47d133ea85028a8b383c4fd539b268c1c8 | tar -x -C "$source_dir"
-          uv sync --locked
-          mypy_bin="$PWD/.venv/bin/mypy"
+          UV_PROJECT_ENVIRONMENT="$mypy_environment" uv sync --locked --all-groups
+          mypy_bin="$mypy_environment/bin/mypy"
+          mypy_python="$mypy_environment/bin/python"
           mypy_config="$PWD/pyproject.toml"
-          "$mypy_bin" --version
+          mypy_version="$("$mypy_bin" --version)"
+          echo "$mypy_version"
+          if [[ ! "$mypy_version" =~ ^mypy\ 1\.20\.2\  ]]; then
+            echo "Dedicated MyPy version is not exactly 1.20.2" >&2
+            exit 1
+          fi
           set +e
           (cd "$source_dir" && "$mypy_bin" --config-file "$mypy_config" --strict --show-column-numbers --show-error-codes BACKEND) > source-strict.txt 2>&1
           source_strict_status=$?
@@ -925,7 +933,7 @@ jobs:
           "$mypy_bin" --config-file "$mypy_config" --show-column-numbers --show-error-codes BACKEND tests > candidate-configured.txt 2>&1
           candidate_configured_status=$?
           set -e
-          SOURCE_DIR="$source_dir" uv run --locked python - <<'PY'
+          SOURCE_DIR="$source_dir" "$mypy_python" - <<'PY'
           from collections import Counter
           from dataclasses import dataclass
           import hashlib
@@ -1046,6 +1054,18 @@ jobs:
           strict_files = {item.path for item in candidate_strict}
           if len(candidate_strict) != 387 or len(strict_files) != 52:
               raise SystemExit("strict backend MyPy historical count drift")
+          expected_strict_codes = {
+              "no-any-return": 199,
+              "no-untyped-call": 120,
+              "no-untyped-def": 61,
+              "redundant-cast": 4,
+              "type-arg": 3,
+          }
+          if Counter(item.code for item in candidate_strict) != expected_strict_codes:
+              raise SystemExit("strict backend MyPy error-code distribution drift")
+          strict_fingerprint = fingerprint(candidate_strict)
+          if strict_fingerprint != "6257a24b9c057c822e45a041519a849c471f6c48":
+              raise SystemExit("strict backend MyPy governed fingerprint drift")
 
           source_configured = normalized("source-configured.txt")
           candidate_configured = normalized("candidate-configured.txt")
@@ -1063,7 +1083,7 @@ jobs:
             echo "Historical MyPy debt unexpectedly disappeared" >&2
             exit 1
           fi
-          rm -rf "$source_dir" source-strict.txt candidate-strict.txt \
+          rm -rf "$source_dir" "$mypy_root" source-strict.txt candidate-strict.txt \
             source-configured.txt candidate-configured.txt
 
       - name: Scan exact candidate for secrets
@@ -1234,6 +1254,34 @@ jobs:
           print("Exact reviewed secret-finding contract: PASS")
           PY
           rm candidate-secrets.json reviewed-secrets-baseline.json
+
+      - name: Verify shared certification dependencies survived MyPy
+        if: github.event_name == 'workflow_dispatch' && (success() || failure()) && steps.postgis.outputs.ready == 'true'
+        run: |
+          set -euo pipefail
+          .venv/bin/python - <<'PY'
+          from importlib import import_module, metadata
+
+          required_modules = {
+              "alembic": "alembic",
+              "sqlalchemy": "sqlalchemy",
+              "psycopg": "psycopg",
+              "pytest": "pytest",
+              "fastapi": "fastapi",
+              "httpx2": "httpx2",
+              "argon2": "argon2-cffi",
+              "jwt": "pyjwt",
+              "geoalchemy2": "geoalchemy2",
+              "pydantic": "pydantic",
+          }
+          for module_name, distribution_name in required_modules.items():
+              import_module(module_name)
+              print(
+                  f"Shared dependency preserved: {distribution_name}=="
+                  f"{metadata.version(distribution_name)}"
+              )
+          print("Shared certification dependency environment: PASS")
+          PY
 
       - name: Verify audit suite against PostgreSQL 17/PostGIS without skips
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true'
