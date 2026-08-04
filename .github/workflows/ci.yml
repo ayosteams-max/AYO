@@ -716,11 +716,20 @@ jobs:
           uv run --locked python - <<'PY'
           import hashlib
           import json
+          import time
 
           import psycopg
           from alembic import command
+          from sqlalchemy import text
 
-          from BACKEND.persistence.migrations import alembic_config
+          from BACKEND.persistence.config import DatabaseSettings
+          from BACKEND.persistence.engine import create_postgres_engine
+          from BACKEND.persistence.migrations import (
+              MIGRATION_LOCK_ID,
+              MigrationRunner,
+              SchemaVersionReadinessChecker,
+              alembic_config,
+          )
 
           admin = dict(host="127.0.0.1", user="ayo_test", password="ayo_test_password")
           with psycopg.connect(dbname="postgres", autocommit=True, **admin) as connection:
@@ -733,12 +742,48 @@ jobs:
               ).fetchone() is None:
                   connection.execute("CREATE ROLE ayo_runtime NOLOGIN")
 
+          engine = create_postgres_engine(
+              DatabaseSettings(application_name="ayo-ci-migration-roundtrip")
+          )
+          runner = MigrationRunner(engine)
+
+          def downgrade_with_migration_lock(revision):
+              with engine.connect() as connection:
+                  deadline = time.monotonic() + 30.0
+                  locked = False
+                  try:
+                      while time.monotonic() < deadline:
+                          locked = bool(
+                              connection.execute(
+                                  text("SELECT pg_try_advisory_lock(:lock_id)"),
+                                  {"lock_id": MIGRATION_LOCK_ID},
+                              ).scalar_one()
+                          )
+                          connection.commit()
+                          if locked:
+                              break
+                          time.sleep(0.1)
+                      if not locked:
+                          raise SystemExit(
+                              "Timed out waiting for the governed migration lock"
+                          )
+                      config = alembic_config()
+                      config.attributes["connection"] = connection
+                      command.downgrade(config, revision)
+                  finally:
+                      if locked:
+                          connection.execute(
+                              text("SELECT pg_advisory_unlock(:lock_id)"),
+                              {"lock_id": MIGRATION_LOCK_ID},
+                          )
+                          connection.commit()
+
           def revision_and_fingerprint():
-              with psycopg.connect(dbname="ayo_roundtrip", **admin) as connection:
+              with engine.connect() as connection:
                   revision = connection.execute(
-                      "SELECT version_num FROM public.ayo_schema_version"
-                  ).fetchone()[0]
-                  rows = connection.execute("""
+                      text("SELECT version_num FROM public.ayo_schema_version")
+                  ).scalar_one()
+                  rows = connection.execute(text("""
                       SELECT n.nspname, c.relname, c.relkind,
                              COALESCE(pg_get_constraintdef(k.oid, true), ''),
                              COALESCE(k.conname, '')
@@ -747,28 +792,80 @@ jobs:
                       LEFT JOIN pg_constraint k ON k.conrelid = c.oid
                       WHERE n.nspname = 'ayo'
                       ORDER BY 1, 2, 3, 4, 5
-                  """).fetchall()
-              payload = json.dumps(rows, separators=(",", ":"), default=str)
+                  """)).fetchall()
+              payload = json.dumps(
+                  [tuple(row) for row in rows], separators=(",", ":"), default=str
+              )
               return revision, hashlib.sha256(payload.encode()).hexdigest()
 
-          config = alembic_config()
-          command.upgrade(config, "20260723_0055")
-          predecessor_revision, predecessor = revision_and_fingerprint()
-          command.upgrade(config, "20260724_0056")
-          head_revision, _ = revision_and_fingerprint()
-          command.downgrade(config, "20260723_0055")
-          restored_revision, restored = revision_and_fingerprint()
-          if (predecessor_revision, restored_revision) != (
-              "20260723_0055", "20260723_0055"
-          ) or restored != predecessor:
-              raise SystemExit("Migration 0056 did not restore its exact predecessor schema")
-          command.upgrade(config, "20260724_0056")
-          final_revision, _ = revision_and_fingerprint()
-          if head_revision != "20260724_0056" or final_revision != "20260724_0056":
-              raise SystemExit("Migration 0056 round-trip head mismatch")
-          print("Migration 0055 predecessor fingerprint:", predecessor)
-          print("Migration 0056 downgrade restoration fingerprint:", restored)
-          print("Migration 0055/0056 round trip: PASS")
+          try:
+              runner.upgrade("20260723_0054")
+              revision_0054, fingerprint_0054 = revision_and_fingerprint()
+              runner.upgrade("20260723_0055")
+              revision_0055, fingerprint_0055 = revision_and_fingerprint()
+              downgrade_with_migration_lock("20260723_0054")
+              restored_0054, restored_fingerprint_0054 = revision_and_fingerprint()
+              if (
+                  revision_0054 != "20260723_0054"
+                  or restored_0054 != "20260723_0054"
+                  or restored_fingerprint_0054 != fingerprint_0054
+              ):
+                  raise SystemExit(
+                      "Migration 0055 did not restore its exact predecessor schema"
+                  )
+              runner.upgrade("20260723_0055")
+              reupgraded_0055, reupgraded_fingerprint_0055 = (
+                  revision_and_fingerprint()
+              )
+              if (
+                  revision_0055 != "20260723_0055"
+                  or reupgraded_0055 != "20260723_0055"
+                  or reupgraded_fingerprint_0055 != fingerprint_0055
+              ):
+                  raise SystemExit("Migration 0055 re-upgrade schema drift")
+
+              runner.upgrade("20260724_0056")
+              revision_0056, fingerprint_0056 = revision_and_fingerprint()
+              downgrade_with_migration_lock("20260723_0055")
+              restored_0055, restored_fingerprint_0055 = revision_and_fingerprint()
+              if (
+                  restored_0055 != "20260723_0055"
+                  or restored_fingerprint_0055 != fingerprint_0055
+              ):
+                  raise SystemExit(
+                      "Migration 0056 did not restore its exact predecessor schema"
+                  )
+              runner.upgrade("20260724_0056")
+              final_revision, final_fingerprint = revision_and_fingerprint()
+              if (
+                  revision_0056 != "20260724_0056"
+                  or final_revision != "20260724_0056"
+                  or final_fingerprint != fingerprint_0056
+              ):
+                  raise SystemExit("Migration 0056 re-upgrade schema drift")
+
+              readiness = SchemaVersionReadinessChecker(engine).check()
+              if (
+                  not readiness.ready
+                  or readiness.current_revision != "20260724_0056"
+                  or readiness.expected_revision != "20260724_0056"
+              ):
+                  raise SystemExit("Round-trip database is not at canonical readiness")
+              print("Migration 0055 predecessor fingerprint:", fingerprint_0054)
+              print(
+                  "Migration 0055 restored predecessor fingerprint:",
+                  restored_fingerprint_0054,
+              )
+              print("Migration 0056 predecessor fingerprint:", fingerprint_0055)
+              print(
+                  "Migration 0056 restored predecessor fingerprint:",
+                  restored_fingerprint_0055,
+              )
+              print("Round-trip canonical head:", final_revision)
+              print("Round-trip schema readiness: PASS")
+              print("Migration 0055/0056 round trip: PASS")
+          finally:
+              engine.dispose()
           PY
 
       - name: Verify Batch 1 typing evidence equivalence
