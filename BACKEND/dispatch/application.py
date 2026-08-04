@@ -22,13 +22,19 @@ class DispatchApplication:
         self._policy = policy
 
     def create_ride(
-        self, *, rider_id: UUID, idempotency_key: str, command: CreateRideCommand
+        self,
+        *,
+        rider_id: UUID,
+        idempotency_key: str,
+        command: CreateRideCommand,
+        now: datetime | None = None,
     ) -> tuple[RideProjection, bool]:
         with self._composition.unit_of_work() as unit:
             return ImmediateDispatchService(unit.dispatch, self._policy).create_ride(
                 rider_id=rider_id,
                 idempotency_key=idempotency_key,
                 command=command,
+                now=now,
             )
 
     def dispatch_next(self, ride_id: UUID) -> DriverOffer | None:

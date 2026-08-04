@@ -12,7 +12,7 @@ from BACKEND.persistence.tables import sessions
 from BACKEND.session.models import SessionRecord
 
 
-def _row_to_session(row: Mapping[str, Any]) -> SessionRecord:
+def _row_to_session(row: Mapping[Any, Any]) -> SessionRecord:
     return SessionRecord.model_validate(dict(row))
 
 

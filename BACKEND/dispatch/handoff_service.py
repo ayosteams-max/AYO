@@ -6,6 +6,7 @@ from BACKEND.dispatch.handoff import (
     DispatchHandoff,
     EligibleDriverInput,
     HandoffOffer,
+    decision_reason_codes,
     rank_candidates,
 )
 from BACKEND.persistence.composition import PostgresRepositoryComposition
@@ -20,11 +21,13 @@ class ImmediateHandoffService:
         policy_version: str,
         offer_timeout_seconds: int = 15,
         maximum_location_age_seconds: int = 45,
+        require_worker_session: bool = False,
     ) -> None:
         self._composition = composition
         self._policy_version = policy_version
         self._offer_timeout = offer_timeout_seconds
         self._maximum_location_age = maximum_location_age_seconds
+        self._require_worker_session = require_worker_session
 
     def receive(
         self,
@@ -98,12 +101,38 @@ class ImmediateHandoffService:
                 if unit.handoff_dispatch.eligibility_current(
                     item.driver_id, item.vehicle_id, now=at
                 )
+                and (
+                    not self._require_worker_session
+                    or unit.worker_sessions.ride_driver_online(
+                        identity_id=item.driver_id,
+                        vehicle_id=item.vehicle_id,
+                        service_zone_id=handoff.service_zone_id,
+                        now=at,
+                    )
+                )
             ]
             ranked = rank_candidates(
                 authoritative, now=at, max_age_seconds=self._maximum_location_age
             )
             unit.handoff_dispatch.record_candidates(
-                handoff, [item.driver_id for item in ranked], at
+                handoff,
+                [item.driver_id for item in ranked],
+                at,
+                {
+                    "route_evidence_ids": [item.route_evidence_id for item in ranked],
+                    "signals": [
+                        "pickup_eta",
+                        "availability",
+                        "vehicle_eligibility",
+                        "fatigue",
+                        "reliability",
+                        "cancellation_history",
+                        "traffic",
+                        "pickup_confidence",
+                        "workload",
+                        "fair_opportunity",
+                    ],
+                },
             )
             if not ranked:
                 unit.handoff_dispatch.event(
@@ -122,6 +151,8 @@ class ImmediateHandoffService:
                 expires_at=at + timedelta(seconds=self._offer_timeout),
                 dispatch_policy_version=self._policy_version,
                 pickup_cost_seconds=selected.pickup_cost_seconds,
+                route_evidence_id=selected.route_evidence_id,
+                decision_reason_codes=decision_reason_codes(selected),
             )
             return unit.handoff_dispatch.create_offer(handoff, offer)
 
@@ -136,7 +167,12 @@ class ImmediateHandoffService:
         at: datetime,
     ) -> UUID | None:
         with self._composition.unit_of_work() as unit:
-            return unit.handoff_dispatch.respond(
+            responder = (
+                unit.handoff_dispatch.respond_canonical
+                if self._require_worker_session
+                else unit.handoff_dispatch.respond
+            )
+            return responder(
                 offer_id=offer_id,
                 driver_id=driver_id,
                 accept=accept,
