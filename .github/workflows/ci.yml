@@ -472,6 +472,91 @@ jobs:
               diagnostic = " ".join((item.get("type", ""), item.get("message", ""))).lower()
               (xfailed if "xfail" in diagnostic else skipped).append(case)
           passed = len(cases) - len(failures) - len(errors) - len(skipped_cases)
+          def node_id(case):
+              return f"{case.get('classname').replace('.', '/')}.py::{case.get('name')}"
+
+          case_nodes = [node_id(case) for case in cases]
+          if len(case_nodes) != len(set(case_nodes)):
+              raise SystemExit("duplicate governed pytest node in JUnit inventory")
+          passed_nodes = {
+              node_id(case)
+              for case in cases
+              if case.find("failure") is None
+              and case.find("error") is None
+              and case.find("skipped") is None
+          }
+          xfailed_nodes = {node_id(case) for case in xfailed}
+          expected_xfailed_nodes = {
+              "tests/test_services.py::test_cash_commission_is_not_lost_on_repeated_wallet_refresh"
+          }
+          new_registry_node = (
+              "tests/test_authorization_contracts.py::"
+              "test_permission_registry_contains_exact_reconciled_production_inventory"
+          )
+          registry_blob = subprocess.run(
+              ["git", "rev-parse", "HEAD:BACKEND/authorization/registry.py"],
+              check=True,
+              capture_output=True,
+              text=True,
+          ).stdout.strip()
+          registry_test_blob = subprocess.run(
+              ["git", "rev-parse", "HEAD:tests/test_authorization_contracts.py"],
+              check=True,
+              capture_output=True,
+              text=True,
+          ).stdout.strip()
+          content_contracts = {
+              (
+                  "cf1b1760adedb55ee16d7a34974f00c80afa780b",
+                  "d59a2eb8fb2699552e8c83f0442e295477d102b8",
+              ): {
+                  "passed": 293,
+                  "passed_fingerprint": "95e00e00b6b65b88bc484fd6e8ec857c8c7fea700bf01e5ac05854fe3f44e18f",
+                  "selected_fingerprint": "9a5b614a01eae9b8cd0ec2ef43b4f427ff6991454a399d81a94c9b96edcdeb31",
+                  "registry_node_count": 0,
+              },
+              (
+                  "d56ba75e9a8c06fe71fa17968d26e736ab26ac9a",
+                  "898bf145214d8a7112b6cd8cc1e052b0ef5bd967",
+              ): {
+                  "passed": 294,
+                  "passed_fingerprint": "2ec9e77654b1fa16284b26e790e74cc5cb225c7f1ed3699112d4db9df200de8d",
+                  "selected_fingerprint": "23f6f3e43f3a7eb2219a070b4e2189143c22c924bc2656410a470567068b1084",
+                  "registry_node_count": 1,
+              },
+          }
+          content_contract = content_contracts.get((registry_blob, registry_test_blob))
+          if content_contract is None:
+              raise SystemExit(
+                  "governed permission-registry/test content pair drift: "
+                  f"registry={registry_blob} test={registry_test_blob}"
+              )
+          passed_fingerprint = hashlib.sha256(
+              "\n".join(sorted(passed_nodes)).encode()
+          ).hexdigest()
+          selected_fingerprint = hashlib.sha256(
+              "\n".join(sorted(case_nodes)).encode()
+          ).hexdigest()
+          if passed_fingerprint != content_contract["passed_fingerprint"]:
+              raise SystemExit(
+                  "governed passing-node inventory drift: "
+                  f"count={len(passed_nodes)} fingerprint={passed_fingerprint}"
+              )
+          if selected_fingerprint != content_contract["selected_fingerprint"]:
+              raise SystemExit(
+                  "governed selected-node inventory drift: "
+                  f"count={len(case_nodes)} fingerprint={selected_fingerprint}"
+              )
+          if xfailed_nodes != expected_xfailed_nodes:
+              raise SystemExit(f"governed xfail-node inventory drift: {sorted(xfailed_nodes)!r}")
+          registry_node_count = case_nodes.count(new_registry_node)
+          if registry_node_count != content_contract["registry_node_count"]:
+              raise SystemExit(
+                  "authorized permission-registry test count drift: "
+                  f"{registry_node_count}"
+              )
+          if registry_node_count and new_registry_node not in passed_nodes:
+              raise SystemExit("authorized permission-registry test is not passing")
           actual_inventory = {
               "passed": passed,
               "failed": len(failures),
@@ -480,7 +565,7 @@ jobs:
               "xfailed": len(xfailed),
           }
           expected_inventory = {
-              "passed": 293,
+              "passed": content_contract["passed"],
               "failed": 0,
               "errors": 0,
               "skipped": 0,
@@ -590,6 +675,9 @@ jobs:
           print("Batch 1 tested SHA:", tested_sha)
           print("Batch 1 BACKEND tree:", backend_tree)
           print("Batch 1 test inventory:", actual_inventory, "deselected=4")
+          print("Governed passing-node fingerprint:", passed_fingerprint)
+          print("Governed selected-node fingerprint:", selected_fingerprint)
+          print("Governed registry/test blobs:", registry_blob, registry_test_blob)
           print("Batch 1 coverage totals:", actual_totals)
           print("Batch 1 semantic coverage fingerprint:", fingerprint)
           print("Batch 1 zero-coverage modules:", len(zero_coverage))
@@ -1311,6 +1399,7 @@ jobs:
           PYTEST_STATUS="$pytest_status" uv run --locked python - <<'PY'
           import hashlib
           import os
+          import re
           import xml.etree.ElementTree as ET
 
           prefix = "tests/integration/test_migrations.py::"
@@ -1348,8 +1437,12 @@ jobs:
               return "unrecognized"
 
           failures = {}
+          errors = {}
           passes = set()
           cases = ET.parse("historical-migrations.xml").getroot().findall(".//testcase")
+          case_nodes = [node_id(case) for case in cases]
+          if len(case_nodes) != len(set(case_nodes)):
+              raise SystemExit("duplicate migration node in JUnit inventory")
           for case in cases:
               node = node_id(case)
               failure = case.find("failure")
@@ -1360,19 +1453,37 @@ jobs:
               if failure is None and error is None:
                   passes.add(node)
                   continue
-              diagnostic = failure if failure is not None else error
+              if error is not None:
+                  text = " ".join((error.get("message", ""), error.text or ""))
+                  errors[node] = signature(text)
+                  continue
+              diagnostic = failure
               text = " ".join((diagnostic.get("message", ""), diagnostic.text or ""))
               failures[node] = signature(text)
 
           if int(os.environ["PYTEST_STATUS"]) != 1:
               raise SystemExit("migration pytest status was not the expected test-failure status 1")
+          if errors:
+              raise SystemExit(f"unexpected historical migration errors: {errors!r}")
           if failures != expected_failures or passes != expected_passes:
               raise SystemExit(f"historical migration inventory drift: failures={failures!r}, passes={passes!r}")
           if len(failures) != 13 or len(passes) != 2:
               raise SystemExit("historical migration result is not exactly 13 failed / 2 passed")
           log = open("historical-migrations.log", encoding="utf-8").read()
-          if "298 deselected" not in log:
-              raise SystemExit("historical migration deselection inventory is not exactly 298")
+          deselected = re.search(r"(\d+) deselected", log)
+          print(
+              "Global non-migration deselection count (diagnostic only):",
+              deselected.group(1) if deselected else "not reported",
+          )
+          selected_fingerprint = hashlib.sha256(
+              "\n".join(sorted(case_nodes)).encode()
+          ).hexdigest()
+          expected_selected_fingerprint = "c16677bf4752fc8bdba13367cd8eeece292d06c1d687045dbe09e097fa8dce0b"
+          if selected_fingerprint != expected_selected_fingerprint:
+              raise SystemExit(
+                  "historical migration selected-node inventory drift: "
+                  f"{selected_fingerprint}"
+              )
           normalized = "\n".join(
               [*(f"FAIL|{node}|{failures[node]}" for node in sorted(failures)),
                *(f"PASS|{node}" for node in sorted(passes))]
@@ -1382,6 +1493,7 @@ jobs:
           if fingerprint != expected_fingerprint:
               raise SystemExit(f"historical migration diagnostic fingerprint drift: {fingerprint}")
           print(normalized)
+          print("Historical migration selected-node fingerprint:", selected_fingerprint)
           print("Historical migration diagnostic fingerprint:", fingerprint)
           PY
           echo "Historical migration debt contract matched"
