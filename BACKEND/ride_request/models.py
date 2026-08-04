@@ -206,3 +206,111 @@ class ValidationDecision(BaseModel):
         if value.tzinfo is None or value.utcoffset() is None:
             raise ValueError("Validation timestamp must be timezone-aware")
         return value.astimezone(UTC)
+
+
+class MobilityRideRequestState(StrEnum):
+    DRAFT = "draft"
+    VALIDATED = "validated"
+    SUBMITTED = "submitted"
+    WITHDRAWN = "withdrawn"
+    EXPIRED = "expired"
+
+
+class ScheduleIntentType(StrEnum):
+    IMMEDIATE = "immediate"
+    SCHEDULED = "scheduled"
+
+
+class LuggagePreference(StrEnum):
+    NONE = "none"
+    SMALL = "small"
+    MEDIUM = "medium"
+    LARGE = "large"
+
+
+class RideIntentPreferences(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    accessibility_needs: tuple[Code, ...] = Field(default=(), max_length=16)
+    luggage: LuggagePreference = LuggagePreference.NONE
+    quiet_ride: bool = False
+    child_seat: bool = False
+    child_seat_count: Annotated[int, Field(ge=0, le=4)] = 0
+
+    @model_validator(mode="after")
+    def consistent_child_seat(self) -> "RideIntentPreferences":
+        if self.child_seat != (self.child_seat_count > 0):
+            raise ValueError(
+                "Child-seat preference and child-seat count must be consistent"
+            )
+        if len(set(self.accessibility_needs)) != len(self.accessibility_needs):
+            raise ValueError("Accessibility needs must be unique")
+        return self
+
+
+LocationReference = Annotated[
+    str,
+    Field(
+        min_length=3,
+        max_length=200,
+        pattern=r"^[a-z][a-z0-9_.-]{1,62}:[A-Za-z0-9][A-Za-z0-9_.:/-]{0,135}$",
+    ),
+]
+
+
+class PassengerMobilityRideRequest(BaseModel):
+    """Canonical R1 travel intent; fulfillment belongs to other domains."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    request_id: UUID = Field(default_factory=uuid4)
+    model_version: Annotated[int, Field(ge=2, le=2)] = 2
+    client_request_id: UUID
+    requester_subject_id: UUID
+    passenger_subject_id: UUID
+    state: MobilityRideRequestState = MobilityRideRequestState.DRAFT
+    pickup_reference: LocationReference
+    destination_reference: LocationReference
+    stop_references: tuple[LocationReference, ...] = Field(default=(), max_length=8)
+    schedule_intent: ScheduleIntentType
+    scheduled_for: datetime | None = None
+    passenger_count: Annotated[int, Field(ge=1, le=8)]
+    preferences: RideIntentPreferences = Field(default_factory=RideIntentPreferences)
+    version: Annotated[int, Field(ge=1)] = 1
+    created_at: datetime
+    updated_at: datetime
+    expires_at: datetime
+
+    @field_validator("created_at", "updated_at", "expires_at", "scheduled_for")
+    @classmethod
+    def mobility_utc(cls, value: datetime | None) -> datetime | None:
+        if value is None:
+            return None
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("Ride Request timestamps must be timezone-aware")
+        return value.astimezone(UTC)
+
+    @model_validator(mode="after")
+    def valid_intent(self) -> "PassengerMobilityRideRequest":
+        if self.expires_at <= self.created_at:
+            raise ValueError("Ride Request expiry must follow creation")
+        if self.pickup_reference == self.destination_reference:
+            raise ValueError("Pickup and destination must differ")
+        locations = (
+            self.pickup_reference,
+            self.destination_reference,
+            *self.stop_references,
+        )
+        if len(set(locations)) != len(locations):
+            raise ValueError("Ride Request locations must be distinct")
+        if (
+            self.schedule_intent is ScheduleIntentType.IMMEDIATE
+            and self.scheduled_for is not None
+        ):
+            raise ValueError("Immediate Ride Request cannot have a scheduled time")
+        if (
+            self.schedule_intent is ScheduleIntentType.SCHEDULED
+            and self.scheduled_for is None
+        ):
+            raise ValueError("Scheduled Ride Request requires a scheduled time")
+        return self
