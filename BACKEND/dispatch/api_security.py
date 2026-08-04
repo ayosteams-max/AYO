@@ -36,6 +36,12 @@ DISPATCH_RATE_POLICIES = {
         refill_tokens=Decimal(30),
         refill_period_seconds=60,
     ),
+    "driver_mode": RateLimitPolicy(
+        name="dispatch.driver_mode",
+        capacity=20,
+        refill_tokens=Decimal(20),
+        refill_period_seconds=60,
+    ),
     "scheduled_create": RateLimitPolicy(
         name="scheduled.create",
         capacity=5,
@@ -132,6 +138,7 @@ class RequestSizeLimitMiddleware:
                 "/scheduled",
                 "/active-rides",
                 "/arrival-waiting",
+                "/mobile/booking",
             )
         ):
             await self.app(scope, receive, send)
