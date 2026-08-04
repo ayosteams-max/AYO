@@ -283,6 +283,7 @@ jobs:
       - name: Verify exact historical migration-suite debt
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true'
         run: |
+          uv run --locked python -c "import psycopg; connection = psycopg.connect(host='127.0.0.1', dbname='postgres', user='ayo_test', password='ayo_test_password', autocommit=True); connection.execute('DROP DATABASE IF EXISTS ayo_certification'); connection.close()"
           if [[ ! -f database/migrations/versions/20260724_0056_courier_pickup_increment1.py ]]; then
             uv run --locked python -c "import psycopg; connection = psycopg.connect(host='127.0.0.1', dbname='ayo_test', user='ayo_test', password='ayo_test_password', autocommit=True); connection.execute('DROP EXTENSION IF EXISTS postgis CASCADE'); connection.close()"
             uv run --locked pytest -m migration --no-cov -q
