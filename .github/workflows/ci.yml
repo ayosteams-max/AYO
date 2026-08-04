@@ -77,6 +77,13 @@ jobs:
       - name: Verify migration suite against PostgreSQL 17 without skips
         run: uv run --locked pytest -m migration --no-cov -q
 
+      - name: Install and verify PostgreSQL 17 client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client-17
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+          /usr/lib/postgresql/17/bin/pg_dump --version | grep -Eq '^pg_dump \(PostgreSQL\) 17(\.|$)'
+
       - name: Certify PostgreSQL backup and restore
         run: uv run --locked python database/certify_restore.py
 
