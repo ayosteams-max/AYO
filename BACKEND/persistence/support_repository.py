@@ -21,7 +21,7 @@ from BACKEND.support.models import (
 )
 
 
-def _model(model_type, row: Mapping[str, Any]):
+def _model(model_type, row: Mapping[Any, Any]):
     return model_type.model_validate(dict(row))
 
 

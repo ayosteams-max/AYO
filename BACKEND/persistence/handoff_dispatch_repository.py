@@ -119,6 +119,15 @@ class PostgresHandoffDispatchRepository:
             insert(immediate_dispatch_handoffs).values(**handoff.model_dump())
         )
         self.event(handoff, "dispatch.handoff_received", handoff.created_at)
+        self.event(
+            handoff,
+            "dispatch.rider.searching",
+            handoff.created_at,
+            {
+                "recipient_identity_id": str(handoff.rider_identity_id),
+                "translation_key": "dispatch.searching",
+            },
+        )
         return handoff
 
     def get_handoff(self, handoff_id: UUID) -> DispatchHandoff | None:
@@ -132,6 +141,136 @@ class PostgresHandoffDispatchRepository:
             .one_or_none()
         )
         return None if row is None else DispatchHandoff.model_validate(dict(row))
+
+    def get_handoff_for_rider(
+        self, *, rider_id: UUID, ride_request_id: UUID
+    ) -> DispatchHandoff | None:
+        row = (
+            self._connection.execute(
+                select(immediate_dispatch_handoffs).where(
+                    immediate_dispatch_handoffs.c.ride_request_id == ride_request_id,
+                    immediate_dispatch_handoffs.c.rider_identity_id == rider_id,
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        return None if row is None else DispatchHandoff.model_validate(dict(row))
+
+    def get_offer(self, offer_id: UUID) -> HandoffOffer | None:
+        row = (
+            self._connection.execute(
+                select(immediate_dispatch_offers).where(
+                    immediate_dispatch_offers.c.offer_id == offer_id
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        return None if row is None else HandoffOffer.model_validate(dict(row))
+
+    def get_active_offer_for_driver(self, driver_id: UUID) -> HandoffOffer | None:
+        row = (
+            self._connection.execute(
+                select(immediate_dispatch_offers).where(
+                    immediate_dispatch_offers.c.driver_id == driver_id,
+                    immediate_dispatch_offers.c.state == "created",
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        return None if row is None else HandoffOffer.model_validate(dict(row))
+
+    def get_active_offer_for_handoff(self, handoff_id: UUID) -> HandoffOffer | None:
+        row = (
+            self._connection.execute(
+                select(immediate_dispatch_offers).where(
+                    immediate_dispatch_offers.c.handoff_id == handoff_id,
+                    immediate_dispatch_offers.c.state == "created",
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        return None if row is None else HandoffOffer.model_validate(dict(row))
+
+    def list_expired_offers(self, *, at: datetime, limit: int) -> list[HandoffOffer]:
+        rows = (
+            self._connection.execute(
+                select(immediate_dispatch_offers)
+                .where(
+                    immediate_dispatch_offers.c.state == "created",
+                    immediate_dispatch_offers.c.expires_at <= at,
+                )
+                .order_by(immediate_dispatch_offers.c.expires_at)
+                .limit(limit)
+            )
+            .mappings()
+            .all()
+        )
+        return [HandoffOffer.model_validate(dict(row)) for row in rows]
+
+    def list_searching_handoff_ids(self, *, at: datetime, limit: int) -> list[UUID]:
+        return list(
+            self._connection.execute(
+                select(immediate_dispatch_handoffs.c.handoff_id)
+                .where(
+                    immediate_dispatch_handoffs.c.state == "searching",
+                    immediate_dispatch_handoffs.c.expires_at > at,
+                )
+                .order_by(immediate_dispatch_handoffs.c.created_at)
+                .limit(limit)
+            ).scalars()
+        )
+
+    def close_expired_handoffs(self, *, at: datetime, limit: int) -> int:
+        rows = (
+            self._connection.execute(
+                select(immediate_dispatch_handoffs)
+                .where(
+                    immediate_dispatch_handoffs.c.state.in_(("searching", "offering")),
+                    immediate_dispatch_handoffs.c.expires_at <= at,
+                )
+                .order_by(immediate_dispatch_handoffs.c.expires_at)
+                .limit(limit)
+                .with_for_update(skip_locked=True)
+            )
+            .mappings()
+            .all()
+        )
+        for row in rows:
+            handoff = DispatchHandoff.model_validate(dict(row))
+            self._connection.execute(
+                update(immediate_dispatch_offers)
+                .where(
+                    immediate_dispatch_offers.c.handoff_id == handoff.handoff_id,
+                    immediate_dispatch_offers.c.state == "created",
+                )
+                .values(
+                    state="expired",
+                    resolved_at=at,
+                    version=immediate_dispatch_offers.c.version + 1,
+                )
+            )
+            self._connection.execute(
+                update(immediate_dispatch_handoffs)
+                .where(
+                    immediate_dispatch_handoffs.c.handoff_id == handoff.handoff_id,
+                    immediate_dispatch_handoffs.c.version == handoff.version,
+                )
+                .values(state="no_driver", version=handoff.version + 1)
+            )
+            self.event(
+                handoff,
+                "dispatch.rider.no_driver_available",
+                at,
+                {
+                    "recipient_identity_id": str(handoff.rider_identity_id),
+                    "translation_key": "dispatch.rider.no_driver_available",
+                },
+            )
+        return len(rows)
 
     def eligibility_current(
         self, driver_id: UUID, vehicle_id: UUID, *, now: datetime
@@ -170,7 +309,11 @@ class PostgresHandoffDispatchRepository:
         return vehicle == "approved" and authorization is not None
 
     def record_candidates(
-        self, handoff: DispatchHandoff, driver_ids: list[UUID], at: datetime
+        self,
+        handoff: DispatchHandoff,
+        driver_ids: list[UUID],
+        at: datetime,
+        decision_evidence: dict[str, Any] | None = None,
     ) -> None:
         self._connection.execute(
             insert(immediate_dispatch_candidate_sets).values(
@@ -179,6 +322,7 @@ class PostgresHandoffDispatchRepository:
                 policy_version=handoff.dispatch_policy_version,
                 candidate_count=len(driver_ids),
                 eligible_driver_ids=[str(x) for x in driver_ids],
+                decision_evidence=decision_evidence or {},
                 created_at=at,
             )
         )
@@ -219,6 +363,26 @@ class PostgresHandoffDispatchRepository:
             "dispatch.offer_created",
             offer.created_at,
             {"offer_id": str(offer.offer_id)},
+        )
+        self.event(
+            DispatchHandoff.model_validate(dict(row)),
+            "dispatch.driver.new_offer",
+            offer.created_at,
+            {
+                "recipient_identity_id": str(offer.driver_id),
+                "offer_id": str(offer.offer_id),
+                "expires_at": offer.expires_at.isoformat(),
+                "translation_key": "dispatch.driver.new_offer",
+            },
+        )
+        self.event(
+            DispatchHandoff.model_validate(dict(row)),
+            "dispatch.rider.driver_found",
+            offer.created_at,
+            {
+                "recipient_identity_id": str(handoff.rider_identity_id),
+                "translation_key": "dispatch.rider.driver_found",
+            },
         )
         return offer
 
@@ -286,6 +450,8 @@ class PostgresHandoffDispatchRepository:
                     )
                 ).scalar_one(),
             )
+        if offer["state"] == "rejected" and not accept:
+            return None
         if (
             offer["state"] != "created"
             or offer["version"] != expected_version
@@ -351,7 +517,83 @@ class PostgresHandoffDispatchRepository:
             at,
             {"assignment_id": str(assignment_id)},
         )
+        assigned_handoff = DispatchHandoff.model_validate(dict(updated))
+        self.event(
+            assigned_handoff,
+            "dispatch.driver.acceptance_confirmed",
+            at,
+            {
+                "recipient_identity_id": str(driver_id),
+                "assignment_id": str(assignment_id),
+                "translation_key": "dispatch.driver.accepted",
+            },
+        )
+        self.event(
+            assigned_handoff,
+            "dispatch.rider.driver_accepted",
+            at,
+            {
+                "recipient_identity_id": str(handoff.rider_identity_id),
+                "assignment_id": str(assignment_id),
+                "translation_key": "dispatch.rider.driver_found",
+            },
+        )
         return assignment_id
+
+    def respond_canonical(
+        self,
+        *,
+        offer_id: UUID,
+        driver_id: UUID,
+        accept: bool,
+        expected_version: int,
+        idempotency_key: str,
+        at: datetime,
+    ) -> UUID | None:
+        offer = (
+            self._connection.execute(
+                select(
+                    immediate_dispatch_offers.c.vehicle_id,
+                    immediate_dispatch_offers.c.state,
+                    immediate_dispatch_handoffs.c.service_zone_id,
+                )
+                .join(
+                    immediate_dispatch_handoffs,
+                    immediate_dispatch_handoffs.c.handoff_id
+                    == immediate_dispatch_offers.c.handoff_id,
+                )
+                .where(
+                    immediate_dispatch_offers.c.offer_id == offer_id,
+                    immediate_dispatch_offers.c.driver_id == driver_id,
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if offer is None:
+            raise HandoffConflict("Offer unavailable")
+        if accept and offer["state"] != "accepted":
+            from BACKEND.persistence.worker_session_repository import (
+                PostgresWorkerSessionRepository,
+            )
+
+            sessions = PostgresWorkerSessionRepository(self._connection)
+            if not sessions.ride_driver_online(
+                identity_id=driver_id,
+                vehicle_id=offer["vehicle_id"],
+                service_zone_id=offer["service_zone_id"],
+                now=at,
+                lock=True,
+            ):
+                raise HandoffConflict("Ride Driver mode is not online")
+        return self.respond(
+            offer_id=offer_id,
+            driver_id=driver_id,
+            accept=accept,
+            expected_version=expected_version,
+            idempotency_key=idempotency_key,
+            at=at,
+        )
 
     def cancel_before_assignment(self, ride_request_id: UUID, *, at: datetime) -> bool:
         row = (
@@ -451,6 +693,22 @@ class PostgresHandoffDispatchRepository:
             at,
             {"offer_id": str(offer_id)},
         )
+
+    def revoke_driver_offer(self, driver_id: UUID, *, at: datetime) -> bool:
+        snapshot = (
+            self._connection.execute(
+                select(immediate_dispatch_offers).where(
+                    immediate_dispatch_offers.c.driver_id == driver_id,
+                    immediate_dispatch_offers.c.state == "created",
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if snapshot is None:
+            return False
+        self.resolve_open_offer(snapshot["offer_id"], outcome="superseded", at=at)
+        return True
 
     def event(
         self,
