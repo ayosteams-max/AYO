@@ -930,19 +930,167 @@ jobs:
             source-configured.txt candidate-configured.txt
 
       - name: Scan exact candidate for secrets
-        if: github.event_name == 'workflow_dispatch' && steps.postgis.outputs.ready == 'true'
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true'
         run: |
+          set -euo pipefail
+          scanner_version="$(uv tool run --from 'detect-secrets==1.5.0' detect-secrets --version)"
           uv tool run --from 'detect-secrets==1.5.0' detect-secrets scan \
             --all-files --exclude-files '^\.git/' > candidate-secrets.json
-          uv run --locked python - <<'PY'
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            git show "$GITHUB_SHA:.secrets.baseline" > reviewed-secrets-baseline.json
+          else
+            cp .secrets.baseline reviewed-secrets-baseline.json
+          fi
+          SCANNER_VERSION="$scanner_version" uv run --locked python - <<'PY'
+          import hashlib
           import json
-          evidence = json.load(open("candidate-secrets.json", encoding="utf-8"))
-          findings = evidence.get("results", {})
-          if findings:
-              raise SystemExit(f"candidate secret scan findings: {sorted(findings)}")
-          print("Exact candidate secret scan: PASS")
+          import os
+          from pathlib import Path
+
+          VERSION = "1.5.0"
+          BASELINE_KEYS = {"version", "plugins_used", "filters_used", "results", "inventory_fingerprint_bytes", "review"}
+          CLASSIFICATIONS = {
+              (".github/workflows/ci.yml", 37, "Secret Keyword"): "CI-only test fixture",
+              (".github/workflows/ci.yml", 47, "Basic Auth Credentials"): "CI-only test fixture",
+              (".github/workflows/ci.yml", 50, "Hex High Entropy String"): "governed commit SHA false positive",
+              (".github/workflows/ci.yml", 51, "Hex High Entropy String"): "governed commit SHA false positive",
+              (".github/workflows/ci.yml", 69, "Hex High Entropy String"): "governed base SHA false positive",
+              ("BACKEND/identity/authentication.py", 13, "Secret Keyword"): "public enum/configuration label",
+              ("BACKEND/identity/models.py", 60, "Secret Keyword"): "public authentication-method enum label",
+              ("BACKEND/routes/authentication.py", 122, "Secret Keyword"): "public capability response key",
+              ("README.md", 80, "Basic Auth Credentials"): "documentation-only localhost example",
+              ("tests/test_audit_contracts.py", 52, "Secret Keyword"): "synthetic redaction test fixture",
+              ("tests/test_restore_certification.py", 17, "Basic Auth Credentials"): "synthetic URL-normalization test fixture",
+          }
+
+          def load(path):
+              try:
+                  value = json.loads(Path(path).read_text(encoding="utf-8"))
+              except (OSError, UnicodeError, json.JSONDecodeError) as error:
+                  raise SystemExit(f"secret baseline parse failure: {error}") from error
+              if not isinstance(value, dict):
+                  raise SystemExit("secret baseline root must be an object")
+              return value
+
+          def canonical(value):
+              return json.dumps(value, sort_keys=True, separators=(",", ":"))
+
+          def hex_bytes(value, length, label):
+              if (not isinstance(value, list) or len(value) != length
+                      or any(type(item) is not int or not 0 <= item <= 255 for item in value)):
+                  raise SystemExit(f"malformed {label} byte inventory")
+              return bytes(value).hex()
+
+          def scan_inventory(results):
+              if not isinstance(results, dict):
+                  raise SystemExit("scanner results must be an object")
+              output = []
+              for raw_path, records in results.items():
+                  if not isinstance(raw_path, str) or not isinstance(records, list):
+                      raise SystemExit("malformed scanner result path or records")
+                  path = raw_path.replace("\\", "/")
+                  for record in records:
+                      try:
+                          output.append((path, int(record["line_number"]), str(record["type"]), str(record["hashed_secret"]), bool(record["is_verified"])))
+                      except (KeyError, TypeError, ValueError) as error:
+                          raise SystemExit(f"malformed scanner finding in {path}: {record!r}") from error
+              return sorted(output)
+
+          def baseline_inventory(results):
+              if not isinstance(results, dict):
+                  raise SystemExit("reviewed results must be an object")
+              required = {"type", "digest_bytes", "is_verified", "line_number", "classification"}
+              output, classes = [], {}
+              for path, records in results.items():
+                  if not isinstance(path, str) or "\\" in path or not isinstance(records, list):
+                      raise SystemExit("malformed reviewed result path or records")
+                  for record in records:
+                      if set(record) != required:
+                          raise SystemExit(f"reviewed finding fields drifted in {path}: {sorted(record)}")
+                      item = (path, int(record["line_number"]), str(record["type"]), hex_bytes(record["digest_bytes"], 20, "finding digest"), bool(record["is_verified"]))
+                      output.append(item)
+                      classes[item[:3]] = str(record["classification"])
+              return sorted(output), classes
+
+          def fingerprint(items):
+              payload = "\n".join(f"{p}|{n}|{t}|{h}|{str(v).lower()}" for p, n, t, h, v in items)
+              return hashlib.sha256(payload.encode()).hexdigest()
+
+          def render(item):
+              p, n, t, h, v = item
+              return f"{p}|{n}|{t}|{h}|{str(v).lower()}"
+
+          def exact(label, actual, expected):
+              if actual == expected:
+                  return
+              a, e = set(actual), set(expected)
+              for item in sorted(e - a):
+                  print("EXPECTED_ONLY|" + render(item))
+              for item in sorted(a - e):
+                  print("ACTUAL_ONLY|" + render(item))
+              raise SystemExit(f"{label} semantic finding inventory drift")
+
+          scan = load("candidate-secrets.json")
+          baseline = load("reviewed-secrets-baseline.json")
+          if set(baseline) != BASELINE_KEYS:
+              raise SystemExit(f"secret baseline top-level fields drifted: {sorted(baseline)}")
+          if os.environ["SCANNER_VERSION"] != VERSION or scan.get("version") != VERSION or baseline["version"] != VERSION:
+              raise SystemExit("detect-secrets version drift")
+          if canonical(scan.get("plugins_used")) != canonical(baseline["plugins_used"]):
+              print("EXPECTED_PLUGINS|" + canonical(baseline["plugins_used"]))
+              print("ACTUAL_PLUGINS|" + canonical(scan.get("plugins_used")))
+              raise SystemExit("detect-secrets plugin inventory drift")
+          if canonical(scan.get("filters_used")) != canonical(baseline["filters_used"]):
+              print("EXPECTED_FILTERS|" + canonical(baseline["filters_used"]))
+              print("ACTUAL_FILTERS|" + canonical(scan.get("filters_used")))
+              raise SystemExit("detect-secrets filter or path-exclusion drift")
+
+          reviewed, classes = baseline_inventory(baseline["results"])
+          if len(reviewed) != 11 or len(set(reviewed)) != 11:
+              raise SystemExit("reviewed finding count or uniqueness drift")
+          if classes != CLASSIFICATIONS:
+              raise SystemExit(f"reviewed classification drift: {classes!r}")
+          approved = hex_bytes(baseline["inventory_fingerprint_bytes"], 32, "inventory fingerprint")
+          expected_approved = "6a85dfa278b8889b" + "49658e526ffed5e1" + "8120fb422c21388e" + "00d9ee18f393be44"
+          if fingerprint(reviewed) != approved or approved != expected_approved:
+              raise SystemExit("reviewed baseline fingerprint drift")
+
+          review = baseline["review"]
+          target = hex_bytes(review.get("target_sha_bytes"), 20, "review target SHA")
+          expected_target = "8e61ff6d6a" + "e94a2f4cb0" + "ee116e225f" + "abc7313181"
+          if (target != expected_target or review.get("authority") != "Founder/CTO"
+                  or review.get("finding_count") != 11
+                  or review.get("genuine_or_uncertain_findings") != 0
+                  or review.get("future_updates_require_separate_security_review") is not True):
+              raise SystemExit("reviewed baseline governance metadata drift")
+
+          actual = scan_inventory(scan.get("results"))
+          w2 = []
+          for path, line, detector, digest, verified in reviewed:
+              if path == "BACKEND/routes/authentication.py":
+                  continue
+              if path == "README.md":
+                  line = 77
+              w2.append((path, line, detector, digest, verified))
+          w2.sort()
+          if os.environ.get("GITHUB_EVENT_NAME") == "workflow_dispatch":
+              exact("L2 certification", actual, reviewed)
+              selected = "L2 exact reviewed inventory"
+          elif actual == reviewed:
+              selected = "L2 exact reviewed inventory"
+          else:
+              exact("ordinary W2 projection", actual, w2)
+              selected = "W2 exact reviewed projection"
+
+          print("detect-secrets version:", VERSION)
+          print("Enabled plugins:", canonical(scan["plugins_used"]))
+          print("Enabled filters:", canonical(scan["filters_used"]))
+          print("Selected reviewed state:", selected)
+          print("Raw findings/fingerprint:", len(actual), fingerprint(actual))
+          print("L2 reviewed findings/fingerprint:", len(reviewed), approved)
+          print("Exact reviewed secret-finding contract: PASS")
           PY
-          rm candidate-secrets.json
+          rm candidate-secrets.json reviewed-secrets-baseline.json
 
       - name: Verify audit suite against PostgreSQL 17/PostGIS without skips
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true'
