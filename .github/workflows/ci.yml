@@ -95,6 +95,7 @@ jobs:
         env:
           AYO_DATABASE_URL: ${{ env.AYO_TEST_DATABASE_URL }}
           AYO_DATABASE_SSL_MODE: disable
+          PYTHONPATH: .
         run: |
           uv run --locked python database/migrate.py
           uv run --locked python -c "
