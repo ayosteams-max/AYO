@@ -255,7 +255,15 @@ class FakeComposition:
         return FakeUnit(self.repository)
 
 
-def test_application_and_worker_are_bounded_transaction_entry_points() -> None:
+def test_application_and_worker_are_bounded_transaction_entry_points(
+    monkeypatch,
+) -> None:
+    class FixedClock:
+        @classmethod
+        def now(cls, tz):
+            return NOW
+
+    monkeypatch.setattr("BACKEND.dispatch.service.datetime", FixedClock)
     repository = InMemoryDispatchRepository()
     repository.list_searching_ride_ids = lambda limit: []
     repository.abandon_expired_searches = lambda now, limit: 0

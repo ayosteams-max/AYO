@@ -511,7 +511,13 @@ class Limiter:
         return RateLimitDecision(allowed=True, remaining=10, retry_after_seconds=0)
 
 
-def test_disabled_routes_activation_and_authenticated_privacy_projections():
+def test_disabled_routes_activation_and_authenticated_privacy_projections(monkeypatch):
+    class FixedClock:
+        @classmethod
+        def now(cls, tz):
+            return NOW
+
+    monkeypatch.setattr("BACKEND.routes.arrival_waiting_routes.datetime", FixedClock)
     disabled = create_app(Settings(ENVIRONMENT=AppEnvironment.TEST))
     assert not any(
         "arrival-waiting" in getattr(route, "path", "") for route in disabled.routes
