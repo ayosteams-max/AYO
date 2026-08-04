@@ -343,10 +343,110 @@ jobs:
           print("Historical non-PostgreSQL diagnostic fingerprint:", fingerprint)
           PY
 
+      - name: Resolve trusted coverage comparison base
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true'
+        id: coverage_base
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_BEFORE: ${{ github.event.before || '' }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || '' }}
+          EVENT_HEAD_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          zero=0000000000000000000000000000000000000000
+          checked_out_head="$(git rev-parse HEAD)"
+
+          require_commit() {
+            local sha="$1"
+            local label="$2"
+            if [[ ! "$sha" =~ ^[0-9a-f]{40}$ ]] || [[ "$sha" == "$zero" ]]; then
+              echo "$label is absent, malformed, or all-zero: $sha" >&2
+              exit 1
+            fi
+            git cat-file -e "$sha^{commit}" 2>/dev/null || {
+              echo "$label does not identify an available commit: $sha" >&2
+              exit 1
+            }
+          }
+
+          case "$EVENT_NAME" in
+            pull_request)
+              require_commit "$PR_BASE_SHA" "pull-request base SHA"
+              require_commit "$PR_HEAD_SHA" "pull-request head SHA"
+              git merge-base --is-ancestor "$PR_BASE_SHA" "$checked_out_head" || {
+                echo "pull-request base is not an ancestor of the tested merge tree" >&2
+                exit 1
+              }
+              git merge-base --is-ancestor "$PR_HEAD_SHA" "$checked_out_head" || {
+                echo "pull-request head is not an ancestor of the tested merge tree" >&2
+                exit 1
+              }
+              comparison_sha="$PR_BASE_SHA"
+              mode=pull-request-base
+              ;;
+            push)
+              require_commit "$EVENT_HEAD_SHA" "pushed head SHA"
+              if [[ "$checked_out_head" != "$EVENT_HEAD_SHA" ]]; then
+                echo "checked-out head does not equal the pushed head" >&2
+                exit 1
+              fi
+              if [[ -n "$EVENT_BEFORE" && "$EVENT_BEFORE" != "$zero" ]]; then
+                require_commit "$EVENT_BEFORE" "push before SHA"
+                git merge-base --is-ancestor "$EVENT_BEFORE" "$EVENT_HEAD_SHA" || {
+                  echo "push before SHA is not an ancestor of the pushed head" >&2
+                  exit 1
+                }
+                comparison_sha="$EVENT_BEFORE"
+                mode=verified-push-before
+              else
+                mapfile -t parents < <(git show -s --format='%P' "$EVENT_HEAD_SHA" | tr ' ' '\n')
+                if [[ "${#parents[@]}" -ne 1 ]]; then
+                  echo "first branch push must contain one unambiguous parent" >&2
+                  exit 1
+                fi
+                first_parent="${parents[0]}"
+                require_commit "$first_parent" "first-push parent SHA"
+                git merge-base --is-ancestor "$first_parent" "$EVENT_HEAD_SHA" || {
+                  echo "first-push parent is not an ancestor of the pushed head" >&2
+                  exit 1
+                }
+                git fetch --no-tags origin \
+                  refs/heads/main:refs/remotes/origin/coverage-main
+                authoritative_main="$(git rev-parse refs/remotes/origin/coverage-main)"
+                require_commit "$authoritative_main" "authoritative remote main SHA"
+                merge_base="$(git merge-base "$EVENT_HEAD_SHA" "$authoritative_main")"
+                if [[ "$first_parent" != "$merge_base" ]]; then
+                  echo "first-push parent differs from merge-base with authoritative main" >&2
+                  exit 1
+                fi
+                if [[ "$first_parent" != "$authoritative_main" ]]; then
+                  echo "first-push parent is not the authoritative main SHA" >&2
+                  exit 1
+                fi
+                comparison_sha="$first_parent"
+                mode=verified-first-push-parent
+              fi
+              ;;
+            workflow_dispatch)
+              comparison_sha=""
+              mode=certified-dispatch-tree
+              ;;
+            *)
+              echo "unsupported event for coverage comparison: $EVENT_NAME" >&2
+              exit 1
+              ;;
+          esac
+
+          echo "sha=$comparison_sha" >> "$GITHUB_OUTPUT"
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+          echo "Coverage comparison mode: $mode"
+          echo "Coverage comparison SHA: ${comparison_sha:-certified-tree-contract}"
+
       - name: Test all admitted non-PostgreSQL behavior with coverage
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true'
         env:
-          COVERAGE_COMPARE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event_name == 'push' && github.event.before || '' }}
+          COVERAGE_COMPARE_SHA: ${{ steps.coverage_base.outputs.sha }}
         run: |
           set +e
           set -o pipefail
