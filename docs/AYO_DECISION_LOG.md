@@ -723,3 +723,12 @@ Supersedes / superseded by:
 - **Authority:** Ledger records financial truth only and executes no payment. Pricing remains amount authority; future Payments orchestrates external attempts; future Wallet projects derived views; Reconciliation/Finance own external mismatch and accounting workflows. AI may explain ledger data but has no ledger mutation authority.
 - **Alternatives:** Mutable balance aggregates were rejected as race-prone and unauditable. Provider-owned financial truth was rejected for lock-in and incomplete cash semantics. Distributed-ledger/blockchain options were rejected as unjustified complexity/cost.
 - **Open gates:** Ethiopian legal/accounting approvals for chart mappings, safeguarding/funds treatment, AML/CFT and tax-reporting boundaries; provider licensing/contracts; payout/refund policy; multi-currency/FX policy; operational reconciliation procedures and production activation criteria.
+
+### WG-001 — Migration 0016 controlled PRE-PRODUCTION correction
+
+- **Date:** 2026-08-04
+- **Status:** Founder and CTO approved Batch 0 reconciliation only. PostgreSQL certification, production, deployment and later reconciliation batches remain unauthorized.
+- **Decision:** Admit corrected migration blob `3c1e4b8400567b154582ffbb5f7426d933db1d23` as a one-time PRE-PRODUCTION historical replay correction. Preserve original blob `c09fc7efec392e8068c7adf62e32fbe2f7b4ecfd` as distinct history.
+- **Reason:** Revision `0016` executes before canonical Subject exists, so a later forward migration cannot repair a clean replay failure inside `0016`. The correction temporarily excludes only future `ayo.canonical_subjects` foreign keys and restores them to metadata after historical table creation.
+- **Permanent rule:** After this checkpoint, revision `0016` is immutable. Every later schema correction uses a new forward migration. No history rewrite, renumbering or silent retroactive change is permitted.
+- **Boundary:** This decision creates no PostgreSQL certification, production readiness, deployment, backup, cleanup or Batch 1 authority.

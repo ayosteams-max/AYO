@@ -1,5 +1,22 @@
 # AYO Database Migration Standard
 
+## Migration 0016 controlled PRE-PRODUCTION correction
+
+Founder and CTO approval authorizes one controlled PRE-PRODUCTION correction to
+revision `20260716_0016`. The original committed form is Git blob
+`c09fc7efec392e8068c7adf62e32fbe2f7b4ecfd`; the approved corrected form is Git
+blob `3c1e4b8400567b154582ffbb5f7426d933db1d23`.
+
+The correction excludes only future foreign keys referencing
+`ayo.canonical_subjects` while the historical tables are created, then restores
+those constraints to the in-process metadata. It does not change the revision,
+predecessor, table sequence, permission seed, downgrade order, indexes or unrelated
+constraints.
+
+After the reviewed Batch 0 checkpoint, the corrected migration is permanently
+immutable. Every later schema correction must use a new forward migration. Batch 0
+does not certify PostgreSQL, production readiness or deployment.
+
 ## Mission 19 active ride revision
 
 Revision `20260716_0013` adds the reversible Active Ride aggregate, append-only ordered
