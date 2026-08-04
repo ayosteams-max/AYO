@@ -4,6 +4,19 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+    inputs:
+      target_sha:
+        description: Exact canonical Batch 1 landing commit SHA
+        required: true
+        type: string
+      expected_base_sha:
+        description: Exact authoritative main SHA at certification time
+        required: true
+        type: string
+      approved_batch1_sha:
+        description: Exact approved Batch 1 reconciliation head
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -33,7 +46,7 @@ jobs:
     env:
       AYO_TEST_DATABASE_URL: postgresql+psycopg://ayo_test:ayo_test_password@127.0.0.1:5432/ayo_test
       DEBUG: "true"
-      TESTED_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      TESTED_COMMIT_SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.approved_batch1_sha || github.event.pull_request.head.sha || github.sha }}
       BATCH1_ORIGINAL_SHA: 4e24dce178239f23abfabea7ff5a47f7ee319f68
       BATCH1_MERGE_SHA: cfd349185fa50b53f2d0f3735cf6b4d95f671e9a
     steps:
@@ -41,6 +54,155 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.target_sha || github.sha }}
+
+      - name: Verify trusted-main Batch 1 dispatch authority
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ inputs.target_sha }}
+          EXPECTED_BASE_SHA: ${{ inputs.expected_base_sha }}
+          APPROVED_BATCH1_SHA: ${{ inputs.approved_batch1_sha }}
+          APPROVED_BATCH1_HEAD: cfd349185fa50b53f2d0f3735cf6b4d95f671e9a
+          APPROVED_BATCH1_ORIGINAL: 4e24dce178239f23abfabea7ff5a47f7ee319f68
+          APPROVED_BATCH1_BASE: 4c92b1c7088d1d54c8d15e5624085d370253c2b9
+          CANONICAL_MESSAGE: Land governed Batch 1 reconciliation
+          CANONICAL_NAME: AYO Governance Bot
+          CANONICAL_EMAIL: governance@ayo.team
+          CANONICAL_TIMESTAMP: 2026-08-04T00:00:00+00:00
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo "Dispatch certification must run from ref main" >&2
+            exit 1
+          fi
+          if [[ "$APPROVED_BATCH1_SHA" != "$APPROVED_BATCH1_HEAD" ]]; then
+            echo "Approved Batch 1 SHA input mismatch" >&2
+            exit 1
+          fi
+
+          permission="$(curl --fail --show-error --silent \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/collaborators/$GITHUB_ACTOR/permission" \
+            | jq -r '.permission')"
+          case "$permission" in
+            admin|maintain|write) ;;
+            *) echo "Triggering actor lacks repository write authority: $permission" >&2; exit 1 ;;
+          esac
+
+          remote_main="$(curl --fail --show-error --silent \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/git/ref/heads/main" \
+            | jq -r '.object.sha')"
+          if [[ "$EXPECTED_BASE_SHA" != "$remote_main" || "$GITHUB_SHA" != "$EXPECTED_BASE_SHA" ]]; then
+            echo "Expected base is not the exact authoritative main at execution" >&2
+            exit 1
+          fi
+
+          read -ra target_parents <<< "$(git show -s --format=%P "$TARGET_SHA")"
+          if [[ "${#target_parents[@]}" -ne 2 \
+            || "${target_parents[0]}" != "$EXPECTED_BASE_SHA" \
+            || "${target_parents[1]}" != "$APPROVED_BATCH1_SHA" ]]; then
+            echo "Canonical landing parent topology mismatch" >&2
+            exit 1
+          fi
+
+          merge_tree="$(git merge-tree --write-tree "$EXPECTED_BASE_SHA" "$APPROVED_BATCH1_SHA")"
+          if [[ "$merge_tree" == *$'\n'* ]] || ! git cat-file -e "$merge_tree^{tree}"; then
+            echo "Canonical merge is conflicted or did not produce one tree" >&2
+            exit 1
+          fi
+          message_file="$(mktemp)"
+          printf '%s\n' "$CANONICAL_MESSAGE" > "$message_file"
+          calculated_sha="$(
+            GIT_AUTHOR_NAME="$CANONICAL_NAME" \
+            GIT_AUTHOR_EMAIL="$CANONICAL_EMAIL" \
+            GIT_AUTHOR_DATE="$CANONICAL_TIMESTAMP" \
+            GIT_COMMITTER_NAME="$CANONICAL_NAME" \
+            GIT_COMMITTER_EMAIL="$CANONICAL_EMAIL" \
+            GIT_COMMITTER_DATE="$CANONICAL_TIMESTAMP" \
+            git -c commit.gpgSign=false -c i18n.commitEncoding=UTF-8 \
+              commit-tree "$merge_tree" \
+              -p "$EXPECTED_BASE_SHA" -p "$APPROVED_BATCH1_SHA" \
+              -F "$message_file"
+          )"
+          rm -f "$message_file"
+          if [[ "$calculated_sha" != "$TARGET_SHA" ]]; then
+            echo "Canonical SHA mismatch: calculated=$calculated_sha target=$TARGET_SHA" >&2
+            exit 1
+          fi
+          if [[ "$(git rev-parse "$TARGET_SHA^{tree}")" != "$merge_tree" ]]; then
+            echo "Canonical landing tree mismatch" >&2
+            exit 1
+          fi
+          if git cat-file commit "$TARGET_SHA" | grep -Eq '^(gpgsig|encoding) '; then
+            echo "Signature or noncanonical encoding header detected" >&2
+            exit 1
+          fi
+
+          mapfile -t approved_manifest < <(git diff --name-only "$APPROVED_BATCH1_BASE" "$APPROVED_BATCH1_ORIGINAL")
+          mapfile -t target_manifest < <(git diff --name-only "$EXPECTED_BASE_SHA" "$TARGET_SHA")
+          if [[ "${#approved_manifest[@]}" -ne 235 || "${#target_manifest[@]}" -ne 235 ]]; then
+            echo "Batch 1 manifest count mismatch" >&2
+            exit 1
+          fi
+          if ! diff -u \
+            <(printf '%s\n' "${approved_manifest[@]}") \
+            <(printf '%s\n' "${target_manifest[@]}"); then
+            echo "Batch 1 manifest identity mismatch" >&2
+            exit 1
+          fi
+          if printf '%s\n' "${target_manifest[@]}" | grep -Fxq '.github/workflows/ci.yml'; then
+            echo "Workflow path entered the Batch 1 manifest" >&2
+            exit 1
+          fi
+          manifest_fingerprint="$(printf '%s\n' "${target_manifest[@]}" | sha256sum | awk '{print $1}')"
+          trusted_workflow_blob="$(git rev-parse "$EXPECTED_BASE_SHA:.github/workflows/ci.yml")"
+          target_workflow_blob="$(git rev-parse "$TARGET_SHA:.github/workflows/ci.yml")"
+          if [[ "$trusted_workflow_blob" != "$target_workflow_blob" ]]; then
+            echo "Target does not preserve the trusted-main workflow blob" >&2
+            exit 1
+          fi
+          if [[ "$(git rev-parse "$TARGET_SHA:BACKEND")" != "5c4895867a7cbf7537158ba41fa7a5361d1ddf31" ]]; then
+            echo "Batch 1 BACKEND tree mismatch" >&2
+            exit 1
+          fi
+          declare -A migration_blobs=(
+            [database/migrations/versions/20260716_0016_canonical_ride_request.py]=3c1e4b8400567b154582ffbb5f7426d933db1d23
+            [database/migrations/versions/20260723_0055_courier_dispatch_increment1.py]=5f9def981c2db843e37dbd11e8b6f924f4d819fe
+            [database/migrations/versions/20260724_0056_courier_pickup_increment1.py]=ba3ca02b8c2274edae02db5552fa2c0125bf0f19
+          )
+          for path in "${!migration_blobs[@]}"; do
+            actual="$(git rev-parse "$TARGET_SHA:$path")"
+            if [[ "$actual" != "${migration_blobs[$path]}" ]]; then
+              echo "Migration blob mismatch: $path" >&2
+              exit 1
+            fi
+            echo "Migration blob: $path=$actual"
+          done
+          if ! git diff --quiet "$APPROVED_BATCH1_SHA" "$TARGET_SHA" -- pyproject.toml uv.lock; then
+            echo "Dependency or lockfile state changed after Batch 1 approval" >&2
+            exit 1
+          fi
+          if [[ "$(git show "$TARGET_SHA:uv.lock" | awk '/^name = "cryptography"$/{getline; print; exit}')" != 'version = "50.0.0"' ]]; then
+            echo "cryptography version mismatch" >&2
+            exit 1
+          fi
+
+          echo "Workflow source main SHA: $GITHUB_SHA"
+          echo "Expected base SHA: $EXPECTED_BASE_SHA"
+          echo "Approved Batch 1 SHA: $APPROVED_BATCH1_SHA"
+          echo "Target SHA: $TARGET_SHA"
+          echo "Calculated canonical SHA: $calculated_sha"
+          echo "Ordered parents: ${target_parents[*]}"
+          echo "Landing tree hash: $merge_tree"
+          echo "Manifest fingerprint: $manifest_fingerprint"
+          git checkout --detach "$TARGET_SHA"
 
       - name: Verify exact Batch 1 authority
         id: batch1_authority
@@ -544,6 +706,147 @@ jobs:
           AYO_TEST_DATABASE_URL: postgresql+psycopg://ayo_test:ayo_test_password@127.0.0.1:5432/ayo_certification
         run: uv run --locked python database/certify_restore.py
 
+      - name: Certify Migration 0055 and 0056 round trip
+        if: github.event_name == 'workflow_dispatch' && steps.canonical_schema.outputs.ready == 'true'
+        env:
+          AYO_DATABASE_URL: postgresql+psycopg://ayo_test:ayo_test_password@127.0.0.1:5432/ayo_roundtrip
+          AYO_DATABASE_SSL_MODE: disable
+          PYTHONPATH: .
+        run: |
+          uv run --locked python - <<'PY'
+          import hashlib
+          import json
+
+          import psycopg
+          from alembic import command
+
+          from BACKEND.persistence.migrations import alembic_config
+
+          admin = dict(host="127.0.0.1", user="ayo_test", password="ayo_test_password")
+          with psycopg.connect(dbname="postgres", autocommit=True, **admin) as connection:
+              connection.execute("DROP DATABASE IF EXISTS ayo_roundtrip")
+              connection.execute("CREATE DATABASE ayo_roundtrip")
+          with psycopg.connect(dbname="ayo_roundtrip", autocommit=True, **admin) as connection:
+              connection.execute("CREATE EXTENSION postgis")
+              if connection.execute(
+                  "SELECT 1 FROM pg_roles WHERE rolname = 'ayo_runtime'"
+              ).fetchone() is None:
+                  connection.execute("CREATE ROLE ayo_runtime NOLOGIN")
+
+          def revision_and_fingerprint():
+              with psycopg.connect(dbname="ayo_roundtrip", **admin) as connection:
+                  revision = connection.execute(
+                      "SELECT version_num FROM public.ayo_schema_version"
+                  ).fetchone()[0]
+                  rows = connection.execute("""
+                      SELECT n.nspname, c.relname, c.relkind,
+                             COALESCE(pg_get_constraintdef(k.oid, true), ''),
+                             COALESCE(k.conname, '')
+                      FROM pg_class c
+                      JOIN pg_namespace n ON n.oid = c.relnamespace
+                      LEFT JOIN pg_constraint k ON k.conrelid = c.oid
+                      WHERE n.nspname = 'ayo'
+                      ORDER BY 1, 2, 3, 4, 5
+                  """).fetchall()
+              payload = json.dumps(rows, separators=(",", ":"), default=str)
+              return revision, hashlib.sha256(payload.encode()).hexdigest()
+
+          config = alembic_config()
+          command.upgrade(config, "20260723_0055")
+          predecessor_revision, predecessor = revision_and_fingerprint()
+          command.upgrade(config, "20260724_0056")
+          head_revision, _ = revision_and_fingerprint()
+          command.downgrade(config, "20260723_0055")
+          restored_revision, restored = revision_and_fingerprint()
+          if (predecessor_revision, restored_revision) != (
+              "20260723_0055", "20260723_0055"
+          ) or restored != predecessor:
+              raise SystemExit("Migration 0056 did not restore its exact predecessor schema")
+          command.upgrade(config, "20260724_0056")
+          final_revision, _ = revision_and_fingerprint()
+          if head_revision != "20260724_0056" or final_revision != "20260724_0056":
+              raise SystemExit("Migration 0056 round-trip head mismatch")
+          print("Migration 0055 predecessor fingerprint:", predecessor)
+          print("Migration 0056 downgrade restoration fingerprint:", restored)
+          print("Migration 0055/0056 round trip: PASS")
+          PY
+
+      - name: Verify Batch 1 typing evidence equivalence
+        if: github.event_name == 'workflow_dispatch' && steps.postgis.outputs.ready == 'true'
+        run: |
+          set -euo pipefail
+          source_dir="$(mktemp -d)"
+          git archive 05b74c47d133ea85028a8b383c4fd539b268c1c8 | tar -x -C "$source_dir"
+          uv run --locked mypy --version
+          set +e
+          (cd "$source_dir" && uv run --locked mypy --strict BACKEND) > source-strict.txt 2>&1
+          source_strict_status=$?
+          uv run --locked mypy --strict BACKEND > candidate-strict.txt 2>&1
+          candidate_strict_status=$?
+          (cd "$source_dir" && uv run --locked mypy) > source-configured.txt 2>&1
+          source_configured_status=$?
+          uv run --locked mypy > candidate-configured.txt 2>&1
+          candidate_configured_status=$?
+          set -e
+          SOURCE_DIR="$source_dir" uv run --locked python - <<'PY'
+          import hashlib
+          import os
+          import re
+          from pathlib import Path
+
+          def normalized(path):
+              prefix = os.environ["SOURCE_DIR"].replace("\\", "/") + "/"
+              lines = []
+              for raw in Path(path).read_text(encoding="utf-8").splitlines():
+                  line = raw.replace("\\", "/").replace(prefix, "")
+                  if re.match(r"^(BACKEND|tests)/.*:\d+(?::\d+)?: error: .+ \[[a-z0-9-]+\]$", line):
+                      lines.append(line)
+              return sorted(lines)
+
+          source_strict = normalized("source-strict.txt")
+          candidate_strict = normalized("candidate-strict.txt")
+          if source_strict != candidate_strict:
+              raise SystemExit("strict backend MyPy diagnostic population changed")
+          strict_files = {line.split(":", 1)[0] for line in candidate_strict}
+          strict_fingerprint = hashlib.sha1("\n".join(candidate_strict).encode()).hexdigest()
+          if len(candidate_strict) != 387 or len(strict_files) != 52:
+              raise SystemExit("strict backend MyPy historical count drift")
+
+          source_configured = normalized("source-configured.txt")
+          candidate_configured = normalized("candidate-configured.txt")
+          if source_configured != candidate_configured:
+              raise SystemExit("configured MyPy diagnostic population changed")
+          configured_files = {line.split(":", 1)[0] for line in candidate_configured}
+          if len(candidate_configured) != 203 or len(configured_files) != 18:
+              raise SystemExit("configured MyPy historical count drift")
+          print("Strict backend MyPy errors/files:", len(candidate_strict), len(strict_files))
+          print("Strict backend semantic fingerprint:", strict_fingerprint)
+          print("Configured MyPy errors/files:", len(candidate_configured), len(configured_files))
+          print("Batch 1 typing equivalence: PASS")
+          PY
+          if [[ "$source_strict_status" -eq 0 || "$candidate_strict_status" -eq 0 \
+            || "$source_configured_status" -eq 0 || "$candidate_configured_status" -eq 0 ]]; then
+            echo "Historical MyPy debt unexpectedly disappeared" >&2
+            exit 1
+          fi
+          rm -rf "$source_dir" source-strict.txt candidate-strict.txt \
+            source-configured.txt candidate-configured.txt
+
+      - name: Scan exact candidate for secrets
+        if: github.event_name == 'workflow_dispatch' && steps.postgis.outputs.ready == 'true'
+        run: |
+          uv tool run --from 'detect-secrets==1.5.0' detect-secrets scan \
+            --all-files --exclude-files '^\.git/' > candidate-secrets.json
+          uv run --locked python - <<'PY'
+          import json
+          evidence = json.load(open("candidate-secrets.json", encoding="utf-8"))
+          findings = evidence.get("results", {})
+          if findings:
+              raise SystemExit(f"candidate secret scan findings: {sorted(findings)}")
+          print("Exact candidate secret scan: PASS")
+          PY
+          rm candidate-secrets.json
+
       - name: Verify audit suite against PostgreSQL 17/PostGIS without skips
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true'
         run: uv run --locked pytest -m audit --no-cov -q
@@ -659,3 +962,13 @@ jobs:
       - name: Audit installed dependencies
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true'
         run: uv run --locked pip-audit
+
+      - name: Verify certified candidate tree cleanliness
+        if: github.event_name == 'workflow_dispatch' && (success() || failure()) && steps.postgis.outputs.ready == 'true'
+        run: |
+          if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
+            git status --short --untracked-files=no
+            echo "Certified candidate tracked tree is not clean" >&2
+            exit 1
+          fi
+          echo "Certified candidate tracked tree cleanliness: PASS"
