@@ -867,9 +867,10 @@ jobs:
               raise SystemExit(f"Batch 2 xfail identity or reason drift: {xfail_nodes!r}")
           if test_fingerprint != expected_test_fingerprint:
               raise SystemExit(f"Batch 2 test inventory drift: {test_fingerprint}")
+          expected_backend_tree = "ae03d4fd14a59c83cef6d62bd0c0d8cc1851a4f7"
           if subprocess.run(["git", "rev-parse", "HEAD:tests"], check=True, capture_output=True, text=True).stdout.strip() != "48ce81c2ee545a5f7a37d65cfd0c4ddd59ead1ff":
               raise SystemExit("Batch 2 tests tree drift")
-          if subprocess.run(["git", "rev-parse", "HEAD:BACKEND"], check=True, capture_output=True, text=True).stdout.strip() != "5c4895867a7cbf7537158ba41fa7a5361d1ddf31":
+          if subprocess.run(["git", "rev-parse", "HEAD:BACKEND"], check=True, capture_output=True, text=True).stdout.strip() != expected_backend_tree:
               raise SystemExit("Batch 2 production tree drift")
           if subprocess.run(["git", "cat-file", "-e", "HEAD:tests/test_ride_flow.py"]).returncode == 0:
               raise SystemExit("obsolete ride-flow test was restored")
@@ -903,6 +904,20 @@ jobs:
               if len(parents) != 2:
                   raise SystemExit("dispatch Batch 2 target lacks an exact first-parent base")
               compare_sha = parents[0]
+          if not compare_sha:
+              raise SystemExit("Batch 2 authoritative base binding is missing")
+          subprocess.run(
+              ["git", "cat-file", "-e", f"{compare_sha}^{{commit}}"], check=True,
+          )
+          base_backend_tree = subprocess.run(
+              ["git", "rev-parse", f"{compare_sha}:BACKEND"],
+              check=True, capture_output=True, text=True,
+          ).stdout.strip()
+          if base_backend_tree != expected_backend_tree:
+              raise SystemExit(
+                  "Batch 2 authoritative base production tree drift: "
+                  f"{base_backend_tree} != {expected_backend_tree}"
+              )
           changed = subprocess.run(
               ["git", "diff", "--name-only", compare_sha, "HEAD"],
               check=True, capture_output=True, text=True,
@@ -922,6 +937,23 @@ jobs:
           }
           if distribution != {"A": 61, "M": 25, "D": 1}:
               raise SystemExit(f"Batch 2 path distribution drift: {distribution!r}")
+          immutable_blobs = {
+              "database/migrations/versions/20260716_0016_canonical_ride_request.py": "3c1e4b8400567b154582ffbb5f7426d933db1d23",
+              "database/migrations/versions/20260723_0055_courier_dispatch_increment1.py": "5f9def981c2db843e37dbd11e8b6f924f4d819fe",
+              "database/migrations/versions/20260724_0056_courier_pickup_increment1.py": "ba3ca02b8c2274edae02db5552fa2c0125bf0f19",
+              "uv.lock": "6a08d31b721b486950fd06df0ca3430fcbe8aabf",
+          }
+          for path, expected_blob in immutable_blobs.items():
+              actual_blob = subprocess.run(
+                  ["git", "rev-parse", f"HEAD:{path}"],
+                  check=True, capture_output=True, text=True,
+              ).stdout.strip()
+              if actual_blob != expected_blob:
+                  raise SystemExit(
+                      f"Batch 2 immutable blob drift: {path}={actual_blob}"
+                  )
+          print("Batch 2 authoritative base SHA:", compare_sha)
+          print("Batch 2 authoritative BACKEND tree:", expected_backend_tree)
           print("Batch 2 tests: 688 passed, 1 governed xfail")
           print("Batch 2 test inventory fingerprint:", test_fingerprint)
           print("Batch 2 manifest fingerprint:", manifest_fingerprint)
@@ -1196,6 +1228,78 @@ jobs:
                   print("Round-trip database absent after cleanup: PASS")
                   print("Round-trip active connections after cleanup: 0")
                   print("Round-trip ayo_runtime dependencies after cleanup: 0")
+          PY
+
+      - name: Remove certification databases before downstream suites
+        if: (success() || failure()) && steps.pg_client.outputs.ready == 'true'
+        run: |
+          uv run --locked python - <<'PY'
+          import psycopg
+
+          admin = dict(
+              host="127.0.0.1", dbname="postgres", user="ayo_test",
+              password="ayo_test_password", autocommit=True,
+          )
+          disposable_databases = (
+              "ayo_certification_restore_cert",
+              "ayo_certification",
+              "ayo_roundtrip",
+          )
+          with psycopg.connect(**admin) as connection:
+              for database in disposable_databases:
+                  connection.execute(
+                      """
+                      SELECT pg_terminate_backend(pid)
+                      FROM pg_stat_activity
+                      WHERE datname = %s AND pid <> pg_backend_pid()
+                      """,
+                      (database,),
+                  )
+                  connection.execute(f'DROP DATABASE IF EXISTS "{database}"')
+              remaining_databases = connection.execute(
+                  "SELECT datname FROM pg_database WHERE datname = ANY(%s) ORDER BY datname",
+                  (list(disposable_databases),),
+              ).fetchall()
+              remaining_connections = connection.execute(
+                  "SELECT datname, usename FROM pg_stat_activity "
+                  "WHERE datname = ANY(%s) ORDER BY datname, usename",
+                  (list(disposable_databases),),
+              ).fetchall()
+              runtime_sessions = connection.execute(
+                  "SELECT datname FROM pg_stat_activity "
+                  "WHERE usename = 'ayo_runtime' ORDER BY datname"
+              ).fetchall()
+              unexpected_dependencies = connection.execute(
+                  """
+                  SELECT COALESCE(database.datname, '<shared>'), count(*)
+                  FROM pg_shdepend dependency
+                  JOIN pg_roles role ON role.oid = dependency.refobjid
+                  LEFT JOIN pg_database database ON database.oid = dependency.dbid
+                  WHERE role.rolname = 'ayo_runtime'
+                    AND database.datname IS DISTINCT FROM 'ayo_test'
+                  GROUP BY database.datname
+                  ORDER BY database.datname
+                  """
+              ).fetchall()
+          if remaining_databases or remaining_connections:
+              raise SystemExit(
+                  "Disposable certification database cleanup failed: "
+                  f"databases={remaining_databases!r} "
+                  f"connections={remaining_connections!r}"
+              )
+          if runtime_sessions:
+              raise SystemExit(
+                  f"ayo_runtime sessions leaked between gates: {runtime_sessions!r}"
+              )
+          if unexpected_dependencies:
+              raise SystemExit(
+                  "ayo_runtime dependencies leaked outside the active test database: "
+                  f"{unexpected_dependencies!r}"
+              )
+          print("Disposable certification databases absent:", disposable_databases)
+          print("Disposable certification database connections: 0")
+          print("ayo_runtime active sessions between gates: 0")
+          print("ayo_runtime dependencies outside ayo_test: 0")
           PY
 
       - name: Verify Batch 1 typing evidence equivalence
@@ -1773,6 +1877,52 @@ jobs:
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'batch2'
         run: |
           set -euo pipefail
+          uv run --locked python - <<'PY'
+          import psycopg
+
+          admin = dict(
+              host="127.0.0.1", dbname="postgres", user="ayo_test",
+              password="ayo_test_password", autocommit=True,
+          )
+          disposable_databases = (
+              "ayo_certification_restore_cert",
+              "ayo_certification",
+              "ayo_roundtrip",
+          )
+          with psycopg.connect(**admin) as connection:
+              databases = connection.execute(
+                  "SELECT datname FROM pg_database WHERE datname = ANY(%s) ORDER BY datname",
+                  (list(disposable_databases),),
+              ).fetchall()
+              connections = connection.execute(
+                  "SELECT datname, usename FROM pg_stat_activity "
+                  "WHERE datname = ANY(%s) ORDER BY datname, usename",
+                  (list(disposable_databases),),
+              ).fetchall()
+              runtime_sessions = connection.execute(
+                  "SELECT datname FROM pg_stat_activity "
+                  "WHERE usename = 'ayo_runtime' ORDER BY datname"
+              ).fetchall()
+              dependencies = connection.execute(
+                  """
+                  SELECT COALESCE(database.datname, '<shared>'), count(*)
+                  FROM pg_shdepend dependency
+                  JOIN pg_roles role ON role.oid = dependency.refobjid
+                  LEFT JOIN pg_database database ON database.oid = dependency.dbid
+                  WHERE role.rolname = 'ayo_runtime'
+                    AND database.datname IS DISTINCT FROM 'ayo_test'
+                  GROUP BY database.datname
+                  ORDER BY database.datname
+                  """
+              ).fetchall()
+          if databases or connections or runtime_sessions or dependencies:
+              raise SystemExit(
+                  "Batch 2 migration database precondition failed: "
+                  f"databases={databases!r} connections={connections!r} "
+                  f"runtime_sessions={runtime_sessions!r} dependencies={dependencies!r}"
+              )
+          print("Batch 2 migration database precondition: PASS")
+          PY
           uv run --locked pytest -m migration --no-cov -q --junitxml=batch2-migrations.xml
           uv run --locked python - <<'PY'
           import hashlib
@@ -1891,6 +2041,46 @@ jobs:
           ):
               changed = copy.deepcopy(environment); changed[key] = value
               rejected(label, verify_environment, changed)
+
+          production_identity = {
+              "base_sha": "cb202d1ec2e6ad35ccb75824f1b5332ba41f3934",
+              "base_backend_tree": "ae03d4fd14a59c83cef6d62bd0c0d8cc1851a4f7",
+              "candidate_backend_tree": "ae03d4fd14a59c83cef6d62bd0c0d8cc1851a4f7",
+              "backend_path_changes": 0,
+          }
+          def verify_production_identity(value):
+              assert value == production_identity
+          for label, key, value in (
+              ("candidate BACKEND tree drift", "candidate_backend_tree", "0" * 40),
+              ("unauthorized BACKEND path", "backend_path_changes", 1),
+              ("stale pre-registry production tree", "base_backend_tree", "5c4895867a7cbf7537158ba41fa7a5361d1ddf31"),
+              ("missing authoritative base binding", "base_sha", ""),
+          ):
+              changed = copy.deepcopy(production_identity); changed[key] = value
+              rejected(label, verify_production_identity, changed)
+
+          lifecycle = {
+              "certification_databases": 0,
+              "certification_connections": 0,
+              "runtime_sessions": 0,
+              "runtime_dependencies_outside_active_database": 0,
+              "cleanup_after_failure": True,
+              "cleanup_before_role_drop": True,
+              "database_names_unique": True,
+          }
+          def verify_lifecycle(value):
+              assert value == lifecycle
+          for label, key, value in (
+              ("residual ayo_certification database", "certification_databases", 1),
+              ("active cleanup-blocking connection", "certification_connections", 1),
+              ("ayo_runtime-owned object leak", "runtime_dependencies_outside_active_database", 1),
+              ("ayo_runtime ACL leak", "runtime_dependencies_outside_active_database", 1),
+              ("role drop before database cleanup", "cleanup_before_role_drop", False),
+              ("cleanup skipped after failure", "cleanup_after_failure", False),
+              ("database-name collision", "database_names_unique", False),
+          ):
+              changed = copy.deepcopy(lifecycle); changed[key] = value
+              rejected(label, verify_lifecycle, changed)
           print("Batch 2 negative admission controls: PASS")
           PY
 
@@ -1903,6 +2093,63 @@ jobs:
       - name: Audit installed dependencies
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true'
         run: uv run --locked pip-audit
+
+      - name: Final PostgreSQL lifecycle cleanup
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true'
+        run: |
+          uv run --locked python - <<'PY'
+          import psycopg
+
+          connection_args = dict(
+              host="127.0.0.1", user="ayo_test", password="ayo_test_password",
+              autocommit=True,
+          )
+          disposable_databases = (
+              "ayo_certification_restore_cert",
+              "ayo_certification",
+              "ayo_roundtrip",
+          )
+          with psycopg.connect(dbname="postgres", **connection_args) as connection:
+              for database in disposable_databases:
+                  connection.execute(
+                      "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+                      "WHERE datname = %s AND pid <> pg_backend_pid()",
+                      (database,),
+                  )
+                  connection.execute(f'DROP DATABASE IF EXISTS "{database}"')
+              connection.execute(
+                  "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+                  "WHERE usename = 'ayo_runtime' AND pid <> pg_backend_pid()"
+              )
+          with psycopg.connect(dbname="ayo_test", **connection_args) as connection:
+              if connection.execute(
+                  "SELECT 1 FROM pg_roles WHERE rolname = 'ayo_runtime'"
+              ).fetchone():
+                  connection.execute("DROP OWNED BY ayo_runtime")
+          with psycopg.connect(dbname="postgres", **connection_args) as connection:
+              connection.execute("DROP ROLE IF EXISTS ayo_runtime")
+              databases = connection.execute(
+                  "SELECT datname FROM pg_database WHERE datname = ANY(%s)",
+                  (list(disposable_databases),),
+              ).fetchall()
+              connections = connection.execute(
+                  "SELECT datname, usename FROM pg_stat_activity "
+                  "WHERE datname = ANY(%s) OR usename = 'ayo_runtime'",
+                  (list(disposable_databases),),
+              ).fetchall()
+              role_count = connection.execute(
+                  "SELECT count(*) FROM pg_roles WHERE rolname = 'ayo_runtime'"
+              ).fetchone()[0]
+          if databases or connections or role_count:
+              raise SystemExit(
+                  "Final PostgreSQL lifecycle cleanup failed: "
+                  f"databases={databases!r} connections={connections!r} "
+                  f"roles={role_count}"
+              )
+          print("Final disposable database count: 0")
+          print("Final ayo_runtime connection count: 0")
+          print("Final ayo_runtime role count: 0")
+          PY
 
       - name: Verify certified candidate tree cleanliness
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true'
