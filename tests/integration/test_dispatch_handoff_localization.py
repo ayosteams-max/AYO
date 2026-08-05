@@ -373,7 +373,9 @@ def test_language_preference_is_owned_versioned_and_does_not_mutate_dispatch(
         at=NOW,
     )
     assert changed.version == 2
-    assert service.get_own_preference(subject=subject).preferred_language == "fr-ET"
+    preference = service.get_own_preference(subject=subject)
+    assert preference is not None
+    assert preference.preferred_language == "fr-ET"
     with postgres_composition.unit_of_work() as unit:
         assert unit.ride_requests.get(request.request_id).version == request.version
         unit.localization.add_manifest(

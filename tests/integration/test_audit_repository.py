@@ -27,7 +27,7 @@ def audit_event(**changes) -> AuditEvent:
         "source_module": "rides",
     }
     values.update(changes)
-    return AuditEvent(**values)
+    return AuditEvent.model_validate(values)
 
 
 def sample_ride() -> Ride:

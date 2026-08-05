@@ -73,7 +73,7 @@ def arrival_signals(**updates) -> ArrivalSignals:
         "operationally_available": True,
     }
     values.update(updates)
-    return ArrivalSignals(**values)
+    return ArrivalSignals.model_validate(values)
 
 
 def context(**updates) -> WaitingPolicyContext:
@@ -84,7 +84,7 @@ def context(**updates) -> WaitingPolicyContext:
         "service_context": ServiceContext.STANDARD,
     }
     values.update(updates)
-    return WaitingPolicyContext(**values)
+    return WaitingPolicyContext.model_validate(values)
 
 
 def policy(**updates) -> WaitingPolicyDefinition:
@@ -100,7 +100,7 @@ def policy(**updates) -> WaitingPolicyDefinition:
         "minimum_location_confidence_bps": 8000,
     }
     values.update(updates)
-    return WaitingPolicyDefinition(**values)
+    return WaitingPolicyDefinition.model_validate(values)
 
 
 def continuity(**updates) -> ContinuitySignals:
@@ -113,7 +113,7 @@ def continuity(**updates) -> ContinuitySignals:
         "reasonable_notification": True,
     }
     values.update(updates)
-    return ContinuitySignals(**values)
+    return ContinuitySignals.model_validate(values)
 
 
 def verified_arrival():

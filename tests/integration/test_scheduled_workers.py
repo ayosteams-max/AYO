@@ -1,7 +1,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from threading import Barrier
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import insert
@@ -21,7 +21,7 @@ NOW = datetime(2026, 7, 16, 12, tzinfo=UTC)
 
 class Processor:
     def __init__(self) -> None:
-        self.processed = []
+        self.processed: list[UUID] = []
 
     def process(self, checkpoint, *, now):
         del now

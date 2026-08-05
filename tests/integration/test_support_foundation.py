@@ -66,7 +66,7 @@ def support_case(requester: Identity, **changes) -> SupportCase:
         "updated_at": now,
         "retention_classification": RetentionClassification.ROUTINE_SUPPORT,
     }
-    return SupportCase(**(values | changes))
+    return SupportCase.model_validate(values | changes)
 
 
 def grant(composition, person: Identity, code: str) -> None:
