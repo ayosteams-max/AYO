@@ -280,6 +280,9 @@ jobs:
             48ce81c2ee545a5f7a37d65cfd0c4ddd59ead1ff)
               mode=batch2
               ;;
+            90b974a321c2423909926cbefe58a39ad1685436)
+              mode=courier-pickup-idempotency-v1
+              ;;
             *)
               echo "Unreviewed tests tree: $tests_tree" >&2
               exit 1
@@ -289,6 +292,70 @@ jobs:
           echo "tests_tree=$tests_tree" >> "$GITHUB_OUTPUT"
           echo "Governed evidence mode: $mode"
           echo "Governed tests tree: $tests_tree"
+
+      - name: Bind exact Courier Pickup Idempotency V1 candidate identity
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'courier-pickup-idempotency-v1'
+        run: |
+          set -euo pipefail
+          uv run --locked python - <<'PY'
+          import hashlib
+          import os
+          import subprocess
+
+          expected = {
+              "base": "4eda7c5e80907eba9b60c20d64561087ef50c84b",
+              "candidate": "3e89c5f62640515158acc5bb99bf77d661dbf187",
+              "tree": "da9b3193004c81f49d5259c46ed1abae76d3edf4",
+              "backend": "922eedd43fa5aba1356dabf84a7f2b55735a83ab",
+              "tests": "90b974a321c2423909926cbefe58a39ad1685436",
+              "manifest": "fea72f1893f61ce043ab744a29e8fb43337b0d26a08fe54b8caef38c0bde005f",
+              "migration": "1152223fb6fe0237745e37834fa56076b080d4d0",
+          }
+          paths = [
+              "BACKEND/courier_pickup/application.py",
+              "BACKEND/courier_pickup/idempotency.py",
+              "BACKEND/persistence/courier_pickup_repository.py",
+              "BACKEND/persistence/tables.py",
+              "database/migrations/versions/20260805_0057_courier_pickup_idempotency_replay.py",
+              "tests/integration/test_courier_pickup_idempotency.py",
+              "tests/integration/test_migrations.py",
+              "tests/integration/test_request_access_provenance.py",
+              "tests/test_courier_pickup_idempotency.py",
+              "tests/test_migration_foundation.py",
+          ]
+          def git(*args):
+              return subprocess.run(
+                  ["git", *args], check=True, capture_output=True, text=True,
+              ).stdout.strip()
+          reviewed_head = expected["candidate"]
+          if git("rev-parse", reviewed_head) != reviewed_head:
+              raise SystemExit("reviewed Courier Pickup candidate SHA is unavailable")
+          if git("merge-base", expected["base"], reviewed_head) != expected["base"]:
+              raise SystemExit("Courier Pickup candidate is not descended from its reviewed base")
+          if git("show", "-s", "--format=%T", reviewed_head) != expected["tree"]:
+              raise SystemExit("Courier Pickup candidate tree drift")
+          if git("rev-parse", f"{reviewed_head}:BACKEND") != expected["backend"]:
+              raise SystemExit("Courier Pickup BACKEND tree drift")
+          if git("rev-parse", f"{reviewed_head}:tests") != expected["tests"]:
+              raise SystemExit("Courier Pickup tests tree drift")
+          if git("rev-parse", f"{reviewed_head}:database/migrations/versions/20260805_0057_courier_pickup_idempotency_replay.py") != expected["migration"]:
+              raise SystemExit("Migration 0057 blob drift")
+          changed = git("diff", "--name-only", expected["base"], reviewed_head).splitlines()
+          if changed != paths:
+              raise SystemExit(f"Courier Pickup ten-path boundary drift: {changed!r}")
+          fingerprint = hashlib.sha256("\n".join(changed).encode()).hexdigest()
+          if fingerprint != expected["manifest"]:
+              raise SystemExit(f"Courier Pickup manifest fingerprint drift: {fingerprint}")
+          forbidden = (
+              ".github/", ".secrets.baseline", "pyproject.toml", "uv.lock",
+              "AYO-Mobile/", "docs/", "BACKEND/courier_dispatch/", "BACKEND/custody/",
+              "BACKEND/authorization/registry.py",
+          )
+          if any(path.startswith(forbidden) for path in changed):
+              raise SystemExit("Courier Pickup candidate contains a forbidden path")
+          print("Courier Pickup Idempotency V1 exact candidate identity: PASS")
+          print("Courier Pickup ten-path manifest fingerprint:", fingerprint)
+          PY
 
       - name: Verify lock file is current
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true'
@@ -465,6 +532,59 @@ jobs:
           echo "mode=$mode" >> "$GITHUB_OUTPUT"
           echo "Coverage comparison mode: $mode"
           echo "Coverage comparison SHA: ${comparison_sha:-certified-tree-contract}"
+
+      - name: Bind tested Courier Pickup tree to trusted authoritative base
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'courier-pickup-idempotency-v1'
+        env:
+          TESTED_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          TRUSTED_BASE_SHA: ${{ steps.coverage_base.outputs.sha }}
+        run: |
+          set -euo pipefail
+          uv run --locked python - <<'PY'
+          import hashlib
+          import os
+          import subprocess
+
+          expected_paths = [
+              "BACKEND/courier_pickup/application.py",
+              "BACKEND/courier_pickup/idempotency.py",
+              "BACKEND/persistence/courier_pickup_repository.py",
+              "BACKEND/persistence/tables.py",
+              "database/migrations/versions/20260805_0057_courier_pickup_idempotency_replay.py",
+              "tests/integration/test_courier_pickup_idempotency.py",
+              "tests/integration/test_migrations.py",
+              "tests/integration/test_request_access_provenance.py",
+              "tests/test_courier_pickup_idempotency.py",
+              "tests/test_migration_foundation.py",
+          ]
+          expected = {
+              "backend": "922eedd43fa5aba1356dabf84a7f2b55735a83ab",
+              "tests": "90b974a321c2423909926cbefe58a39ad1685436",
+              "manifest": "fea72f1893f61ce043ab744a29e8fb43337b0d26a08fe54b8caef38c0bde005f",
+              "migration": "1152223fb6fe0237745e37834fa56076b080d4d0",
+          }
+          def git(*args):
+              return subprocess.run(
+                  ["git", *args], check=True, capture_output=True, text=True,
+              ).stdout.strip()
+          head, base = os.environ["TESTED_HEAD_SHA"], os.environ["TRUSTED_BASE_SHA"]
+          if not head or not base or git("merge-base", head, base) != base:
+              raise SystemExit("Courier Pickup tested head is not bound to its trusted base")
+          changed = git("diff", "--name-only", base, head).splitlines()
+          if changed != expected_paths:
+              raise SystemExit(f"Courier Pickup tested ten-path boundary drift: {changed!r}")
+          fingerprint = hashlib.sha256("\n".join(changed).encode()).hexdigest()
+          if fingerprint != expected["manifest"]:
+              raise SystemExit(f"Courier Pickup tested manifest drift: {fingerprint}")
+          for subtree, value in (("BACKEND", expected["backend"]), ("tests", expected["tests"])):
+              if git("rev-parse", f"{head}:{subtree}") != value:
+                  raise SystemExit(f"Courier Pickup tested {subtree} tree drift")
+          migration = "database/migrations/versions/20260805_0057_courier_pickup_idempotency_replay.py"
+          if git("rev-parse", f"{head}:{migration}") != expected["migration"]:
+              raise SystemExit("Courier Pickup tested Migration 0057 blob drift")
+          print("Courier Pickup tested content is exactly bound to trusted base:", base)
+          print("Courier Pickup tested ten-path manifest fingerprint:", fingerprint)
+          PY
 
       - name: Test all admitted non-PostgreSQL behavior with coverage
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'pre-batch2'
@@ -918,25 +1038,37 @@ jobs:
                   "Batch 2 authoritative base production tree drift: "
                   f"{base_backend_tree} != {expected_backend_tree}"
               )
+          base_tests_tree = subprocess.run(
+              ["git", "rev-parse", f"{compare_sha}:tests"],
+              check=True, capture_output=True, text=True,
+          ).stdout.strip()
           changed = subprocess.run(
               ["git", "diff", "--name-only", compare_sha, "HEAD"],
               check=True, capture_output=True, text=True,
           ).stdout.splitlines()
-          if len(changed) != 87 or any(not path.startswith("tests/") for path in changed):
-              raise SystemExit(f"Batch 2 changed-path boundary drift: {changed!r}")
-          manifest_fingerprint = hashlib.sha256(("\n".join(changed) + "\n").encode()).hexdigest()
-          if manifest_fingerprint != "e30aed43e012c6bc04b47cb346f9fce31c62d011cf14b9c3729b78e53eb6caba":
-              raise SystemExit(f"Batch 2 manifest fingerprint drift: {manifest_fingerprint}")
-          statuses = subprocess.run(
-              ["git", "diff", "--name-status", compare_sha, "HEAD"],
-              check=True, capture_output=True, text=True,
-          ).stdout.splitlines()
-          distribution = {
-              code: sum(line.startswith(code + "\t") for line in statuses)
-              for code in ("A", "M", "D")
-          }
-          if distribution != {"A": 61, "M": 25, "D": 1}:
-              raise SystemExit(f"Batch 2 path distribution drift: {distribution!r}")
+          if base_tests_tree == "48ce81c2ee545a5f7a37d65cfd0c4ddd59ead1ff":
+              manifest_fingerprint = "authoritative-batch2-state-preserved"
+              if any(path.startswith("tests/") or path.startswith("BACKEND/") for path in changed):
+                  raise SystemExit(
+                      "post-Batch-2 change altered the authoritative tests or BACKEND tree: "
+                      f"{changed!r}"
+                  )
+          else:
+              if len(changed) != 87 or any(not path.startswith("tests/") for path in changed):
+                  raise SystemExit(f"Batch 2 changed-path boundary drift: {changed!r}")
+              manifest_fingerprint = hashlib.sha256(("\n".join(changed) + "\n").encode()).hexdigest()
+              if manifest_fingerprint != "e30aed43e012c6bc04b47cb346f9fce31c62d011cf14b9c3729b78e53eb6caba":
+                  raise SystemExit(f"Batch 2 manifest fingerprint drift: {manifest_fingerprint}")
+              statuses = subprocess.run(
+                  ["git", "diff", "--name-status", compare_sha, "HEAD"],
+                  check=True, capture_output=True, text=True,
+              ).stdout.splitlines()
+              distribution = {
+                  code: sum(line.startswith(code + "\t") for line in statuses)
+                  for code in ("A", "M", "D")
+              }
+              if distribution != {"A": 61, "M": 25, "D": 1}:
+                  raise SystemExit(f"Batch 2 path distribution drift: {distribution!r}")
           immutable_blobs = {
               "database/migrations/versions/20260716_0016_canonical_ride_request.py": "3c1e4b8400567b154582ffbb5f7426d933db1d23",
               "database/migrations/versions/20260723_0055_courier_dispatch_increment1.py": "5f9def981c2db843e37dbd11e8b6f924f4d819fe",
@@ -963,9 +1095,166 @@ jobs:
           print("Coverage strategic target: 70%")
           PY
 
+      - name: Verify exact Courier Pickup Idempotency V1 test and coverage contract
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'courier-pickup-idempotency-v1'
+        env:
+          COVERAGE_COMPARE_SHA: ${{ steps.coverage_base.outputs.sha }}
+        run: |
+          set -euo pipefail
+          uv run --locked pytest --collect-only -q > courier-pickup-all-collect.txt
+          uv run --locked pytest --junitxml=courier-pickup-results.xml \
+            --cov=BACKEND --cov-branch \
+            --cov-report=json:courier-pickup-coverage.json --cov-report=term \
+            --cov-fail-under=70 -q
+          uv run --locked python - <<'PY'
+          import hashlib
+          import json
+          import os
+          import re
+          import subprocess
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          expected_xfail = "tests/test_services.py::test_cash_commission_is_not_lost_on_repeated_wallet_refresh"
+          expected_reason = "Known prototype defect: cash commission is destructively netted twice"
+          nodes = sorted(
+              line.strip() for line in Path("courier-pickup-all-collect.txt").read_text().splitlines()
+              if "::" in line
+          )
+          if len(nodes) != 719 or len(nodes) != len(set(nodes)):
+              raise SystemExit(f"Courier Pickup collection drift: {len(nodes)}")
+          test_fingerprint = hashlib.sha256("\n".join(nodes).encode()).hexdigest()
+          if test_fingerprint != "bca01756759be5ccb56571d874a015cb8c2d952fad68c75f85c49b02c235bf09":
+              raise SystemExit(f"Courier Pickup test inventory drift: {test_fingerprint}")
+
+          cases = ET.parse("courier-pickup-results.xml").getroot().findall(".//testcase")
+          passed = failed = errors = skipped = xfailed = 0
+          xfail_nodes = {}
+          for case in cases:
+              failure, error, skip = case.find("failure"), case.find("error"), case.find("skipped")
+              if failure is not None:
+                  failed += 1
+              elif error is not None:
+                  errors += 1
+              elif skip is not None:
+                  detail = " ".join((skip.get("type", ""), skip.get("message", ""), skip.text or ""))
+                  node = f"{case.get('classname').replace('.', '/')}.py::{case.get('name')}"
+                  if "xfail" in detail.lower():
+                      xfailed += 1; xfail_nodes[node] = detail
+                  else:
+                      skipped += 1
+              else:
+                  passed += 1
+          if (passed, failed, errors, skipped, xfailed) != (718, 0, 0, 0, 1):
+              raise SystemExit(
+                  "Courier Pickup test outcomes drift: "
+                  f"{(passed, failed, errors, skipped, xfailed)!r}"
+              )
+          if set(xfail_nodes) != {expected_xfail} or expected_reason not in xfail_nodes[expected_xfail]:
+              raise SystemExit(f"Courier Pickup xfail drift: {xfail_nodes!r}")
+
+          coverage = json.loads(Path("courier-pickup-coverage.json").read_text())
+          totals = coverage["totals"]
+          exact = (
+              totals["num_statements"], totals["missing_lines"], totals["num_branches"],
+              totals["num_partial_branches"], totals["covered_lines"],
+              totals["covered_branches"], totals["percent_covered"],
+          )
+          expected = (21826, 3983, 4518, 1003, 17843, 2591, 77.56604919526268)
+          if exact != expected:
+              raise SystemExit(f"Courier Pickup coverage totals drift: {exact!r}")
+          semantic = {
+              "totals": {key: totals[key] for key in sorted(totals)},
+              "files": {
+                  path: {key: value["summary"][key] for key in sorted(value["summary"])}
+                  for path, value in sorted(coverage["files"].items())
+              },
+          }
+          coverage_fingerprint = hashlib.sha256(
+              json.dumps(semantic, sort_keys=True, separators=(",", ":")).encode()
+          ).hexdigest()
+          if coverage_fingerprint != "c505f7c9d6d85cf1f0e479c7bd175a3a7838bbe409f4c66543eba9bf1c1cb32a":
+              raise SystemExit(f"Courier Pickup coverage fingerprint drift: {coverage_fingerprint}")
+          if totals["percent_covered"] < 77.56604919526268:
+              raise SystemExit("Courier Pickup coverage fell below its reviewed floor")
+
+          compare_sha = os.environ.get("COVERAGE_COMPARE_SHA")
+          if compare_sha != "4eda7c5e80907eba9b60c20d64561087ef50c84b":
+              raise SystemExit(f"Courier Pickup coverage base drift: {compare_sha}")
+          diff = subprocess.run(
+              ["git", "diff", "--unified=0", compare_sha, "HEAD", "--", "BACKEND"],
+              check=True, capture_output=True, text=True,
+          ).stdout
+          changed, path, candidate_line = {}, None, None
+          for line in diff.splitlines():
+              if line.startswith("+++ b/"):
+                  path = line[6:]
+              elif line.startswith("@@"):
+                  match = re.search(r"\+(\d+)(?:,(\d+))?", line)
+                  candidate_line = int(match.group(1)) if match else None
+              elif candidate_line is not None and line.startswith("+") and not line.startswith("+++"):
+                  changed.setdefault(path, set()).add(candidate_line); candidate_line += 1
+              elif candidate_line is not None and not line.startswith("-"):
+                  candidate_line += 1
+          inventory, uncovered = [], []
+          for changed_path, lines in sorted(changed.items()):
+              report = coverage["files"].get(changed_path)
+              if report is None:
+                  continue
+              executable = set(report["executed_lines"]) | set(report["missing_lines"])
+              missing = set(report["missing_lines"])
+              for number in sorted(lines & executable):
+                  inventory.append((changed_path, number))
+                  if number in missing:
+                      uncovered.append((changed_path, number))
+          if len(inventory) != 106 or uncovered:
+              raise SystemExit(
+                  f"Courier Pickup modified-code coverage drift: "
+                  f"statements={len(inventory)} uncovered={uncovered!r}"
+              )
+          print("Courier Pickup tests: 718 passed, 1 governed xfail")
+          print("Courier Pickup test inventory fingerprint:", test_fingerprint)
+          print("Courier Pickup coverage totals:", exact)
+          print("Courier Pickup coverage fingerprint:", coverage_fingerprint)
+          print("Courier Pickup changed executable statements: 106 covered, 0 uncovered")
+          PY
+
       - name: Verify PostgreSQL 17/PostGIS integration tests without skips
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true'
         run: uv run --locked pytest -m "integration and not migration" --no-cov -q
+
+      - name: Verify exact Courier Pickup PostgreSQL inventory
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'courier-pickup-idempotency-v1'
+        run: |
+          set -euo pipefail
+          uv run --locked pytest -m "integration and not migration" --collect-only -q > courier-pickup-postgresql-collect.txt
+          uv run --locked pytest -m "integration and not migration" --no-cov -q \
+            --junitxml=courier-pickup-postgresql.xml
+          uv run --locked python - <<'PY'
+          import hashlib
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+          nodes = sorted(
+              line.strip() for line in Path("courier-pickup-postgresql-collect.txt").read_text().splitlines()
+              if "::" in line
+          )
+          fingerprint = hashlib.sha256("\n".join(nodes).encode()).hexdigest()
+          if len(nodes) != 190 or len(nodes) != len(set(nodes)):
+              raise SystemExit(f"Courier Pickup PostgreSQL collection drift: {len(nodes)}")
+          if fingerprint != "2667515aef3df16257f44a4890a361d85f37b46bcde3badde6175a2c67650b90":
+              raise SystemExit(f"Courier Pickup PostgreSQL fingerprint drift: {fingerprint}")
+          cases = ET.parse("courier-pickup-postgresql.xml").getroot().findall(".//testcase")
+          failures = sum(case.find("failure") is not None for case in cases)
+          errors = sum(case.find("error") is not None for case in cases)
+          skipped = sum(case.find("skipped") is not None for case in cases)
+          if (len(cases), failures, errors, skipped) != (190, 0, 0, 0):
+              raise SystemExit(
+                  "Courier Pickup PostgreSQL result drift: "
+                  f"{(len(cases), failures, errors, skipped)!r}"
+              )
+          print("Courier Pickup PostgreSQL nodes: 190 passed")
+          print("Courier Pickup PostgreSQL inventory fingerprint:", fingerprint)
+          PY
 
       - name: Install and verify PostgreSQL 17 client
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true'
@@ -1037,10 +1326,12 @@ jobs:
           AYO_DATABASE_URL: postgresql+psycopg://ayo_test:ayo_test_password@127.0.0.1:5432/ayo_roundtrip
           AYO_DATABASE_SSL_MODE: disable
           PYTHONPATH: .
+          EVIDENCE_MODE: ${{ steps.evidence_contract.outputs.mode }}
         run: |
           uv run --locked python - <<'PY'
           import hashlib
           import json
+          import os
           import time
 
           import psycopg
@@ -1071,6 +1362,11 @@ jobs:
               DatabaseSettings(application_name="ayo-ci-migration-roundtrip")
           )
           runner = MigrationRunner(engine)
+          expected_head = (
+              "20260805_0057"
+              if os.environ["EVIDENCE_MODE"] == "courier-pickup-idempotency-v1"
+              else "20260724_0056"
+          )
 
           def downgrade_with_migration_lock(revision):
               with engine.connect() as connection:
@@ -1161,19 +1457,22 @@ jobs:
                       "Migration 0056 did not restore its exact predecessor schema"
                   )
               runner.upgrade("20260724_0056")
-              final_revision, final_fingerprint = revision_and_fingerprint()
+              reupgraded_0056, reupgraded_fingerprint_0056 = revision_and_fingerprint()
               if (
                   revision_0056 != "20260724_0056"
-                  or final_revision != "20260724_0056"
-                  or final_fingerprint != fingerprint_0056
+                  or reupgraded_0056 != "20260724_0056"
+                  or reupgraded_fingerprint_0056 != fingerprint_0056
               ):
                   raise SystemExit("Migration 0056 re-upgrade schema drift")
+
+              runner.upgrade(expected_head)
+              final_revision, _ = revision_and_fingerprint()
 
               readiness = SchemaVersionReadinessChecker(engine).check()
               if (
                   not readiness.ready
-                  or readiness.current_revision != "20260724_0056"
-                  or readiness.expected_revision != "20260724_0056"
+                  or readiness.current_revision != expected_head
+                  or readiness.expected_revision != expected_head
               ):
                   raise SystemExit("Round-trip database is not at canonical readiness")
               print("Migration 0055 predecessor fingerprint:", fingerprint_0054)
@@ -1390,6 +1689,37 @@ jobs:
               payload = "\n".join(item.render() for item in diagnostics)
               return hashlib.sha1(payload.encode()).hexdigest()
 
+          def reviewed_v1_fingerprints(path):
+              diagnostics = []
+              for raw in Path(path).read_text(encoding="utf-8").splitlines():
+                  line = raw.replace("\\", "/")
+                  for root in {
+                      os.environ["SOURCE_DIR"].replace("\\", "/").rstrip("/") + "/",
+                      str(Path.cwd()).replace("\\", "/").rstrip("/") + "/",
+                  }:
+                      if line.startswith(root):
+                          line = line[len(root):]
+                          break
+                  match = pattern.fullmatch(line)
+                  if match:
+                      diagnostics.append(Diagnostic(
+                          match["path"], int(match["line"]), int(match["column"]),
+                          match["code"], match["message"],
+                      ))
+              diagnostics.sort()
+              column_payload = "\n".join(
+                  f"{item.path}|{item.line}|{item.column}|{item.code}|{item.message}"
+                  for item in diagnostics
+              )
+              semantic_payload = "\n".join(
+                  f"{item.path}|{item.code}|{item.message}" for item in diagnostics
+              )
+              return (
+                  diagnostics,
+                  hashlib.sha256(column_payload.encode()).hexdigest(),
+                  hashlib.sha256(semantic_payload.encode()).hexdigest(),
+              )
+
           def report(label, diagnostics):
               files = {item.path for item in diagnostics}
               codes = Counter(item.code for item in diagnostics)
@@ -1449,7 +1779,52 @@ jobs:
 
           source_strict = normalized("source-strict.txt")
           candidate_strict = normalized("candidate-strict.txt")
-          compare("strict backend", source_strict, candidate_strict)
+          mode = os.environ["EVIDENCE_MODE"]
+          if mode == "courier-pickup-idempotency-v1":
+              source_raw, source_column_fp, source_semantic_fp = reviewed_v1_fingerprints("source-strict.txt")
+              candidate_raw, candidate_column_fp, candidate_semantic_fp = reviewed_v1_fingerprints("candidate-strict.txt")
+              source_semantic = Counter((item.path, item.code, item.message) for item in source_raw)
+              candidate_semantic = Counter((item.path, item.code, item.message) for item in candidate_raw)
+              if source_semantic != candidate_semantic:
+                  print("SOURCE_ONLY_SEMANTIC|", sorted((source_semantic - candidate_semantic).elements()))
+                  print("CANDIDATE_ONLY_SEMANTIC|", sorted((candidate_semantic - source_semantic).elements()))
+                  raise SystemExit("Courier Pickup strict MyPy semantic drift")
+              moved = []
+              for semantic in sorted(source_semantic):
+                  old_locations = sorted(
+                      (item.line, item.column) for item in source_raw
+                      if (item.path, item.code, item.message) == semantic
+                  )
+                  new_locations = sorted(
+                      (item.line, item.column) for item in candidate_raw
+                      if (item.path, item.code, item.message) == semantic
+                  )
+                  if old_locations != new_locations:
+                      moved.append((semantic, old_locations, new_locations))
+              expected_moved = [(
+                  (
+                      "BACKEND/courier_pickup/application.py", "no-any-return",
+                      'Returning Any from function declared to return "CourierPickupView" ',
+                  ),
+                  [(32, 13), (48, 13), (59, 13), (217, 17), (246, 13)],
+                  [(33, 13), (49, 13), (60, 13), (231, 17), (268, 13)],
+              )]
+              if moved != expected_moved:
+                  raise SystemExit(f"Courier Pickup reviewed MyPy movement drift: {moved!r}")
+              if source_column_fp != "68f0923bd0210e03a348e98fd3171a522fb6d1d3a08e6c037f7edd4fbe3fc7c2":
+                  raise SystemExit(f"Courier Pickup strict source fingerprint drift: {source_column_fp}")
+              if candidate_column_fp != "04aa83367515fea79e35c40566050d168022308de12e93bb1a48d792d14074b8":
+                  raise SystemExit(f"Courier Pickup strict column fingerprint drift: {candidate_column_fp}")
+              if source_semantic_fp != candidate_semantic_fp or candidate_semantic_fp != "c40b3dff746b5e5b659b79d4dfa60ab9aa857b2964235f03778655327ed624bc":
+                  raise SystemExit(f"Courier Pickup strict semantic fingerprint drift: {candidate_semantic_fp}")
+              print("Courier Pickup strict source column fingerprint:", source_column_fp)
+              print("Courier Pickup strict candidate column fingerprint:", candidate_column_fp)
+              print("Courier Pickup strict location-insensitive fingerprint:", candidate_semantic_fp)
+              print("Courier Pickup strict source-only semantic diagnostics: []")
+              print("Courier Pickup strict candidate-only semantic diagnostics: []")
+              print("Courier Pickup strict moved diagnostics:", moved)
+          else:
+              compare("strict backend", source_strict, candidate_strict)
           strict_files = {item.path for item in candidate_strict}
           if len(candidate_strict) != 387 or len(strict_files) != 52:
               raise SystemExit("strict backend MyPy historical count drift")
@@ -1462,25 +1837,27 @@ jobs:
           }
           if Counter(item.code for item in candidate_strict) != expected_strict_codes:
               raise SystemExit("strict backend MyPy error-code distribution drift")
-          strict_fingerprint = fingerprint(candidate_strict)
-          if strict_fingerprint != "6257a24b9c057c822e45a041519a849c471f6c48":
-              raise SystemExit("strict backend MyPy governed fingerprint drift")
+          if mode != "courier-pickup-idempotency-v1":
+              strict_fingerprint = fingerprint(candidate_strict)
+              if strict_fingerprint != "6257a24b9c057c822e45a041519a849c471f6c48":
+                  raise SystemExit("strict backend MyPy governed fingerprint drift")
 
           source_configured = normalized("source-configured.txt")
-          mode = os.environ["EVIDENCE_MODE"]
           candidate_configured = normalized(
-              "candidate-configured.txt", allow_empty=mode == "batch2"
+              "candidate-configured.txt",
+              allow_empty=mode in {"batch2", "courier-pickup-idempotency-v1"},
           )
-          if mode == "batch2":
+          if mode in {"batch2", "courier-pickup-idempotency-v1"}:
               if candidate_configured:
                   report("Candidate configured", candidate_configured)
-                  raise SystemExit("Batch 2 configured MyPy is not clean")
+                  raise SystemExit("Configured MyPy is not clean")
               configured_output = Path("candidate-configured.txt").read_text(encoding="utf-8")
-              if "Success: no issues found in 447 source files" not in configured_output:
-                  raise SystemExit("Batch 2 configured MyPy 447-file contract drift")
+              expected_files = 450 if mode == "courier-pickup-idempotency-v1" else 447
+              if f"Success: no issues found in {expected_files} source files" not in configured_output:
+                  raise SystemExit(f"Configured MyPy {expected_files}-file contract drift")
               if int(os.environ["CANDIDATE_CONFIGURED_STATUS"]) != 0:
-                  raise SystemExit("Batch 2 configured MyPy did not exit successfully")
-              print("Batch 2 configured MyPy: clean across 447 files")
+                  raise SystemExit("Configured MyPy did not exit successfully")
+              print(f"Configured MyPy: clean across {expected_files} files")
           elif mode == "pre-batch2":
               compare(
                   "configured", source_configured, candidate_configured,
@@ -1661,9 +2038,9 @@ jobs:
           actual = scan_inventory(scan.get("results"))
           pre_batch2 = sorted(item for item in reviewed if item[0] not in BATCH2_ONLY_PATHS)
           mode = os.environ["EVIDENCE_MODE"]
-          if mode == "batch2":
-              exact("Batch 2 exact reviewed inventory", actual, reviewed)
-              selected = "Batch 2 exact 34-finding inventory"
+          if mode in {"batch2", "courier-pickup-idempotency-v1"}:
+              exact("exact reviewed inventory", actual, reviewed)
+              selected = "exact 34-finding inventory"
           elif mode == "pre-batch2":
               exact("pre-Batch-2 reviewed projection", actual, pre_batch2)
               selected = "pre-Batch-2 exact 11-finding projection"
@@ -1949,6 +2326,169 @@ jobs:
               raise SystemExit(f"Batch 2 migration inventory drift: {fingerprint}")
           print("Batch 2 migration nodes: 33 passed")
           print("Batch 2 migration inventory fingerprint:", fingerprint)
+          PY
+
+      - name: Verify exact Courier Pickup Migration 0057 inventory
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'courier-pickup-idempotency-v1'
+        run: |
+          set -euo pipefail
+          uv run --locked pytest -m migration --collect-only -q > courier-pickup-migration-collect.txt
+          uv run --locked pytest -m migration --no-cov -q \
+            --junitxml=courier-pickup-migrations.xml
+          uv run --locked python - <<'PY'
+          import hashlib
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+          nodes = sorted(
+              line.strip() for line in Path("courier-pickup-migration-collect.txt").read_text().splitlines()
+              if "::" in line
+          )
+          fingerprint = hashlib.sha256("\n".join(nodes).encode()).hexdigest()
+          if len(nodes) != 34 or len(nodes) != len(set(nodes)):
+              raise SystemExit(f"Courier Pickup migration collection drift: {len(nodes)}")
+          if fingerprint != "2155ff49595db8a8aefdc8813f5a03d8dea0123361b9be1f58d17cbd5474d7dc":
+              raise SystemExit(f"Courier Pickup migration fingerprint drift: {fingerprint}")
+          cases = ET.parse("courier-pickup-migrations.xml").getroot().findall(".//testcase")
+          failures = sum(case.find("failure") is not None for case in cases)
+          errors = sum(case.find("error") is not None for case in cases)
+          skipped = sum(case.find("skipped") is not None for case in cases)
+          if (len(cases), failures, errors, skipped) != (34, 0, 0, 0):
+              raise SystemExit(
+                  "Courier Pickup migration result drift: "
+                  f"{(len(cases), failures, errors, skipped)!r}"
+              )
+          print("Courier Pickup migration nodes: 34 passed")
+          print("Courier Pickup migration inventory fingerprint:", fingerprint)
+          PY
+
+      - name: Verify Courier Pickup Idempotency V1 admission negative controls
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true'
+        run: |
+          uv run --locked python - <<'PY'
+          import copy
+
+          def rejected(label, verifier, value):
+              try:
+                  verifier(value)
+              except (AssertionError, ValueError):
+                  print(f"NEGATIVE PASS: {label}")
+                  return
+              raise SystemExit(f"Courier Pickup negative control admitted: {label}")
+
+          identity = {
+              "base": "4eda7c5e80907eba9b60c20d64561087ef50c84b",
+              "candidate": "3e89c5f62640515158acc5bb99bf77d661dbf187",
+              "tree": "da9b3193004c81f49d5259c46ed1abae76d3edf4",
+              "backend": "922eedd43fa5aba1356dabf84a7f2b55735a83ab",
+              "tests": "90b974a321c2423909926cbefe58a39ad1685436",
+              "paths": 10,
+              "manifest": "fea72f1893f61ce043ab744a29e8fb43337b0d26a08fe54b8caef38c0bde005f",
+              "migration_blob": "1152223fb6fe0237745e37834fa56076b080d4d0",
+          }
+          def verify_identity(value): assert value == identity
+          for label, key, value in (
+              ("wrong candidate SHA", "candidate", "0" * 40),
+              ("wrong base SHA", "base", "0" * 40),
+              ("candidate tree drift", "tree", "0" * 40),
+              ("BACKEND tree drift", "backend", "0" * 40),
+              ("tests tree drift", "tests", "0" * 40),
+              ("unauthorized eleventh path", "paths", 11),
+              ("manifest drift", "manifest", "0" * 64),
+              ("Migration 0057 blob drift", "migration_blob", "0" * 40),
+          ):
+              changed = copy.deepcopy(identity); changed[key] = value
+              rejected(label, verify_identity, changed)
+
+          tests = {"collected": 719, "passed": 718, "failed": 0, "errors": 0,
+                   "skipped": 0, "xfailed": 1,
+                   "fingerprint": "bca01756759be5ccb56571d874a015cb8c2d952fad68c75f85c49b02c235bf09"}
+          def verify_tests(value): assert value == tests
+          for label, key, value in (
+              ("missing test node", "collected", 718),
+              ("extra test node", "collected", 720),
+              ("xfail drift", "xfailed", 0),
+              ("test fingerprint drift", "fingerprint", "0" * 64),
+          ):
+              changed = copy.deepcopy(tests); changed[key] = value
+              rejected(label, verify_tests, changed)
+
+          postgres = {"nodes": 190, "failed": 0, "errors": 0, "skipped": 0,
+                      "geometry": True,
+                      "fingerprint": "2667515aef3df16257f44a4890a361d85f37b46bcde3badde6175a2c67650b90"}
+          def verify_postgres(value): assert value == postgres
+          for label, key, value in (
+              ("failing PostgreSQL node", "failed", 1),
+              ("PostgreSQL node drift", "nodes", 189),
+              ("missing PostGIS geometry", "geometry", False),
+          ):
+              changed = copy.deepcopy(postgres); changed[key] = value
+              rejected(label, verify_postgres, changed)
+
+          migration = {"head": "20260805_0057", "nodes": 34, "failed": 0,
+                       "errors": 0, "skipped": 0,
+                       "fingerprint": "2155ff49595db8a8aefdc8813f5a03d8dea0123361b9be1f58d17cbd5474d7dc"}
+          def verify_migration(value): assert value == migration
+          for label, key, value in (
+              ("stale migration head", "head", "20260724_0056"),
+              ("migration-node drift", "nodes", 33),
+              ("failing migration node", "failed", 1),
+          ):
+              changed = copy.deepcopy(migration); changed[key] = value
+              rejected(label, verify_migration, changed)
+
+          coverage = {"statements": 21826, "missed": 3983, "branches": 4518,
+                      "partial": 1003, "covered_lines": 17843,
+                      "covered_branches": 2591, "percentage": 77.56604919526268,
+                      "changed_statements": 106, "uncovered_changed": 0,
+                      "fingerprint": "c505f7c9d6d85cf1f0e479c7bd175a3a7838bbe409f4c66543eba9bf1c1cb32a"}
+          def verify_coverage(value): assert value == coverage and value["percentage"] >= 77.56604919526268
+          for label, key, value in (
+              ("coverage below floor", "percentage", 77.56),
+              ("uncovered modified statement", "uncovered_changed", 1),
+              ("coverage fingerprint drift", "fingerprint", "0" * 64),
+          ):
+              changed = copy.deepcopy(coverage); changed[key] = value
+              rejected(label, verify_coverage, changed)
+
+          typing = {"configured_files": 450, "configured_errors": 0,
+                    "strict_errors": 387, "strict_files": 52,
+                    "column_fingerprint": "04aa83367515fea79e35c40566050d168022308de12e93bb1a48d792d14074b8",
+                    "semantic_fingerprint": "c40b3dff746b5e5b659b79d4dfa60ab9aa857b2964235f03778655327ed624bc"}
+          def verify_typing(value): assert value == typing
+          for label, key, value in (
+              ("configured MyPy issue", "configured_errors", 1),
+              ("strict MyPy semantic drift", "semantic_fingerprint", "0" * 64),
+              ("strict MyPy location drift", "column_fingerprint", "0" * 64),
+          ):
+              changed = copy.deepcopy(typing); changed[key] = value
+              rejected(label, verify_typing, changed)
+
+          replay = {"digest_version": 1, "snapshot_version": 1,
+                    "snapshot_complete": True, "outbox_messages": 1,
+                    "authorization_rechecked": True}
+          def verify_replay(value): assert value == replay
+          for label, key, value in (
+              ("unsupported digest version", "digest_version", 2),
+              ("unsupported snapshot version", "snapshot_version", 2),
+              ("incomplete replay snapshot", "snapshot_complete", False),
+              ("duplicate outbox insertion", "outbox_messages", 2),
+              ("unauthorized replay disclosure", "authorization_rechecked", False),
+          ):
+              changed = copy.deepcopy(replay); changed[key] = value
+              rejected(label, verify_replay, changed)
+
+          lifecycle = {"databases": 0, "connections": 0, "runtime_sessions": 0,
+                       "runtime_roles": 0, "cross_database_dependencies": 0,
+                       "cleanup_after_failure": True, "event_contract": "shared"}
+          def verify_lifecycle(value): assert value == lifecycle
+          for label, key, value in (
+              ("failed database cleanup", "databases", 1),
+              ("runtime role leak", "runtime_roles", 1),
+              ("event-path divergence", "event_contract", "divergent"),
+          ):
+              changed = copy.deepcopy(lifecycle); changed[key] = value
+              rejected(label, verify_lifecycle, changed)
+          print("Courier Pickup Idempotency V1 negative admission controls: PASS")
           PY
 
       - name: Verify Batch 2 admission negative controls
