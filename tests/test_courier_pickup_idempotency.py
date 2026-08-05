@@ -214,6 +214,34 @@ def test_snapshot_round_trip_is_bounded_and_fail_closed() -> None:
     )
     with pytest.raises(ValueError, match="size limit"):
         CourierPickupReplaySnapshotV1(response=oversized).encode()
+    with pytest.raises(ValueError, match="unsupported"):
+        CourierPickupReplaySnapshotV1(
+            response_schema_version=2, response=view()
+        ).encode()
+    oversized_encoded = CourierPickupReplaySnapshotV1(response=oversized).model_dump(
+        mode="json"
+    )
+    with pytest.raises(ValueError, match="size limit"):
+        CourierPickupReplaySnapshotV1.decode(oversized_encoded)
+
+
+def test_application_rejects_partial_location_evidence_before_unit_of_work() -> None:
+    app = CourierPickupApplication(SimpleNamespace())
+    subject = AuthorizationSubject(
+        identity_id=ACTOR_ID,
+        identity_type=IdentityType.DRIVER,
+        actor_type=ActorType.DRIVER,
+    )
+    with pytest.raises(CourierPickupConflict, match="location_evidence_invalid"):
+        app.courier_command(
+            subject,
+            pickup_id=PICKUP_ID,
+            expected_version=1,
+            action=CourierPickupAction.MARK_ARRIVED,
+            idempotency_key="partial-location-0001",
+            at=NOW,
+            location_evidence_reference=LOCATION_ID,
+        )
 
 
 def test_application_rejects_missing_assignment_before_any_write() -> None:

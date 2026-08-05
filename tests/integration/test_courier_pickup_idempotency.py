@@ -197,6 +197,30 @@ def test_malformed_snapshot_and_sensitive_material_are_rejected_or_absent(
         assert stored == "a" * 64
 
 
+@pytest.mark.parametrize("failure", ["incomplete", "mismatched_response_version"])
+def test_completed_replay_rejects_incomplete_or_mismatched_snapshot(
+    postgres_engine, failure
+) -> None:
+    row = completed_row()
+    if failure == "incomplete":
+        row.update(response_version=None, response_snapshot=None)
+    else:
+        row["response_version"] = 99
+    with postgres_engine.begin() as connection:
+        connection.execute(insert(commerce_courier_pickup_idempotency), row)
+        with pytest.raises(
+            CourierPickupConflict, match="idempotency_record_incompatible"
+        ):
+            PostgresCourierPickupRepository(connection).reserve(
+                actor_id=ACTOR,
+                pickup_id=PICKUP,
+                key="postgres-idempotency-0001",
+                action=CourierPickupAction.START_TRAVEL,
+                request_hash="a" * 64,
+                at=NOW,
+            )
+
+
 def _seed_command_state(engine) -> None:
     with engine.begin() as connection:
         for identity_id, identity_type in (
@@ -616,6 +640,31 @@ def test_forced_failure_rolls_back_every_effect(
             ).where(commerce_courier_pickups.c.pickup_id == PICKUP)
         ).one()
     assert row == (CourierPickupState.ASSIGNED.value, 1)
+
+
+def test_transition_without_reservation_fails_closed_and_rolls_back(
+    postgres_engine, command_state
+) -> None:
+    del command_state
+    with (
+        pytest.raises(CourierPickupConflict, match="idempotency_record_incompatible"),
+        postgres_engine.begin() as connection,
+    ):
+        repository = PostgresCourierPickupRepository(connection)
+        current = repository.get(PICKUP, lock=True)
+        assert current is not None
+        repository.transition(
+            current,
+            target=CourierPickupState.TRAVELLING,
+            action=CourierPickupAction.START_TRAVEL,
+            actor_id=ACTOR,
+            key="missing-reservation-0001",
+            at=NOW,
+            authority_basis="courier_pickup.manage_assigned",
+            correlation_id=CORRELATION,
+            causation_id=CAUSATION,
+        )
+    assert _effect_counts(postgres_engine) == (0, 0, 0, 0, 0)
 
 
 def test_database_lock_timeout_before_commit_retries_once(
