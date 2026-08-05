@@ -1,4 +1,3 @@
-import hashlib
 from datetime import datetime
 from uuid import UUID, uuid4
 
@@ -6,6 +5,11 @@ from sqlalchemy import Connection, insert, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from BACKEND.courier_pickup.engine import CourierPickupConflict
+from BACKEND.courier_pickup.idempotency import (
+    DIGEST_VERSION,
+    RESPONSE_SCHEMA_VERSION,
+    CourierPickupReplaySnapshotV1,
+)
 from BACKEND.courier_pickup.models import (
     CourierPickupAction,
     CourierPickupEvent,
@@ -171,13 +175,9 @@ class PostgresCourierPickupRepository:
         pickup_id: UUID,
         key: str,
         action: CourierPickupAction,
-        expected_version: int,
+        request_hash: str,
         at: datetime,
-        reason: CourierPickupExceptionReason | None = None,
     ) -> CourierPickupView | None:
-        digest = hashlib.sha256(
-            f"{action.value}:{expected_version}:{reason or ''}".encode()
-        ).hexdigest()
         created = self._connection.execute(
             pg_insert(commerce_courier_pickup_idempotency)
             .values(
@@ -185,8 +185,11 @@ class PostgresCourierPickupRepository:
                 pickup_id=pickup_id,
                 action=action.value,
                 idempotency_key=key,
-                request_hash=digest,
+                request_hash=request_hash,
+                digest_version=DIGEST_VERSION,
+                response_schema_version=RESPONSE_SCHEMA_VERSION,
                 response_version=None,
+                response_snapshot=None,
                 created_at=at,
             )
             .on_conflict_do_nothing()
@@ -205,11 +208,24 @@ class PostgresCourierPickupRepository:
             .mappings()
             .one()
         )
-        if row["pickup_id"] != pickup_id or row["request_hash"] != digest:
+        if row["pickup_id"] != pickup_id or row["request_hash"] != request_hash:
             raise CourierPickupConflict("idempotency_conflict")
-        result = self._required(pickup_id)
-        if row["response_version"] != result.pickup.version:
-            raise CourierPickupConflict("idempotency_result_unavailable")
+        if (
+            row["digest_version"] != DIGEST_VERSION
+            or row["response_schema_version"] != RESPONSE_SCHEMA_VERSION
+        ):
+            raise CourierPickupConflict("idempotency_record_incompatible")
+        if row["response_version"] is None or row["response_snapshot"] is None:
+            raise CourierPickupConflict("idempotency_record_incompatible")
+        try:
+            result = CourierPickupReplaySnapshotV1.decode(row["response_snapshot"])
+        except ValueError as error:
+            raise CourierPickupConflict("idempotency_record_incompatible") from error
+        if (
+            result.pickup.pickup_id != pickup_id
+            or result.pickup.version != row["response_version"]
+        ):
+            raise CourierPickupConflict("idempotency_record_incompatible")
         return result
 
     def transition(
@@ -313,7 +329,9 @@ class PostgresCourierPickupRepository:
                 causation_id=causation_id or current.pickup_id,
                 at=location_evidence_observed_at,
             )
-        self._connection.execute(
+        result = self._required(current.pickup_id)
+        snapshot = CourierPickupReplaySnapshotV1(response=result).encode()
+        completed = self._connection.execute(
             update(commerce_courier_pickup_idempotency)
             .where(
                 commerce_courier_pickup_idempotency.c.actor_identity_id == actor_id,
@@ -321,9 +339,16 @@ class PostgresCourierPickupRepository:
                 commerce_courier_pickup_idempotency.c.action == action.value,
                 commerce_courier_pickup_idempotency.c.idempotency_key == key,
             )
-            .values(response_version=version)
-        )
-        return self._required(current.pickup_id)
+            .where(
+                commerce_courier_pickup_idempotency.c.response_version.is_(None),
+                commerce_courier_pickup_idempotency.c.response_snapshot.is_(None),
+            )
+            .values(response_version=version, response_snapshot=snapshot)
+            .returning(commerce_courier_pickup_idempotency.c.pickup_id)
+        ).scalar_one_or_none()
+        if completed is None:
+            raise CourierPickupConflict("idempotency_record_incompatible")
+        return result
 
     def _record(
         self,
