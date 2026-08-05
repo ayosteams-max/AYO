@@ -889,6 +889,89 @@ jobs:
           print("Authorization-ordering tested five-path fingerprint:", fingerprint)
           PY
 
+      - name: Classify exact Courier Pickup response evidence authority
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true'
+        id: courier_pickup_response_authority_content
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_REF: ${{ github.ref }}
+          PUSH_HEAD_SHA: ${{ github.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          set -euo pipefail
+          uv run --locked python - <<'PY'
+          import os
+          import subprocess
+
+          base = "3891ad9bed216611da740c289e0f955eccd49990"
+          first = "8ee0592f785047ffe90df65111c6e51857abf7f1"
+          branch = "agent/courier-pickup-response-minimization-admission"
+
+          def git(*args, check=True):
+              result = subprocess.run(
+                  ["git", *args], check=check, capture_output=True, text=True,
+              )
+              return result.stdout.strip()
+
+          event = os.environ.get("EVENT_NAME", "")
+          if event == "pull_request":
+              if os.environ.get("PR_BASE_REF") != "main" or os.environ.get("PR_BASE_SHA") != base:
+                  raise SystemExit("response authority pull-request base drift")
+              if os.environ.get("PR_HEAD_REF") != branch:
+                  raise SystemExit("response authority pull-request branch drift")
+              head = os.environ.get("PR_HEAD_SHA", "")
+          elif event == "push":
+              if os.environ.get("EVENT_REF") != f"refs/heads/{branch}":
+                  raise SystemExit("response authority push branch drift")
+              head = os.environ.get("PUSH_HEAD_SHA", "")
+          else:
+              raise SystemExit(f"unsupported response authority event: {event!r}")
+
+          if not head or git("rev-parse", head) != head:
+              raise SystemExit("response authority resolved-head is unavailable")
+          if event == "push" and git("rev-parse", "HEAD") != head:
+              raise SystemExit("response authority push checkout/head drift")
+          if git("merge-base", base, head) != base:
+              raise SystemExit("response authority ancestry drift")
+          commits = git("rev-list", "--reverse", f"{base}..{head}").splitlines()
+          if len(commits) != 2 or commits[0] != first or commits[1] != head:
+              raise SystemExit(f"response authority two-commit history drift: {commits!r}")
+          if git("rev-parse", f"{head}^") != first or git("rev-parse", f"{first}^") != base:
+              raise SystemExit("response authority history was rewritten")
+          if git("diff", "--name-status", base, head).splitlines() != ["M\t.github/workflows/ci.yml"]:
+              raise SystemExit("response authority cumulative path/status drift")
+
+          for path in ("BACKEND", "tests", "database/migrations", "AYO-Mobile"):
+              if git("rev-parse", f"{base}:{path}") != git("rev-parse", f"{head}:{path}"):
+                  raise SystemExit(f"response authority altered protected tree: {path}")
+          for path in (
+              "BACKEND/courier_pickup/application.py",
+              "BACKEND/routes/courier_pickup.py",
+              ".secrets.baseline", "pyproject.toml", "uv.lock",
+          ):
+              if git("rev-parse", f"{base}:{path}") != git("rev-parse", f"{head}:{path}"):
+                  raise SystemExit(f"response authority altered protected file: {path}")
+          for path in (
+              "tests/integration/test_courier_pickup_api_contract.py",
+              "tests/test_courier_pickup_api_contract.py",
+          ):
+              base_has = subprocess.run(["git", "cat-file", "-e", f"{base}:{path}"]).returncode == 0
+              head_has = subprocess.run(["git", "cat-file", "-e", f"{head}:{path}"]).returncode == 0
+              if base_has or head_has:
+                  raise SystemExit(f"response authority unexpectedly contains feature test: {path}")
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write("content_classification=workflow-only-response-authority\n")
+              output.write(f"content_comparison_base_sha={base}\n")
+              output.write(f"authority_head_sha={head}\n")
+          print("Response evidence authority classification: workflow-only-response-authority")
+          print("Response evidence authority comparison base:", base)
+          print("Response evidence authority resolved head:", head)
+          PY
+
       - name: Test all admitted non-PostgreSQL behavior with coverage
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'pre-batch2'
         env:
@@ -1826,14 +1909,30 @@ jobs:
       - name: Derive exact Courier Pickup response-minimization evidence
         if: >-
           (success() || failure()) && steps.canonical_schema.outputs.ready == 'true' &&
-          steps.courier_pickup_authorization_ordering_content.outputs.content_classification == 'workflow-only-authority'
+          steps.courier_pickup_response_authority_content.outputs.content_classification == 'workflow-only-response-authority' &&
+          steps.courier_pickup_response_authority_content.outputs.content_comparison_base_sha == '3891ad9bed216611da740c289e0f955eccd49990'
+        env:
+          AYO_TEST_DATABASE_URL: postgresql+psycopg://ayo_test:ayo_test_password@127.0.0.1:5432/ayo_response_evidence
+          AYO_DATABASE_URL: postgresql+psycopg://ayo_test:ayo_test_password@127.0.0.1:5432/ayo_response_evidence
+          AYO_DATABASE_SSL_MODE: disable
         run: |
           set -euo pipefail
           candidate=/tmp/courier-pickup-response-minimization-candidate
+          source=/tmp/courier-pickup-response-minimization-source
           cleanup() {
             git worktree remove --force "$candidate" >/dev/null 2>&1 || true
+            git worktree remove --force "$source" >/dev/null 2>&1 || true
+            psql postgresql://ayo_test:ayo_test_password@127.0.0.1:5432/postgres \
+              -v ON_ERROR_STOP=1 -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'ayo_response_evidence' AND pid <> pg_backend_pid()" >/dev/null || true
+            dropdb --if-exists --host=127.0.0.1 --username=ayo_test ayo_response_evidence >/dev/null 2>&1 || true
           }
           trap cleanup EXIT
+          dropdb --if-exists --host=127.0.0.1 --username=ayo_test ayo_response_evidence
+          createdb --host=127.0.0.1 --username=ayo_test ayo_response_evidence
+          psql postgresql://ayo_test:ayo_test_password@127.0.0.1:5432/ayo_response_evidence \
+            -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS postgis"
+          git fetch --no-tags origin a18c68172ec7e998f6f01d4e610d3b52eab017cc
+          test "$(git rev-parse FETCH_HEAD)" = a18c68172ec7e998f6f01d4e610d3b52eab017cc
           git worktree add --detach "$candidate" a18c68172ec7e998f6f01d4e610d3b52eab017cc
           cd "$candidate"
           test "$(git rev-parse HEAD)" = a18c68172ec7e998f6f01d4e610d3b52eab017cc
@@ -1843,6 +1942,17 @@ jobs:
           test "$(git rev-parse HEAD:BACKEND/courier_pickup/application.py)" = 4a0c47355d1862e976d0d9bf539a158ec6aab8cc
           test "$(git rev-parse HEAD:.github/workflows/ci.yml)" = 023e560f68798c0a3af11c1e9318dde0d11ac1a9
           uv sync --locked
+          scan_root="$(mktemp -d)"
+          git archive HEAD | tar -x -C "$scan_root"
+          (
+            cd "$scan_root"
+            uv tool run --from 'detect-secrets==1.5.0' detect-secrets scan \
+              --all-files --exclude-files '^\.git/'
+          ) > response-secrets.json
+          rm -rf "$scan_root"
+          uv run --locked alembic upgrade head
+          test "$(uv run --locked alembic current | tail -n 1 | awk '{print $1}')" = 20260805_0057
+          uv run --locked python database/certify_restore.py
           uv run --locked pytest --collect-only -q > response-all-collect.txt
           uv run --locked pytest -m "not integration" --collect-only -q > response-nonpostgresql-collect.txt
           uv run --locked pytest -m "integration and not migration" --collect-only -q > response-postgresql-collect.txt
@@ -1850,15 +1960,27 @@ jobs:
             tests/test_courier_pickup_api_contract.py \
             tests/integration/test_courier_pickup_api_contract.py \
             > response-focused-collect.txt
+          uv run --locked pytest -m integration --collect-only -q \
+            tests/integration/test_migrations.py > response-migrations-collect.txt
           uv run --locked pytest --junitxml=response-results.xml \
             --cov=BACKEND --cov-branch --cov-report=json:response-coverage.json \
             --cov-report=term --cov-fail-under=70 -q
-          uv run --locked mypy --config-file pyproject.toml .
+          uv run --locked mypy --config-file pyproject.toml BACKEND tests \
+            > response-configured-mypy.txt
           set +e
           uv run --locked mypy --strict --show-column-numbers --show-error-codes BACKEND \
             > response-strict-mypy.txt 2>&1
           strict_status=$?
           set -e
+          cd "$GITHUB_WORKSPACE"
+          git worktree add --detach "$source" 3891ad9bed216611da740c289e0f955eccd49990
+          cd "$source"
+          uv sync --locked
+          set +e
+          uv run --locked mypy --strict --show-column-numbers --show-error-codes BACKEND \
+            > "$candidate/response-source-strict-mypy.txt" 2>&1
+          set -e
+          cd "$candidate"
           uv run --locked python - <<'PY'
           import hashlib
           import json
@@ -1886,6 +2008,8 @@ jobs:
               if actual != expected:
                   raise SystemExit(f"response-minimization inventory drift in {path}: {actual!r}")
               print("DERIVED inventory:", path, actual)
+          migration_inventory = inventory("response-migrations-collect.txt")
+          print("DERIVED migration inventory:", migration_inventory)
 
           cases = ET.parse("response-results.xml").getroot().findall(".//testcase")
           outcomes = {"passed": 0, "failed": 0, "errors": 0, "skipped": 0, "xfailed": 0}
@@ -1911,6 +2035,12 @@ jobs:
               raise SystemExit(f"response-minimization governed xfail drift: {xfails!r}")
           print("DERIVED execution outcomes:", outcomes)
           print("DERIVED governed xfail:", xfails)
+          execution_rows = sorted(
+              f"{case.get('classname')}|{case.get('name')}|"
+              f"{'failed' if case.find('failure') is not None else 'error' if case.find('error') is not None else 'skipped' if case.find('skipped') is not None else 'passed'}"
+              for case in cases
+          )
+          print("DERIVED execution fingerprint:", hashlib.sha256("\n".join(execution_rows).encode()).hexdigest())
 
           coverage = json.loads(Path("response-coverage.json").read_text())
           totals = coverage["totals"]
@@ -1955,23 +2085,44 @@ jobs:
           print("DERIVED route module coverage:", route["summary"]["percent_covered"])
 
           pattern = re.compile(r"^(BACKEND[\\/].*?):(\d+):(\d+): error: (.*)  \[([^]]+)\]$")
-          diagnostics = []
-          for raw in Path("response-strict-mypy.txt").read_text().splitlines():
-              match = pattern.match(raw)
-              if match:
-                  path, line, column, message, code = match.groups()
-                  diagnostics.append((path.replace("\\", "/"), int(line), int(column), code, message))
-          diagnostics.sort()
-          column_payload = "\n".join(
-              f"{path}|{line}|{column}|{code}|{message}"
-              for path, line, column, code, message in diagnostics
-          )
-          semantic_payload = "\n".join(
-              f"{path}|{code}|{message}" for path, _, _, code, message in diagnostics
-          )
+          def mypy_inventory(path):
+              diagnostics = []
+              for raw in Path(path).read_text().splitlines():
+                  match = pattern.match(raw)
+                  if match:
+                      name, line, column, message, code = match.groups()
+                      diagnostics.append((name.replace("\\", "/"), int(line), int(column), code, message))
+              diagnostics.sort()
+              column_payload = "\n".join(
+                  f"{name}|{line}|{column}|{code}|{message}"
+                  for name, line, column, code, message in diagnostics
+              )
+              semantic_payload = "\n".join(
+                  f"{name}|{code}|{message}" for name, _, _, code, message in diagnostics
+              )
+              return diagnostics, hashlib.sha256(column_payload.encode()).hexdigest(), hashlib.sha256(semantic_payload.encode()).hexdigest()
+          source_diagnostics, source_column, source_semantic = mypy_inventory("response-source-strict-mypy.txt")
+          diagnostics, column_fingerprint, semantic_fingerprint = mypy_inventory("response-strict-mypy.txt")
+          print("DERIVED configured MyPy:", Path("response-configured-mypy.txt").read_text().strip())
           print("DERIVED strict MyPy errors/files:", len(diagnostics), len({item[0] for item in diagnostics}))
-          print("DERIVED strict MyPy column fingerprint:", hashlib.sha256(column_payload.encode()).hexdigest())
-          print("DERIVED strict MyPy semantic fingerprint:", hashlib.sha256(semantic_payload.encode()).hexdigest())
+          print("DERIVED strict MyPy column fingerprint:", column_fingerprint)
+          print("DERIVED strict MyPy semantic fingerprint:", semantic_fingerprint)
+          source_semantic_rows = {(item[0], item[3], item[4]) for item in source_diagnostics}
+          candidate_semantic_rows = {(item[0], item[3], item[4]) for item in diagnostics}
+          print("DERIVED strict MyPy source-only semantic diagnostics:", sorted(source_semantic_rows - candidate_semantic_rows))
+          print("DERIVED strict MyPy candidate-only semantic diagnostics:", sorted(candidate_semantic_rows - source_semantic_rows))
+
+          secrets = json.loads(Path("response-secrets.json").read_text())
+          findings = sorted(
+              (path.replace("\\", "/"), int(item["line_number"]), str(item["type"]), str(item["hashed_secret"]), bool(item["is_verified"]))
+              for path, records in secrets["results"].items() for item in records
+          )
+          secret_payload = "\n".join(
+              f"{path}|{line}|{kind}|{digest}|{str(verified).lower()}"
+              for path, line, kind, digest, verified in findings
+          )
+          print("DERIVED detect-secrets version/findings:", secrets.get("version"), len(findings))
+          print("DERIVED detect-secrets fingerprint:", hashlib.sha256(secret_payload.encode()).hexdigest())
           if uncovered:
               raise SystemExit("response-minimization has uncovered modified production statements")
           raise SystemExit("DERIVATION COMPLETE: exact values require CTO review before permanent binding")
