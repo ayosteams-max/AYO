@@ -35,7 +35,7 @@ def candidate(cost: int, **changes):
         eligibility_policy_version="identity.v1",
     )
     values.update(changes)
-    return EligibleDriverInput(**values)
+    return EligibleDriverInput.model_validate(values)
 
 
 def test_pickup_speed_is_primary_and_ineligible_inputs_fail_closed() -> None:

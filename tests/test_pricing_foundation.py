@@ -33,7 +33,7 @@ def policy(**changes) -> PricingPolicy:
         "created_at": NOW,
     }
     values.update(changes)
-    return PricingPolicy(**values)
+    return PricingPolicy.model_validate(values)
 
 
 def metrics(**changes) -> RouteMetrics:
@@ -49,7 +49,7 @@ def metrics(**changes) -> RouteMetrics:
         "data_quality": DataQuality.APPROVED_SYNTHETIC,
     }
     values.update(changes)
-    return RouteMetrics(**values)
+    return RouteMetrics.model_validate(values)
 
 
 def test_integer_etb_calculation_is_deterministic_and_transparent() -> None:
