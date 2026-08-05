@@ -937,9 +937,12 @@ jobs:
           if git("merge-base", base, head) != base:
               raise SystemExit("response authority ancestry drift")
           commits = git("rev-list", "--reverse", f"{base}..{head}").splitlines()
-          if len(commits) != 2 or commits[0] != first or commits[1] != head:
-              raise SystemExit(f"response authority two-commit history drift: {commits!r}")
-          if git("rev-parse", f"{head}^") != first or git("rev-parse", f"{first}^") != base:
+          second = "05780834108a1496796e13536437de62f9543bd6"
+          if len(commits) != 3 or commits[:2] != [first, second] or commits[2] != head:
+              raise SystemExit(f"response authority three-commit history drift: {commits!r}")
+          if (git("rev-parse", f"{head}^") != second
+                  or git("rev-parse", f"{second}^") != first
+                  or git("rev-parse", f"{first}^") != base):
               raise SystemExit("response authority history was rewritten")
           if git("diff", "--name-status", base, head).splitlines() != ["M\t.github/workflows/ci.yml"]:
               raise SystemExit("response authority cumulative path/status drift")
@@ -1912,6 +1915,12 @@ jobs:
           steps.courier_pickup_response_authority_content.outputs.content_classification == 'workflow-only-response-authority' &&
           steps.courier_pickup_response_authority_content.outputs.content_comparison_base_sha == '3891ad9bed216611da740c289e0f955eccd49990'
         env:
+          PGHOST: 127.0.0.1
+          PGPORT: "5432"
+          PGUSER: ayo_test
+          PGPASSWORD: ayo_test_password
+          PGDATABASE: postgres
+          PGCONNECT_TIMEOUT: "5"
           AYO_TEST_DATABASE_URL: postgresql+psycopg://ayo_test:ayo_test_password@127.0.0.1:5432/ayo_response_evidence
           AYO_DATABASE_URL: postgresql+psycopg://ayo_test:ayo_test_password@127.0.0.1:5432/ayo_response_evidence
           AYO_DATABASE_SSL_MODE: disable
@@ -1920,16 +1929,29 @@ jobs:
           candidate=/tmp/courier-pickup-response-minimization-candidate
           source=/tmp/courier-pickup-response-minimization-source
           cleanup() {
+            primary_status=$?
             git worktree remove --force "$candidate" >/dev/null 2>&1 || true
             git worktree remove --force "$source" >/dev/null 2>&1 || true
-            psql postgresql://ayo_test:ayo_test_password@127.0.0.1:5432/postgres \
-              -v ON_ERROR_STOP=1 -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'ayo_response_evidence' AND pid <> pg_backend_pid()" >/dev/null || true
-            dropdb --if-exists --host=127.0.0.1 --username=ayo_test ayo_response_evidence >/dev/null 2>&1 || true
+            for database_name in ayo_response_evidence_restore_cert ayo_response_evidence; do
+              psql --no-password --dbname=postgres -v ON_ERROR_STOP=1 \
+                --set=database_name="$database_name" \
+                -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = :'database_name' AND pid <> pg_backend_pid()" >/dev/null || true
+              dropdb --no-password --if-exists --host=127.0.0.1 --username=ayo_test "$database_name" >/dev/null 2>&1 || true
+            done
+            residual="$(psql --no-password --dbname=postgres -v ON_ERROR_STOP=1 --tuples-only --no-align \
+              -c "SELECT count(*) FROM pg_database WHERE datname IN ('ayo_response_evidence', 'ayo_response_evidence_restore_cert')")" || residual=2
+            echo "Response evidence disposable database count: $residual"
+            if [[ "$residual" != "0" && "$primary_status" == "0" ]]; then
+              return 1
+            fi
+            return "$primary_status"
           }
           trap cleanup EXIT
-          dropdb --if-exists --host=127.0.0.1 --username=ayo_test ayo_response_evidence
-          createdb --host=127.0.0.1 --username=ayo_test ayo_response_evidence
-          psql postgresql://ayo_test:ayo_test_password@127.0.0.1:5432/ayo_response_evidence \
+          psql --no-password --dbname=postgres -v ON_ERROR_STOP=1 -c "SELECT 1" >/dev/null
+          echo "Response evidence PostgreSQL authentication preflight: PASS"
+          dropdb --no-password --if-exists --host=127.0.0.1 --username=ayo_test ayo_response_evidence
+          createdb --no-password --host=127.0.0.1 --username=ayo_test ayo_response_evidence
+          psql --no-password --dbname=ayo_response_evidence \
             -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS postgis"
           git fetch --no-tags origin a18c68172ec7e998f6f01d4e610d3b52eab017cc
           test "$(git rev-parse FETCH_HEAD)" = a18c68172ec7e998f6f01d4e610d3b52eab017cc
