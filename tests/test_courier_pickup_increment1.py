@@ -254,7 +254,7 @@ def test_stale_location_and_wrong_merchant_scope_are_rejected() -> None:
             location_evidence_version=1,
             location_evidence_observed_at=NOW - timedelta(minutes=6),
         )
-    with pytest.raises(CourierPickupConflict, match="access_denied"):
+    with pytest.raises(CourierPickupConflict, match="courier_pickup_unavailable"):
         app.merchant_acknowledge(
             subject(merchant_owner, IdentityType.MERCHANT),
             merchant_id=uuid4(),

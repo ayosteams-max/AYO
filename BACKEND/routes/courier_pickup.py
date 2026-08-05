@@ -6,7 +6,7 @@ from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from BACKEND.authorization.contracts import AuthorizationSubject
-from BACKEND.authorization.enforcement import AuthorizationRoute, permission_required
+from BACKEND.authorization.enforcement import AuthorizationRoute
 from BACKEND.courier_pickup.application import CourierPickupApplication
 from BACKEND.courier_pickup.engine import CourierPickupConflict
 from BACKEND.courier_pickup.models import (
@@ -51,11 +51,6 @@ def create_courier_pickup_router(application: CourierPickupApplication) -> APIRo
     router = APIRouter(tags=["courier-pickup"], route_class=AuthorizationRoute)
 
     @router.get("/mobile/merchants/{merchant_id}/orders/{order_id}/courier-pickup")
-    @permission_required(
-        "courier_pickup.read_own_merchant",
-        resource_type="merchant",
-        resource_id_parameter="merchant_id",
-    )
     def merchant_detail(
         merchant_id: UUID, order_id: UUID, request: Request
     ) -> dict[str, Any]:
@@ -67,11 +62,6 @@ def create_courier_pickup_router(application: CourierPickupApplication) -> APIRo
 
     @router.post(
         "/mobile/merchants/{merchant_id}/courier-pickups/{pickup_id}/acknowledge"
-    )
-    @permission_required(
-        "courier_pickup.acknowledge_own_merchant",
-        resource_type="merchant",
-        resource_id_parameter="merchant_id",
     )
     def acknowledge(
         merchant_id: UUID,
@@ -104,22 +94,12 @@ def create_courier_pickup_router(application: CourierPickupApplication) -> APIRo
         ).model_dump(mode="json")
 
     @router.get("/mobile/courier-pickups/{pickup_id}")
-    @permission_required(
-        "courier_pickup.manage_assigned",
-        resource_type="courier_pickup",
-        resource_id_parameter="pickup_id",
-    )
     def courier_detail(pickup_id: UUID, request: Request) -> dict[str, Any]:
         return _call(
             lambda: application.courier_detail(_subject(request), pickup_id=pickup_id)
         ).model_dump(mode="json")
 
     @router.post("/mobile/courier-pickups/{pickup_id}/actions")
-    @permission_required(
-        "courier_pickup.manage_assigned",
-        resource_type="courier_pickup",
-        resource_id_parameter="pickup_id",
-    )
     def courier_command(
         pickup_id: UUID,
         command: CourierPickupCommand,
