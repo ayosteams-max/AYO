@@ -911,6 +911,7 @@ jobs:
           second = "05780834108a1496796e13536437de62f9543bd6"
           third = "49666b37395193f224076314a46047aa75218dcc"
           fourth = "85388216555c58571576707e6694fd2c08f865e5"
+          fifth = "4d11481fccb2f27b6368331186c89ad8b2161156"
           branch = "agent/courier-pickup-response-minimization-admission"
 
           def git(*args, check=True):
@@ -940,9 +941,10 @@ jobs:
           if git("merge-base", base, head) != base:
               raise SystemExit("response authority ancestry drift")
           commits = git("rev-list", "--reverse", f"{base}..{head}").splitlines()
-          if len(commits) != 5 or commits[:4] != [first, second, third, fourth] or commits[4] != head:
-              raise SystemExit(f"response authority five-commit history drift: {commits!r}")
-          if (git("rev-parse", f"{head}^") != fourth
+          if len(commits) != 6 or commits[:5] != [first, second, third, fourth, fifth] or commits[5] != head:
+              raise SystemExit(f"response authority six-commit history drift: {commits!r}")
+          if (git("rev-parse", f"{head}^") != fifth
+                  or git("rev-parse", f"{fifth}^") != fourth
                   or git("rev-parse", f"{fourth}^") != third
                   or git("rev-parse", f"{third}^") != second
                   or git("rev-parse", f"{second}^") != first
@@ -1990,9 +1992,12 @@ jobs:
           spec = BACKEND.__spec__
           if spec is None or not spec.submodule_search_locations:
               raise SystemExit("BACKEND import is unavailable from immutable candidate root")
-          locations = [Path(value).resolve() for value in spec.submodule_search_locations]
-          if locations != [candidate_root / "BACKEND"]:
-              raise SystemExit(f"BACKEND import escaped immutable candidate root: {locations!r}")
+          approved = (candidate_root / "BACKEND").resolve()
+          locations = {Path(value).resolve() for value in spec.submodule_search_locations}
+          if not locations:
+              raise SystemExit("BACKEND import has no canonical namespace location")
+          if locations != {approved}:
+              raise SystemExit(f"BACKEND import escaped immutable candidate root: {sorted(map(str, locations))!r}")
           print("Response evidence candidate-root import preflight: PASS")
           PY
           uv sync --locked
