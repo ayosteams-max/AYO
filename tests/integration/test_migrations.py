@@ -1474,3 +1474,47 @@ def test_courier_pickup_increment_one_migrates_additively(
         "courier_pickup.correct_own_merchant",
         "courier_pickup.close_own_merchant",
     } <= permissions
+
+
+def test_courier_pickup_idempotency_v1_migrates_and_refuses_evidence_loss(
+    postgres_engine, empty_database
+) -> None:
+    from alembic import command
+
+    runner = MigrationRunner(postgres_engine)
+    config = alembic_config()
+    runner.upgrade("20260724_0056")
+    with postgres_engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO ayo.commerce_courier_pickup_idempotency "
+                "(actor_identity_id,pickup_id,action,idempotency_key,request_hash,created_at) "
+                "VALUES ('30000000-0000-4000-8000-000000000001',"
+                "'30000000-0000-4000-8000-000000000002','legacy','legacy-key',"
+                "repeat('a',64),now())"
+            )
+        )
+    runner.upgrade("20260805_0057")
+    with postgres_engine.connect() as connection:
+        legacy = connection.execute(
+            text(
+                "SELECT digest_version,response_schema_version,response_snapshot "
+                "FROM ayo.commerce_courier_pickup_idempotency"
+            )
+        ).one()
+        assert legacy == (0, 0, None)
+    command.downgrade(config, "20260724_0056")
+    runner.upgrade("20260805_0057")
+    with postgres_engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO ayo.commerce_courier_pickup_idempotency "
+                "(actor_identity_id,pickup_id,action,idempotency_key,request_hash,"
+                "digest_version,response_schema_version,response_version,response_snapshot,created_at) "
+                "VALUES ('30000000-0000-4000-8000-000000000003',"
+                "'30000000-0000-4000-8000-000000000004','start_travel','v1-key',"
+                "repeat('b',64),1,1,2,'{}'::jsonb,now())"
+            )
+        )
+    with pytest.raises(Exception, match="committed Courier Pickup V1 replay evidence"):
+        command.downgrade(config, "20260724_0056")
