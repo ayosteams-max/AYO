@@ -40,12 +40,18 @@ class CourierPickupApplication:
         with self._composition.unit_of_work() as unit:
             merchant = unit.merchants.get_profile(merchant_id, lock=False)
             if merchant is None or merchant.owner_identity_id != subject.identity_id:
-                raise CourierPickupConflict("access_denied")
+                raise CourierPickupConflict("courier_pickup_unavailable")
             if merchant.state is not MerchantState.APPROVED:
                 raise CourierPickupConflict("merchant_unavailable")
             value = unit.courier_pickup.get_by_order(order_id)
             if value is None or value.pickup.merchant_id != merchant_id:
-                raise CourierPickupConflict("courier_pickup_not_found")
+                raise CourierPickupConflict("courier_pickup_unavailable")
+            if not unit.authorization.has_permission(
+                subject.identity_id,
+                "courier_pickup.read_own_merchant",
+                at=datetime.now(UTC),
+            ):
+                raise CourierPickupConflict("access_denied")
             return value
 
     def courier_detail(
@@ -54,8 +60,14 @@ class CourierPickupApplication:
         with self._composition.unit_of_work() as unit:
             value = unit.courier_pickup.view(pickup_id)
             if value is None:
-                raise CourierPickupConflict("courier_pickup_not_found")
+                raise CourierPickupConflict("courier_pickup_unavailable")
             if value.pickup.assigned_courier_identity_id != subject.identity_id:
+                raise CourierPickupConflict("courier_pickup_unavailable")
+            if not unit.authorization.has_permission(
+                subject.identity_id,
+                "courier_pickup.manage_assigned",
+                at=datetime.now(UTC),
+            ):
                 raise CourierPickupConflict("access_denied")
             return value
 
@@ -174,10 +186,10 @@ class CourierPickupApplication:
             instant = self._at(at)
             current = unit.courier_pickup.get(pickup_id, lock=True)
             if current is None:
-                raise CourierPickupConflict("courier_pickup_not_found")
+                raise CourierPickupConflict("courier_pickup_unavailable")
             if merchant_id is None:
                 if current.assigned_courier_identity_id != subject.identity_id:
-                    raise CourierPickupConflict("access_denied")
+                    raise CourierPickupConflict("courier_pickup_unavailable")
                 permission = {
                     CourierPickupAction.CORRECT_ARRIVAL: "courier_pickup.correct_assigned",
                     CourierPickupAction.END_ATTEMPT: "courier_pickup.close_assigned",
@@ -189,7 +201,7 @@ class CourierPickupApplication:
                     or merchant.owner_identity_id != subject.identity_id
                     or current.merchant_id != merchant_id
                 ):
-                    raise CourierPickupConflict("access_denied")
+                    raise CourierPickupConflict("courier_pickup_unavailable")
                 permission = {
                     CourierPickupAction.CORRECT_WAITING: "courier_pickup.correct_own_merchant",
                     CourierPickupAction.END_ATTEMPT: "courier_pickup.close_own_merchant",
