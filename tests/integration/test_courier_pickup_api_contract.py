@@ -3,7 +3,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import delete, insert
+from sqlalchemy import delete, insert, update
 
 from BACKEND.audit.models import ActorType
 from BACKEND.authorization.contracts import AuthorizationSubject
@@ -12,9 +12,11 @@ from BACKEND.config.settings import Settings
 from BACKEND.courier_pickup.application import CourierPickupApplication
 from BACKEND.identity.models import IdentityType
 from BACKEND.main import CourierPickupPlatformActivation, create_app
+from BACKEND.merchant.models import MerchantKind, OnboardingSource
 from BACKEND.persistence.composition import PostgresRepositoryComposition
 from BACKEND.persistence.tables import (
     identity_role_assignments,
+    merchant_profiles,
     permissions,
     role_permissions,
 )
@@ -112,6 +114,14 @@ def api_contract_state(postgres_engine):
     _cleanup_command_state(postgres_engine)
     _seed_command_state(postgres_engine)
     with postgres_engine.begin() as connection:
+        connection.execute(
+            update(merchant_profiles)
+            .where(merchant_profiles.c.merchant_id == MERCHANT)
+            .values(
+                kind=MerchantKind.COMPANY.value,
+                onboarding_source=OnboardingSource.SELF.value,
+            )
+        )
         for permission_id, code in (
             (MERCHANT_READ_PERMISSION, "courier_pickup.read_own_merchant"),
             (MERCHANT_ACK_PERMISSION, "courier_pickup.acknowledge_own_merchant"),
