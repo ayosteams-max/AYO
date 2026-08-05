@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta, timezone
 from uuid import UUID
 
 import pytest
@@ -142,6 +142,36 @@ def test_digest_rejects_naive_timestamps_unknown_fields_and_versions() -> None:
         command(digest_schema_version=2).hexdigest()
 
 
+def test_digest_normalizes_uuid_utc_unicode_and_explicit_nulls() -> None:
+    canonical = command()
+    equivalent = command(
+        pickup_id=str(PICKUP_ID).upper(),
+        actor_identity_id=str(ACTOR_ID).upper(),
+        location_evidence_observed_at=NOW.astimezone(timezone(timedelta(hours=3))),
+        pickup_policy_code="AYO_COURIER_PICKUP_POLICY_V1",
+    )
+    assert equivalent.canonical_bytes() == canonical.canonical_bytes()
+    assert equivalent.hexdigest() == canonical.hexdigest()
+    assert b'"acting_for_identity_id":null' in canonical.canonical_bytes()
+    assert b'"merchant_id":null' in canonical.canonical_bytes()
+    assert b'"reason":null' in canonical.canonical_bytes()
+    assert b"2026-08-05T12:34:56.123456Z" in canonical.canonical_bytes()
+    assert (
+        command(pickup_policy_code="Cafe\u0301").canonical_bytes()
+        == command(pickup_policy_code="Caf\u00e9").canonical_bytes()
+    )
+
+
+def test_tracing_metadata_is_not_part_of_digest_schema() -> None:
+    fields = set(CourierPickupCommandDigestV1.model_fields)
+    assert "correlation_id" not in fields
+    assert "causation_id" not in fields
+    with pytest.raises(ValidationError):
+        command(correlation_id=UUID(int=90))
+    with pytest.raises(ValidationError):
+        command(causation_id=UUID(int=91))
+
+
 def test_snapshot_round_trip_is_bounded_and_fail_closed() -> None:
     encoded = CourierPickupReplaySnapshotV1(response=view()).encode()
     assert len(str(encoded).encode()) < SNAPSHOT_MAX_BYTES
@@ -150,6 +180,25 @@ def test_snapshot_round_trip_is_bounded_and_fail_closed() -> None:
         CourierPickupReplaySnapshotV1.decode({**encoded, "unexpected": True})
     with pytest.raises(ValueError, match="unsupported"):
         CourierPickupReplaySnapshotV1.decode({**encoded, "response_schema_version": 2})
+    malformed = {
+        **encoded,
+        "response": {**encoded["response"], "request_hash": "not-public"},
+    }
+    with pytest.raises(ValueError, match="malformed"):
+        CourierPickupReplaySnapshotV1.decode(malformed)
+    serialized = str(encoded).lower()
+    for forbidden in (
+        "latitude",
+        "longitude",
+        "location_payload",
+        "password",
+        "credential",
+        "token",
+        "authentication_context",
+        "canonical_command",
+        "request_hash",
+    ):
+        assert forbidden not in serialized
     oversized = view().model_copy(
         update={
             "pickup": view().pickup.model_copy(

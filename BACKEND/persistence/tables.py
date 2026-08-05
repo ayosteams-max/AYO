@@ -5621,7 +5621,8 @@ commerce_courier_pickup_idempotency = Table(
     CheckConstraint(
         "digest_version = 0 OR "
         "((response_version IS NULL AND response_snapshot IS NULL) OR "
-        "(response_version IS NOT NULL AND response_snapshot IS NOT NULL))",
+        "(response_version IS NOT NULL AND response_snapshot IS NOT NULL "
+        "AND octet_length(response_snapshot::text) <= 65536))",
         name="courier_pickup_idempotency_completion_valid",
     ),
     schema=AYO_SCHEMA,

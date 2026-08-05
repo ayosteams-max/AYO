@@ -373,7 +373,7 @@ def test_provenance_and_continuity_are_database_immutable(
     del migration_built_schema
     readiness = SchemaVersionReadinessChecker(postgres_engine).check()
     assert readiness.ready
-    assert readiness.current_revision == "20260724_0056"
+    assert readiness.current_revision == "20260805_0057"
     with postgres_engine.connect() as connection:
         triggers = set(
             connection.execute(

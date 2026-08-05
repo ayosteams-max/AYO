@@ -65,7 +65,8 @@ def upgrade() -> None:
         table,
         "digest_version = 0 OR "
         "((response_version IS NULL AND response_snapshot IS NULL) OR "
-        "(response_version IS NOT NULL AND response_snapshot IS NOT NULL))",
+        "(response_version IS NOT NULL AND response_snapshot IS NOT NULL "
+        "AND octet_length(response_snapshot::text) <= 65536))",
         schema="ayo",
     )
 

@@ -321,7 +321,7 @@ def test_canonical_compatibility_upgrades_from_previous_revision(
     } <= after
     readiness = SchemaVersionReadinessChecker(postgres_engine).check()
     assert readiness.ready
-    assert readiness.current_revision == "20260724_0056"
+    assert readiness.current_revision == "20260805_0057"
     assert readiness.current_revision == expected_schema_revision()
 
 
@@ -1498,12 +1498,21 @@ def test_courier_pickup_idempotency_v1_migrates_and_refuses_evidence_loss(
     with postgres_engine.connect() as connection:
         legacy = connection.execute(
             text(
-                "SELECT digest_version,response_schema_version,response_snapshot "
+                "SELECT request_hash,digest_version,response_schema_version,"
+                "response_snapshot "
                 "FROM ayo.commerce_courier_pickup_idempotency"
             )
         ).one()
-        assert legacy == (0, 0, None)
+        assert legacy == ("a" * 64, 0, 0, None)
+        assert SchemaVersionReadinessChecker(
+            postgres_engine
+        ).check().current_revision == ("20260805_0057")
+        assert expected_schema_revision() == "20260805_0057"
+        assert expected_schema_revision() != "20260724_0056"
     command.downgrade(config, "20260724_0056")
+    assert SchemaVersionReadinessChecker(postgres_engine).check().current_revision == (
+        "20260724_0056"
+    )
     runner.upgrade("20260805_0057")
     with postgres_engine.begin() as connection:
         connection.execute(
@@ -1518,3 +1527,16 @@ def test_courier_pickup_idempotency_v1_migrates_and_refuses_evidence_loss(
         )
     with pytest.raises(Exception, match="committed Courier Pickup V1 replay evidence"):
         command.downgrade(config, "20260724_0056")
+    readiness = SchemaVersionReadinessChecker(postgres_engine).check()
+    assert readiness.ready
+    assert readiness.current_revision == "20260805_0057"
+    with postgres_engine.connect() as connection:
+        preserved = connection.execute(
+            text(
+                "SELECT request_hash,digest_version,response_schema_version,"
+                "response_version,response_snapshot "
+                "FROM ayo.commerce_courier_pickup_idempotency "
+                "WHERE idempotency_key='v1-key'"
+            )
+        ).one()
+    assert preserved == ("b" * 64, 1, 1, 2, {})
