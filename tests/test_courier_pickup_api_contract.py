@@ -4,8 +4,9 @@ from typing import cast
 from uuid import UUID, uuid4
 
 import pytest
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.routing import APIRoute
+from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from BACKEND.audit.models import ActorType
@@ -33,6 +34,9 @@ from BACKEND.routes.courier_pickup import (
     _merchant_command_result,
     _merchant_status,
     create_courier_pickup_router,
+)
+from BACKEND.routes.courier_pickup import (
+    _subject as route_subject,
 )
 
 NOW = datetime(2026, 8, 5, 8, tzinfo=UTC)
@@ -228,6 +232,87 @@ def test_openapi_exposes_only_closed_public_pickup_response_schemas() -> None:
         "CourierPickupEvidence",
     ):
         assert prohibited_schema not in schemas
+
+
+class _RouteApplication:
+    def __init__(self, view: CourierPickupView) -> None:
+        self.view = view
+
+    def merchant_detail(self, *args, **kwargs) -> CourierPickupView:
+        return self.view
+
+    def merchant_acknowledge(self, *args, **kwargs) -> CourierPickupView:
+        return self.view
+
+    def courier_detail(self, *args, **kwargs) -> CourierPickupView:
+        return self.view
+
+    def courier_command(self, *args, **kwargs) -> CourierPickupView:
+        return self.view
+
+
+class _RouteEnforcer:
+    def __init__(self, subject: AuthorizationSubject) -> None:
+        self.subject = subject
+
+    def enforce(self, request: Request, requirement) -> None:
+        request.state.authorization_subject = self.subject
+
+
+def test_all_four_http_adapters_execute_the_explicit_public_mappers() -> None:
+    view = _view()
+    subject = _subject(view.pickup.assigned_courier_identity_id, IdentityType.DRIVER)
+    application = cast(CourierPickupApplication, _RouteApplication(view))
+    app = FastAPI()
+    app.state.authorization_enforcer = _RouteEnforcer(subject)
+    app.include_router(create_courier_pickup_router(application))
+    client = TestClient(app)
+
+    merchant_status = client.get(
+        f"/mobile/merchants/{view.pickup.merchant_id}/orders/{view.pickup.order_id}/courier-pickup"
+    )
+    merchant_command = client.post(
+        f"/mobile/merchants/{view.pickup.merchant_id}/courier-pickups/{view.pickup.pickup_id}/acknowledge",
+        headers={"Idempotency-Key": "merchant-command-0001"},
+        json={"expected_version": 3, "action": "acknowledge_arrival"},
+    )
+    courier_status = client.get(f"/mobile/courier-pickups/{view.pickup.pickup_id}")
+    courier_command = client.post(
+        f"/mobile/courier-pickups/{view.pickup.pickup_id}/actions",
+        headers={"Idempotency-Key": "courier-command-0001"},
+        json={"expected_version": 3, "action": "start_travel"},
+    )
+
+    assert merchant_status.status_code == merchant_command.status_code == 200
+    assert courier_status.status_code == courier_command.status_code == 200
+    assert (
+        set(merchant_status.json()) == set(merchant_command.json()) == MERCHANT_FIELDS
+    )
+    assert set(courier_status.json()) == set(courier_command.json()) == COURIER_FIELDS
+
+
+def test_adapter_authentication_and_invalid_merchant_action_fail_closed() -> None:
+    request = Request({"type": "http", "headers": []})
+    with pytest.raises(HTTPException) as missing_subject:
+        route_subject(request)
+    assert missing_subject.value.status_code == 401
+    assert missing_subject.value.detail == {"code": "authentication_required"}
+
+    view = _view()
+    subject = _subject(view.pickup.assigned_courier_identity_id, IdentityType.DRIVER)
+    application = cast(CourierPickupApplication, _RouteApplication(view))
+    app = FastAPI()
+    app.state.authorization_enforcer = _RouteEnforcer(subject)
+    app.include_router(create_courier_pickup_router(application))
+    response = TestClient(app).post(
+        f"/mobile/merchants/{view.pickup.merchant_id}/courier-pickups/{view.pickup.pickup_id}/acknowledge",
+        headers={"Idempotency-Key": "merchant-command-0002"},
+        json={"expected_version": 3, "action": "start_travel"},
+    )
+    assert response.status_code == 409
+    assert response.json() == {
+        "detail": {"code": "courier_pickup_transition_not_allowed"}
+    }
 
 
 @pytest.mark.parametrize(

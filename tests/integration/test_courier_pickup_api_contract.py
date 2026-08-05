@@ -20,6 +20,8 @@ from tests.integration.test_courier_pickup_idempotency import (
     _subject,
 )
 
+pytestmark = pytest.mark.integration
+
 
 @pytest.fixture
 def api_contract_state(postgres_engine):
