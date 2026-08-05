@@ -910,6 +910,7 @@ jobs:
           first = "8ee0592f785047ffe90df65111c6e51857abf7f1"
           second = "05780834108a1496796e13536437de62f9543bd6"
           third = "49666b37395193f224076314a46047aa75218dcc"
+          fourth = "85388216555c58571576707e6694fd2c08f865e5"
           branch = "agent/courier-pickup-response-minimization-admission"
 
           def git(*args, check=True):
@@ -939,9 +940,10 @@ jobs:
           if git("merge-base", base, head) != base:
               raise SystemExit("response authority ancestry drift")
           commits = git("rev-list", "--reverse", f"{base}..{head}").splitlines()
-          if len(commits) != 4 or commits[:3] != [first, second, third] or commits[3] != head:
-              raise SystemExit(f"response authority four-commit history drift: {commits!r}")
-          if (git("rev-parse", f"{head}^") != third
+          if len(commits) != 5 or commits[:4] != [first, second, third, fourth] or commits[4] != head:
+              raise SystemExit(f"response authority five-commit history drift: {commits!r}")
+          if (git("rev-parse", f"{head}^") != fourth
+                  or git("rev-parse", f"{fourth}^") != third
                   or git("rev-parse", f"{third}^") != second
                   or git("rev-parse", f"{second}^") != first
                   or git("rev-parse", f"{first}^") != base):
@@ -1972,11 +1974,27 @@ jobs:
           git worktree add --detach "$candidate" a18c68172ec7e998f6f01d4e610d3b52eab017cc
           cd "$candidate"
           test "$(git rev-parse HEAD)" = a18c68172ec7e998f6f01d4e610d3b52eab017cc
+          candidate_root="$(git rev-parse --show-toplevel)"
+          test "$candidate_root" = "$candidate"
           test "$(git show -s --format=%T HEAD)" = 1bcc094c48bc54a42d561762f2122f13f0fb41bf
           test "$(git rev-parse HEAD:BACKEND)" = 1173cd56110404c2728536d44c61feacc173fcb1
           test "$(git rev-parse HEAD:tests)" = be1caf7a0513a862a35d413a2d942854c8d34575
           test "$(git rev-parse HEAD:BACKEND/courier_pickup/application.py)" = 4a0c47355d1862e976d0d9bf539a158ec6aab8cc
           test "$(git rev-parse HEAD:.github/workflows/ci.yml)" = 023e560f68798c0a3af11c1e9318dde0d11ac1a9
+          export PYTHONPATH="$candidate_root"
+          uv run --locked python - <<'PY'
+          from pathlib import Path
+          import BACKEND
+
+          candidate_root = Path.cwd().resolve()
+          spec = BACKEND.__spec__
+          if spec is None or not spec.submodule_search_locations:
+              raise SystemExit("BACKEND import is unavailable from immutable candidate root")
+          locations = [Path(value).resolve() for value in spec.submodule_search_locations]
+          if locations != [candidate_root / "BACKEND"]:
+              raise SystemExit(f"BACKEND import escaped immutable candidate root: {locations!r}")
+          print("Response evidence candidate-root import preflight: PASS")
+          PY
           uv sync --locked
           scan_root="$(mktemp -d)"
           git archive HEAD | tar -x -C "$scan_root"
