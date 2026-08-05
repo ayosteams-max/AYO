@@ -286,6 +286,9 @@ jobs:
             b30243de4bcc3b082a1222d368e9f7e9ef91cbdc)
               mode=courier-pickup-authorization-ordering
               ;;
+            be1caf7a0513a862a35d413a2d942854c8d34575)
+              mode=courier-pickup-response-minimization
+              ;;
             *)
               echo "Unreviewed tests tree: $tests_tree" >&2
               exit 1
@@ -454,6 +457,83 @@ jobs:
           print("Exact Founder & CEO approval binding:", approval)
           print("Courier Pickup authorization-ordering candidate identity: PASS")
           print("Courier Pickup authorization-ordering manifest fingerprint:", fingerprint)
+          PY
+
+      - name: Bind exact Courier Pickup response-minimization candidate identity
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'courier-pickup-response-minimization'
+        env:
+          TESTED_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          uv run --locked python - <<'PY'
+          import hashlib
+          import os
+          import subprocess
+
+          base = "3891ad9bed216611da740c289e0f955eccd49990"
+          head = "a18c68172ec7e998f6f01d4e610d3b52eab017cc"
+          commits = [
+              "322fce128199544640bd0da3a7d2be4510d2dabb",
+              "a18c68172ec7e998f6f01d4e610d3b52eab017cc",
+          ]
+          paths = [
+              "BACKEND/routes/courier_pickup.py",
+              "tests/integration/test_courier_pickup_api_contract.py",
+              "tests/test_courier_pickup_api_contract.py",
+          ]
+          blobs = {
+              paths[0]: "0675d6371de4e250e7654e96137bddf5c4fcf1aa",
+              paths[1]: "2203a18d79180776433c213d2c811f3bb476962c",
+              paths[2]: "c0aa13c354363d2ec6523b0e3afe194e1b1894a6",
+          }
+          expected = {
+              "tree": "1bcc094c48bc54a42d561762f2122f13f0fb41bf",
+              "backend": "1173cd56110404c2728536d44c61feacc173fcb1",
+              "tests": "be1caf7a0513a862a35d413a2d942854c8d34575",
+              "manifest": "cb464745522120f2f30e011a0896a47d70c76d761b9e2b90d1989c5e7193b14b",
+              "application": "4a0c47355d1862e976d0d9bf539a158ec6aab8cc",
+              "workflow": "023e560f68798c0a3af11c1e9318dde0d11ac1a9",
+          }
+
+          def git(*args):
+              return subprocess.run(
+                  ["git", *args], check=True, capture_output=True, text=True,
+              ).stdout.strip()
+
+          if os.environ.get("TESTED_HEAD_SHA") != head or git("rev-parse", "HEAD") != head:
+              raise SystemExit("response-minimization tested head drift")
+          if git("rev-parse", head) != head or git("merge-base", base, head) != base:
+              raise SystemExit("response-minimization candidate ancestry drift")
+          if git("rev-list", "--reverse", f"{base}..{head}").splitlines() != commits:
+              raise SystemExit("response-minimization commit sequence drift")
+          identities = {
+              "tree": git("show", "-s", "--format=%T", head),
+              "backend": git("rev-parse", f"{head}:BACKEND"),
+              "tests": git("rev-parse", f"{head}:tests"),
+              "application": git("rev-parse", f"{head}:BACKEND/courier_pickup/application.py"),
+              "workflow": git("rev-parse", f"{head}:.github/workflows/ci.yml"),
+          }
+          for name, actual in identities.items():
+              if actual != expected[name]:
+                  raise SystemExit(f"response-minimization {name} identity drift: {actual}")
+          status = git("diff", "--name-status", base, head).splitlines()
+          if status != [f"M\t{paths[0]}", f"A\t{paths[1]}", f"A\t{paths[2]}"]:
+              raise SystemExit(f"response-minimization path/status drift: {status!r}")
+          fingerprint = hashlib.sha256(("\n".join(paths) + "\n").encode()).hexdigest()
+          if fingerprint != expected["manifest"]:
+              raise SystemExit(f"response-minimization manifest drift: {fingerprint}")
+          for path, blob in blobs.items():
+              if git("rev-parse", f"{head}:{path}") != blob:
+                  raise SystemExit(f"response-minimization blob drift: {path}")
+          unchanged = (
+              ".github/workflows/ci.yml", "BACKEND/courier_pickup/application.py",
+              "database/migrations", ".secrets.baseline", "pyproject.toml", "uv.lock",
+          )
+          for path in unchanged:
+              if git("rev-parse", f"{head}:{path}") != git("rev-parse", f"{base}:{path}"):
+                  raise SystemExit(f"response-minimization forbidden drift: {path}")
+          print("Courier Pickup response-minimization exact candidate identity: PASS")
+          print("Courier Pickup response-minimization manifest fingerprint:", fingerprint)
           PY
 
       - name: Verify lock file is current
@@ -1742,6 +1822,160 @@ jobs:
         env:
           AYO_TEST_DATABASE_URL: postgresql+psycopg://ayo_test:ayo_test_password@127.0.0.1:5432/ayo_certification
         run: uv run --locked python database/certify_restore.py
+
+      - name: Derive exact Courier Pickup response-minimization evidence
+        if: >-
+          (success() || failure()) && steps.canonical_schema.outputs.ready == 'true' &&
+          steps.courier_pickup_authorization_ordering_content.outputs.content_classification == 'workflow-only-authority'
+        run: |
+          set -euo pipefail
+          candidate=/tmp/courier-pickup-response-minimization-candidate
+          cleanup() {
+            git worktree remove --force "$candidate" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          git worktree add --detach "$candidate" a18c68172ec7e998f6f01d4e610d3b52eab017cc
+          cd "$candidate"
+          test "$(git rev-parse HEAD)" = a18c68172ec7e998f6f01d4e610d3b52eab017cc
+          test "$(git show -s --format=%T HEAD)" = 1bcc094c48bc54a42d561762f2122f13f0fb41bf
+          test "$(git rev-parse HEAD:BACKEND)" = 1173cd56110404c2728536d44c61feacc173fcb1
+          test "$(git rev-parse HEAD:tests)" = be1caf7a0513a862a35d413a2d942854c8d34575
+          test "$(git rev-parse HEAD:BACKEND/courier_pickup/application.py)" = 4a0c47355d1862e976d0d9bf539a158ec6aab8cc
+          test "$(git rev-parse HEAD:.github/workflows/ci.yml)" = 023e560f68798c0a3af11c1e9318dde0d11ac1a9
+          uv sync --locked
+          uv run --locked pytest --collect-only -q > response-all-collect.txt
+          uv run --locked pytest -m "not integration" --collect-only -q > response-nonpostgresql-collect.txt
+          uv run --locked pytest -m "integration and not migration" --collect-only -q > response-postgresql-collect.txt
+          uv run --locked pytest --collect-only -q \
+            tests/test_courier_pickup_api_contract.py \
+            tests/integration/test_courier_pickup_api_contract.py \
+            > response-focused-collect.txt
+          uv run --locked pytest --junitxml=response-results.xml \
+            --cov=BACKEND --cov-branch --cov-report=json:response-coverage.json \
+            --cov-report=term --cov-fail-under=70 -q
+          uv run --locked mypy --config-file pyproject.toml .
+          set +e
+          uv run --locked mypy --strict --show-column-numbers --show-error-codes BACKEND \
+            > response-strict-mypy.txt 2>&1
+          strict_status=$?
+          set -e
+          uv run --locked python - <<'PY'
+          import hashlib
+          import json
+          import re
+          import subprocess
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          def inventory(path):
+              nodes = sorted(
+                  line.strip() for line in Path(path).read_text().splitlines() if "::" in line
+              )
+              if len(nodes) != len(set(nodes)):
+                  raise SystemExit(f"duplicate collected node in {path}")
+              return len(nodes), hashlib.sha256("\n".join(nodes).encode()).hexdigest()
+
+          expected_inventories = {
+              "response-all-collect.txt": (759, "7d752ea1d549e7015de891153bbef41c007fe6de2622ebd82cba84be57cbf3a5"),
+              "response-nonpostgresql-collect.txt": (529, "2dc76a7051b9266d0339506e8b3d3b1990fc7de9e7197c76b6179c119512d880"),
+              "response-postgresql-collect.txt": (196, "e2891e7d4b27d3ab67a167b658942b4403a7e24135db730cd22a69dc84e5520f"),
+              "response-focused-collect.txt": (24, "ebcc67a468242592254d35f8c9dbc5ccf2cf1ec56b8c0d026e73675a20d8486f"),
+          }
+          for path, expected in expected_inventories.items():
+              actual = inventory(path)
+              if actual != expected:
+                  raise SystemExit(f"response-minimization inventory drift in {path}: {actual!r}")
+              print("DERIVED inventory:", path, actual)
+
+          cases = ET.parse("response-results.xml").getroot().findall(".//testcase")
+          outcomes = {"passed": 0, "failed": 0, "errors": 0, "skipped": 0, "xfailed": 0}
+          xfails = {}
+          for case in cases:
+              failure, error, skip = case.find("failure"), case.find("error"), case.find("skipped")
+              node = f"{case.get('classname').replace('.', '/')}.py::{case.get('name')}"
+              if failure is not None:
+                  outcomes["failed"] += 1
+              elif error is not None:
+                  outcomes["errors"] += 1
+              elif skip is not None:
+                  detail = " ".join((skip.get("type", ""), skip.get("message", ""), skip.text or ""))
+                  key = "xfailed" if "xfail" in detail.lower() else "skipped"
+                  outcomes[key] += 1
+                  if key == "xfailed":
+                      xfails[node] = detail
+              else:
+                  outcomes["passed"] += 1
+          expected_xfail = "tests/test_services.py::test_cash_commission_is_not_lost_on_repeated_wallet_refresh"
+          expected_reason = "Known prototype defect: cash commission is destructively netted twice"
+          if set(xfails) != {expected_xfail} or expected_reason not in xfails[expected_xfail]:
+              raise SystemExit(f"response-minimization governed xfail drift: {xfails!r}")
+          print("DERIVED execution outcomes:", outcomes)
+          print("DERIVED governed xfail:", xfails)
+
+          coverage = json.loads(Path("response-coverage.json").read_text())
+          totals = coverage["totals"]
+          exact = (
+              totals["num_statements"], totals["missing_lines"], totals["covered_lines"],
+              totals["num_branches"], totals["covered_branches"],
+              totals["num_branches"] - totals["covered_branches"],
+              totals["num_partial_branches"], totals["percent_covered"],
+          )
+          semantic = {
+              "totals": {key: totals[key] for key in sorted(totals)},
+              "files": {
+                  path: {key: value["summary"][key] for key in sorted(value["summary"])}
+                  for path, value in sorted(coverage["files"].items())
+              },
+          }
+          fingerprint = hashlib.sha256(
+              json.dumps(semantic, sort_keys=True, separators=(",", ":")).encode()
+          ).hexdigest()
+          diff = subprocess.run(
+              ["git", "diff", "--unified=0", "3891ad9bed216611da740c289e0f955eccd49990", "HEAD", "--", "BACKEND/routes/courier_pickup.py"],
+              check=True, capture_output=True, text=True,
+          ).stdout
+          changed, line_number = set(), None
+          for line in diff.splitlines():
+              if line.startswith("@@"):
+                  match = re.search(r"\+(\d+)(?:,(\d+))?", line)
+                  line_number = int(match.group(1)) if match else None
+              elif line_number is not None and line.startswith("+") and not line.startswith("+++"):
+                  changed.add(line_number)
+                  line_number += 1
+              elif line_number is not None and not line.startswith("-"):
+                  line_number += 1
+          route = coverage["files"]["BACKEND/routes/courier_pickup.py"]
+          executable = set(route["executed_lines"]) | set(route["missing_lines"])
+          modified = sorted(changed & executable)
+          uncovered = sorted(set(modified) & set(route["missing_lines"]))
+          print("DERIVED coverage totals:", exact)
+          print("DERIVED coverage semantic fingerprint:", fingerprint)
+          print("DERIVED route modified executable statements:", modified)
+          print("DERIVED route uncovered modified statements:", uncovered)
+          print("DERIVED route module coverage:", route["summary"]["percent_covered"])
+
+          pattern = re.compile(r"^(BACKEND[\\/].*?):(\d+):(\d+): error: (.*)  \[([^]]+)\]$")
+          diagnostics = []
+          for raw in Path("response-strict-mypy.txt").read_text().splitlines():
+              match = pattern.match(raw)
+              if match:
+                  path, line, column, message, code = match.groups()
+                  diagnostics.append((path.replace("\\", "/"), int(line), int(column), code, message))
+          diagnostics.sort()
+          column_payload = "\n".join(
+              f"{path}|{line}|{column}|{code}|{message}"
+              for path, line, column, code, message in diagnostics
+          )
+          semantic_payload = "\n".join(
+              f"{path}|{code}|{message}" for path, _, _, code, message in diagnostics
+          )
+          print("DERIVED strict MyPy errors/files:", len(diagnostics), len({item[0] for item in diagnostics}))
+          print("DERIVED strict MyPy column fingerprint:", hashlib.sha256(column_payload.encode()).hexdigest())
+          print("DERIVED strict MyPy semantic fingerprint:", hashlib.sha256(semantic_payload.encode()).hexdigest())
+          if uncovered:
+              raise SystemExit("response-minimization has uncovered modified production statements")
+          raise SystemExit("DERIVATION COMPLETE: exact values require CTO review before permanent binding")
+          PY
 
       - name: Certify Migration 0055 and 0056 round trip
         if: (success() || failure()) && steps.canonical_schema.outputs.ready == 'true'
