@@ -912,6 +912,7 @@ jobs:
           third = "49666b37395193f224076314a46047aa75218dcc"
           fourth = "85388216555c58571576707e6694fd2c08f865e5"
           fifth = "4d11481fccb2f27b6368331186c89ad8b2161156"
+          sixth = "dca51f9847bc1093ab143e8748c7c67110c80dde"
           branch = "agent/courier-pickup-response-minimization-admission"
 
           def git(*args, check=True):
@@ -941,9 +942,10 @@ jobs:
           if git("merge-base", base, head) != base:
               raise SystemExit("response authority ancestry drift")
           commits = git("rev-list", "--reverse", f"{base}..{head}").splitlines()
-          if len(commits) != 6 or commits[:5] != [first, second, third, fourth, fifth] or commits[5] != head:
-              raise SystemExit(f"response authority six-commit history drift: {commits!r}")
-          if (git("rev-parse", f"{head}^") != fifth
+          if len(commits) != 7 or commits[:6] != [first, second, third, fourth, fifth, sixth] or commits[6] != head:
+              raise SystemExit(f"response authority seven-commit history drift: {commits!r}")
+          if (git("rev-parse", f"{head}^") != sixth
+                  or git("rev-parse", f"{sixth}^") != fifth
                   or git("rev-parse", f"{fifth}^") != fourth
                   or git("rev-parse", f"{fourth}^") != third
                   or git("rev-parse", f"{third}^") != second
@@ -2000,7 +2002,15 @@ jobs:
               raise SystemExit(f"BACKEND import escaped immutable candidate root: {sorted(map(str, locations))!r}")
           print("Response evidence candidate-root import preflight: PASS")
           PY
-          uv sync --locked
+          uv sync --locked --all-groups
+          uv run --locked python - <<'PY'
+          import alembic
+          import database.migrate
+
+          print("Response evidence locked migration tooling preflight: PASS")
+          PY
+          git diff --exit-code -- pyproject.toml uv.lock
+          test -z "$(git status --porcelain --untracked-files=all)"
           scan_root="$(mktemp -d)"
           git archive HEAD | tar -x -C "$scan_root"
           (
