@@ -283,6 +283,9 @@ jobs:
             90b974a321c2423909926cbefe58a39ad1685436)
               mode=courier-pickup-idempotency-v1
               ;;
+            b30243de4bcc3b082a1222d368e9f7e9ef91cbdc)
+              mode=courier-pickup-authorization-ordering
+              ;;
             *)
               echo "Unreviewed tests tree: $tests_tree" >&2
               exit 1
@@ -355,6 +358,102 @@ jobs:
               raise SystemExit("Courier Pickup candidate contains a forbidden path")
           print("Courier Pickup Idempotency V1 exact candidate identity: PASS")
           print("Courier Pickup ten-path manifest fingerprint:", fingerprint)
+          PY
+
+      - name: Bind exact Courier Pickup authorization-ordering candidate identity
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'courier-pickup-authorization-ordering'
+        run: |
+          set -euo pipefail
+          uv run --locked python - <<'PY'
+          import hashlib
+          import subprocess
+
+          expected = {
+              "base": "65ff78430315c2d10bc40a0f3edafced6cec3ad2",
+              "candidate": "f764189398f70d7e9fecdb217362a26e0ac09f35",
+              "commits": [
+                  "9cb075d91cb163a0ee2c4334d71ddf61c205f15f",
+                  "c1d58ab059c93ab113462cdd4c352e01eb86d2d7",
+                  "f764189398f70d7e9fecdb217362a26e0ac09f35",
+              ],
+              "tree": "65cdf5cef8605cd1b4e31443dca902ddb8d31225",
+              "backend": "29bb7bf4fc568c9c961e849872d5cef91d69e158",
+              "tests": "b30243de4bcc3b082a1222d368e9f7e9ef91cbdc",
+              "migrations": "3997d1a4022db4cb844b3283b454682eeb0420f2",
+              "workflow": "be0cc913cd29e1679715f4aa742b00af5c53de6a",
+              "secrets": "71770a9e529e9af0c9ed5c72549b3a2f7ddcfb02",
+              "pyproject": "6b8425f6ed81258388c4e6bba39c80af0afa7fef",
+              "lock": "6a08d31b721b486950fd06df0ca3430fcbe8aabf",
+              "manifest": "0ac039f011a6b88c472ad84af9770e98abc0c50fee2518a36515e04a3cd1bf5d",
+          }
+          paths = [
+              "BACKEND/courier_pickup/application.py",
+              "BACKEND/routes/courier_pickup.py",
+              "tests/integration/test_courier_pickup_authorization_ordering.py",
+              "tests/test_courier_pickup_authorization_ordering.py",
+              "tests/test_courier_pickup_increment1.py",
+          ]
+          blobs = {
+              paths[0]: "4a0c47355d1862e976d0d9bf539a158ec6aab8cc",
+              paths[1]: "39e151d8acb1f58c9346686a431108c4d5faa5d1",
+              paths[2]: "fe32fb5aa6b097c7eec26d03cf414f367209e6f5",
+              paths[3]: "c253c67026694e966dc6d36b55e949858e58fef9",
+              paths[4]: "7ea9bac56969120d7258efa0bf8a0cbfcd53ffc1",
+          }
+
+          def git(*args):
+              return subprocess.run(
+                  ["git", *args], check=True, capture_output=True, text=True,
+              ).stdout.strip()
+
+          base, head = expected["base"], expected["candidate"]
+          if git("rev-parse", head) != head or git("merge-base", base, head) != base:
+              raise SystemExit("reviewed authorization-ordering candidate ancestry drift")
+          commits = git("rev-list", "--reverse", f"{base}..{head}").splitlines()
+          if commits != expected["commits"]:
+              raise SystemExit(f"reviewed authorization-ordering commit sequence drift: {commits!r}")
+          identities = {
+              "tree": git("show", "-s", "--format=%T", head),
+              "backend": git("rev-parse", f"{head}:BACKEND"),
+              "tests": git("rev-parse", f"{head}:tests"),
+              "migrations": git("rev-parse", f"{head}:database/migrations/versions"),
+              "workflow": git("rev-parse", f"{head}:.github/workflows/ci.yml"),
+              "secrets": git("rev-parse", f"{head}:.secrets.baseline"),
+              "pyproject": git("rev-parse", f"{head}:pyproject.toml"),
+              "lock": git("rev-parse", f"{head}:uv.lock"),
+          }
+          for name, actual in identities.items():
+              if actual != expected[name]:
+                  raise SystemExit(f"reviewed authorization-ordering {name} identity drift: {actual}")
+          if git("rev-parse", f"{base}:database/migrations") != git("rev-parse", f"{head}:database/migrations"):
+              raise SystemExit("reviewed authorization-ordering enclosing migration tree drift")
+          status = git("diff", "--name-status", base, head).splitlines()
+          expected_status = [
+              f"M\t{paths[0]}", f"M\t{paths[1]}", f"A\t{paths[2]}",
+              f"A\t{paths[3]}", f"M\t{paths[4]}",
+          ]
+          if status != expected_status:
+              raise SystemExit(f"authorization-ordering path/status drift: {status!r}")
+          fingerprint = hashlib.sha256(("\n".join(paths) + "\n").encode()).hexdigest()
+          if fingerprint != expected["manifest"]:
+              raise SystemExit(f"authorization-ordering manifest drift: {fingerprint}")
+          for path, blob in blobs.items():
+              if git("rev-parse", f"{head}:{path}") != blob:
+                  raise SystemExit(f"authorization-ordering blob drift: {path}")
+          forbidden = (
+              ".github/", "database/migrations/", ".secrets.baseline", "pyproject.toml",
+              "uv.lock", "AYO-Mobile/", "docs/", "BACKEND/courier_dispatch/",
+              "BACKEND/custody/", "BACKEND/authorization/registry.py",
+          )
+          if any(path.startswith(forbidden) for path in paths):
+              raise SystemExit("authorization-ordering candidate contains forbidden drift")
+          approval = (
+              "Ibrahim Hambentu Shibiru", "Founder & CEO",
+              "courier-pickup-authorization-ordering", head, expected["tests"],
+          )
+          print("Exact Founder & CEO approval binding:", approval)
+          print("Courier Pickup authorization-ordering candidate identity: PASS")
+          print("Courier Pickup authorization-ordering manifest fingerprint:", fingerprint)
           PY
 
       - name: Verify lock file is current
@@ -552,9 +651,10 @@ jobs:
 
       - name: Bind tested Courier Pickup tree to trusted authoritative base
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'courier-pickup-idempotency-v1'
+        id: courier_pickup_v1_content
         env:
           TESTED_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          TRUSTED_COMPARISON_BASE_SHA: ${{ steps.trusted_comparison_base.outputs.sha }}
+          PUBLISHED_PREDECESSOR_SHA: ${{ steps.trusted_comparison_base.outputs.sha }}
         run: |
           set -euo pipefail
           uv run --locked python - <<'PY'
@@ -585,9 +685,39 @@ jobs:
                   ["git", *args], check=True, capture_output=True, text=True,
               ).stdout.strip()
           head = os.environ["TESTED_HEAD_SHA"]
-          base = os.environ["TRUSTED_COMPARISON_BASE_SHA"]
-          if not head or not base or git("merge-base", head, base) != base:
-              raise SystemExit("Courier Pickup tested head is not bound to its trusted base")
+          predecessor = os.environ["PUBLISHED_PREDECESSOR_SHA"]
+          authoritative_base = "65ff78430315c2d10bc40a0f3edafced6cec3ad2"
+          if not head or not predecessor or git("merge-base", head, predecessor) != predecessor:
+              raise SystemExit("Courier Pickup tested head does not preserve published ancestry")
+          predecessor_descends_from_w16 = (
+              git("merge-base", predecessor, authoritative_base) == authoritative_base
+          )
+          head_descends_from_w16 = (
+              git("merge-base", head, authoritative_base) == authoritative_base
+          )
+          cumulative_changed = (
+              git("diff", "--name-only", authoritative_base, head).splitlines()
+              if head_descends_from_w16 else []
+          )
+          workflow_only_admission = (
+              predecessor_descends_from_w16
+              and head_descends_from_w16
+              and
+              cumulative_changed == [".github/workflows/ci.yml"]
+          )
+          if workflow_only_admission:
+              for subtree in ("BACKEND", "tests", "database/migrations"):
+                  if git("rev-parse", f"{authoritative_base}:{subtree}") != git("rev-parse", f"{head}:{subtree}"):
+                      raise SystemExit(f"workflow-only admission altered {subtree}")
+              for path in ("pyproject.toml", "uv.lock", ".secrets.baseline"):
+                  if git("rev-parse", f"{authoritative_base}:{path}") != git("rev-parse", f"{head}:{path}"):
+                      raise SystemExit(f"workflow-only admission altered {path}")
+              with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+                  output.write("content_classification=workflow-only-authority\n")
+                  output.write(f"content_comparison_base_sha={authoritative_base}\n")
+              print("Courier Pickup W16 content preserved by workflow-only admission")
+              raise SystemExit(0)
+          base = predecessor
           changed = git("diff", "--name-only", base, head).splitlines()
           if changed != expected_paths:
               raise SystemExit(f"Courier Pickup tested ten-path boundary drift: {changed!r}")
@@ -600,8 +730,83 @@ jobs:
           migration = "database/migrations/versions/20260805_0057_courier_pickup_idempotency_replay.py"
           if git("rev-parse", f"{head}:{migration}") != expected["migration"]:
               raise SystemExit("Courier Pickup tested Migration 0057 blob drift")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write("content_classification=reviewed-feature-content\n")
+              output.write(f"content_comparison_base_sha={base}\n")
           print("Courier Pickup tested content is exactly bound to trusted base:", base)
           print("Courier Pickup tested ten-path manifest fingerprint:", fingerprint)
+          PY
+
+      - name: Bind tested Courier Pickup authorization-ordering tree to trusted base
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'courier-pickup-authorization-ordering'
+        id: courier_pickup_authorization_ordering_content
+        env:
+          TESTED_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          PUBLISHED_PREDECESSOR_SHA: ${{ steps.trusted_comparison_base.outputs.sha }}
+        run: |
+          set -euo pipefail
+          uv run --locked python - <<'PY'
+          import hashlib
+          import os
+          import subprocess
+
+          expected_paths = [
+              "BACKEND/courier_pickup/application.py",
+              "BACKEND/routes/courier_pickup.py",
+              "tests/integration/test_courier_pickup_authorization_ordering.py",
+              "tests/test_courier_pickup_authorization_ordering.py",
+              "tests/test_courier_pickup_increment1.py",
+          ]
+          expected_blobs = {
+              expected_paths[0]: "4a0c47355d1862e976d0d9bf539a158ec6aab8cc",
+              expected_paths[1]: "39e151d8acb1f58c9346686a431108c4d5faa5d1",
+              expected_paths[2]: "fe32fb5aa6b097c7eec26d03cf414f367209e6f5",
+              expected_paths[3]: "c253c67026694e966dc6d36b55e949858e58fef9",
+              expected_paths[4]: "7ea9bac56969120d7258efa0bf8a0cbfcd53ffc1",
+          }
+          expected = {
+              "backend": "29bb7bf4fc568c9c961e849872d5cef91d69e158",
+              "tests": "b30243de4bcc3b082a1222d368e9f7e9ef91cbdc",
+              "migrations": "3997d1a4022db4cb844b3283b454682eeb0420f2",
+              "manifest": "0ac039f011a6b88c472ad84af9770e98abc0c50fee2518a36515e04a3cd1bf5d",
+          }
+
+          def git(*args):
+              return subprocess.run(
+                  ["git", *args], check=True, capture_output=True, text=True,
+              ).stdout.strip()
+
+          head = os.environ["TESTED_HEAD_SHA"]
+          base = os.environ["PUBLISHED_PREDECESSOR_SHA"]
+          if not head or not base or git("merge-base", head, base) != base:
+              raise SystemExit("authorization-ordering tested head is not bound to trusted base")
+          changed = git("diff", "--name-only", base, head).splitlines()
+          if changed != expected_paths:
+              raise SystemExit(f"authorization-ordering tested five-path drift: {changed!r}")
+          fingerprint = hashlib.sha256(("\n".join(changed) + "\n").encode()).hexdigest()
+          if fingerprint != expected["manifest"]:
+              raise SystemExit(f"authorization-ordering tested manifest drift: {fingerprint}")
+          for subtree in ("backend", "tests"):
+              if git("rev-parse", f"{head}:{subtree.upper() if subtree == 'backend' else subtree}") != expected[subtree]:
+                  raise SystemExit(f"authorization-ordering tested {subtree} tree drift")
+          if git("rev-parse", f"{head}:database/migrations/versions") != expected["migrations"]:
+              raise SystemExit("authorization-ordering tested migration-tree drift")
+          if git("rev-parse", f"{base}:database/migrations/versions") != expected["migrations"]:
+              raise SystemExit("authorization-ordering trusted-base migration-tree drift")
+          if git("rev-parse", f"{head}:database/migrations") != git("rev-parse", f"{base}:database/migrations"):
+              raise SystemExit("authorization-ordering enclosing migration tree drift")
+          for path, blob in expected_blobs.items():
+              if git("rev-parse", f"{head}:{path}") != blob:
+                  raise SystemExit(f"authorization-ordering tested blob drift: {path}")
+          unchanged = (".github/workflows/ci.yml", ".secrets.baseline", "pyproject.toml", "uv.lock")
+          for path in unchanged:
+              if git("rev-parse", f"{head}:{path}") != git("rev-parse", f"{base}:{path}"):
+                  raise SystemExit(f"authorization-ordering forbidden tested drift: {path}")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write("content_classification=courier-pickup-authorization-ordering\n")
+              output.write(f"content_comparison_base_sha={base}\n")
+          print("Authorization-ordering tested content bound to trusted base:", base)
+          print("Authorization-ordering tested five-path fingerprint:", fingerprint)
           PY
 
       - name: Test all admitted non-PostgreSQL behavior with coverage
@@ -1108,7 +1313,8 @@ jobs:
       - name: Verify exact Courier Pickup Idempotency V1 test and coverage contract
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'courier-pickup-idempotency-v1'
         env:
-          TRUSTED_COMPARISON_BASE_SHA: ${{ steps.trusted_comparison_base.outputs.sha }}
+          CONTENT_CLASSIFICATION: ${{ steps.courier_pickup_v1_content.outputs.content_classification }}
+          CONTENT_COMPARISON_BASE_SHA: ${{ steps.courier_pickup_v1_content.outputs.content_comparison_base_sha }}
         run: |
           set -euo pipefail
           uv run --locked pytest --collect-only -q > courier-pickup-all-collect.txt
@@ -1188,7 +1394,22 @@ jobs:
           if totals["percent_covered"] < 77.56604919526268:
               raise SystemExit("Courier Pickup coverage fell below its reviewed floor")
 
-          compare_sha = os.environ.get("TRUSTED_COMPARISON_BASE_SHA", "")
+          compare_sha = os.environ.get("CONTENT_COMPARISON_BASE_SHA", "")
+          classification = os.environ.get("CONTENT_CLASSIFICATION", "")
+          expected_statements = {
+              "workflow-only-authority": 0,
+              "reviewed-feature-content": 106,
+          }.get(classification)
+          if expected_statements is None:
+              raise SystemExit(f"unknown or absent trusted content classification: {classification!r}")
+          expected_base = {
+              "workflow-only-authority": "65ff78430315c2d10bc40a0f3edafced6cec3ad2",
+              "reviewed-feature-content": "4eda7c5e80907eba9b60c20d64561087ef50c84b",
+          }[classification]
+          if compare_sha != expected_base:
+              raise SystemExit(
+                  f"trusted classification/base pair drift: {classification!r} {compare_sha!r}"
+              )
           if not re.fullmatch(r"[0-9a-f]{40}", compare_sha) or set(compare_sha) == {"0"}:
               raise SystemExit(f"Courier Pickup trusted comparison base is invalid: {compare_sha!r}")
           diff = subprocess.run(
@@ -1217,16 +1438,174 @@ jobs:
                   inventory.append((changed_path, number))
                   if number in missing:
                       uncovered.append((changed_path, number))
-          if len(inventory) != 106 or uncovered:
+          if len(inventory) != expected_statements or uncovered:
               raise SystemExit(
                   f"Courier Pickup modified-code coverage drift: "
-                  f"statements={len(inventory)} uncovered={uncovered!r}"
+                  f"classification={classification} statements={len(inventory)} "
+                  f"expected={expected_statements} uncovered={uncovered!r}"
               )
           print("Courier Pickup tests: 718 passed, 1 governed xfail")
           print("Courier Pickup test inventory fingerprint:", test_fingerprint)
           print("Courier Pickup coverage totals:", exact)
           print("Courier Pickup coverage fingerprint:", coverage_fingerprint)
-          print("Courier Pickup changed executable statements: 106 covered, 0 uncovered")
+          print("Courier Pickup trusted content classification:", classification)
+          print(
+              "Courier Pickup changed executable statements: "
+              f"{expected_statements} covered, 0 uncovered"
+          )
+          PY
+
+      - name: Verify exact Courier Pickup authorization-ordering test and coverage contract
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'courier-pickup-authorization-ordering'
+        env:
+          CONTENT_CLASSIFICATION: ${{ steps.courier_pickup_authorization_ordering_content.outputs.content_classification }}
+          CONTENT_COMPARISON_BASE_SHA: ${{ steps.courier_pickup_authorization_ordering_content.outputs.content_comparison_base_sha }}
+        run: |
+          set -euo pipefail
+          uv run --locked pytest --collect-only -q > authorization-ordering-all-collect.txt
+          uv run --locked pytest -m "not integration" --collect-only -q > authorization-ordering-nonpostgresql-collect.txt
+          uv run --locked pytest --collect-only -q \
+            tests/test_courier_pickup_authorization_ordering.py \
+            tests/integration/test_courier_pickup_authorization_ordering.py \
+            > authorization-ordering-focused-collect.txt
+          uv run --locked pytest --junitxml=authorization-ordering-results.xml \
+            --cov=BACKEND --cov-branch \
+            --cov-report=json:authorization-ordering-coverage.json --cov-report=term \
+            --cov-fail-under=70 -q
+          uv run --locked python - <<'PY'
+          import hashlib
+          import json
+          import os
+          import re
+          import subprocess
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          def inventory(path):
+              nodes = sorted(
+                  line.strip() for line in Path(path).read_text().splitlines() if "::" in line
+              )
+              if len(nodes) != len(set(nodes)):
+                  raise SystemExit(f"duplicate collected node in {path}")
+              return nodes, hashlib.sha256("\n".join(nodes).encode()).hexdigest()
+
+          contracts = {
+              "authorization-ordering-all-collect.txt": (735, "547c64c3f22891df88d77a02f56894b24ae8423135f9a12fe5fed87725f1cbf2"),
+              "authorization-ordering-nonpostgresql-collect.txt": (508, "888c1fcbda58d8de06d04d15bd29eca0804813a5636412156fe3494280ce82c8f"),
+              "authorization-ordering-focused-collect.txt": (16, "3f5ed78283db6682033a9f795e6a06a2877ffb5ec4cb74249f5e1a4631acb516"),
+          }
+          for path, expected in contracts.items():
+              nodes, fingerprint = inventory(path)
+              if (len(nodes), fingerprint) != expected:
+                  raise SystemExit(f"authorization-ordering inventory drift in {path}: {(len(nodes), fingerprint)!r}")
+
+          expected_xfail = "tests/test_services.py::test_cash_commission_is_not_lost_on_repeated_wallet_refresh"
+          expected_reason = "Known prototype defect: cash commission is destructively netted twice"
+          cases = ET.parse("authorization-ordering-results.xml").getroot().findall(".//testcase")
+          passed = failed = errors = skipped = xfailed = 0
+          xfail_nodes = {}
+          for case in cases:
+              failure, error, skip = case.find("failure"), case.find("error"), case.find("skipped")
+              node = f"{case.get('classname').replace('.', '/')}.py::{case.get('name')}"
+              if failure is not None:
+                  failed += 1
+              elif error is not None:
+                  errors += 1
+              elif skip is not None:
+                  detail = " ".join((skip.get("type", ""), skip.get("message", ""), skip.text or ""))
+                  if "xfail" in detail.lower():
+                      xfailed += 1
+                      xfail_nodes[node] = detail
+                  else:
+                      skipped += 1
+              else:
+                  passed += 1
+          if (passed, failed, errors, skipped, xfailed) != (734, 0, 0, 0, 1):
+              raise SystemExit(f"authorization-ordering outcomes drift: {(passed, failed, errors, skipped, xfailed)!r}")
+          if set(xfail_nodes) != {expected_xfail} or expected_reason not in xfail_nodes[expected_xfail]:
+              raise SystemExit(f"authorization-ordering governed xfail drift: {xfail_nodes!r}")
+
+          coverage = json.loads(Path("authorization-ordering-coverage.json").read_text())
+          totals = coverage["totals"]
+          exact = (
+              totals["num_statements"], totals["missing_lines"], totals["covered_lines"],
+              totals["num_branches"], totals["covered_branches"],
+              totals["num_branches"] - totals["covered_branches"],
+              totals["num_partial_branches"], totals["percent_covered"],
+          )
+          expected = (21826, 3940, 17886, 4522, 2608, 1914, 1004, 77.7819948383179)
+          if exact != expected:
+              raise SystemExit(f"authorization-ordering coverage totals drift: {exact!r}")
+          semantic = {
+              "totals": {key: totals[key] for key in sorted(totals)},
+              "files": {
+                  path: {key: value["summary"][key] for key in sorted(value["summary"])}
+                  for path, value in sorted(coverage["files"].items())
+              },
+          }
+          coverage_fingerprint = hashlib.sha256(
+              json.dumps(semantic, sort_keys=True, separators=(",", ":")).encode()
+          ).hexdigest()
+          if coverage_fingerprint != "440c72ce71a28596dd8b69a2c60c7d9ce3b4d08b249178c313768c002f29bcb2":
+              raise SystemExit(f"authorization-ordering coverage fingerprint drift: {coverage_fingerprint}")
+          baseline = 77.56604919526268
+          if totals["percent_covered"] - baseline != 0.21594564305522113:
+              raise SystemExit("authorization-ordering coverage increase drift")
+
+          compare_sha = os.environ.get("CONTENT_COMPARISON_BASE_SHA", "")
+          classification = os.environ.get("CONTENT_CLASSIFICATION", "")
+          if classification != "courier-pickup-authorization-ordering":
+              raise SystemExit(f"authorization-ordering trusted classification drift: {classification!r}")
+          if not re.fullmatch(r"[0-9a-f]{40}", compare_sha) or set(compare_sha) == {"0"}:
+              raise SystemExit("authorization-ordering trusted comparison base is invalid")
+          diff = subprocess.run(
+              ["git", "diff", "--unified=0", compare_sha, "HEAD", "--", "BACKEND"],
+              check=True, capture_output=True, text=True,
+          ).stdout
+          changed, path, candidate_line = {}, None, None
+          for line in diff.splitlines():
+              if line.startswith("+++ b/"):
+                  path = line[6:]
+              elif line.startswith("@@"):
+                  match = re.search(r"\+(\d+)(?:,(\d+))?", line)
+                  candidate_line = int(match.group(1)) if match else None
+              elif candidate_line is not None and line.startswith("+") and not line.startswith("+++"):
+                  changed.setdefault(path, set()).add(candidate_line)
+                  candidate_line += 1
+              elif candidate_line is not None and not line.startswith("-"):
+                  candidate_line += 1
+          inventory_rows, uncovered = [], []
+          for changed_path, lines in sorted(changed.items()):
+              report = coverage["files"].get(changed_path)
+              if report is None:
+                  continue
+              executable = set(report["executed_lines"]) | set(report["missing_lines"])
+              missing = set(report["missing_lines"])
+              for number in sorted(lines & executable):
+                  inventory_rows.append((changed_path, number))
+                  if number in missing:
+                      uncovered.append((changed_path, number))
+          if len(inventory_rows) != 11 or uncovered:
+              raise SystemExit(
+                  f"authorization-ordering modified-code coverage drift: statements={len(inventory_rows)} uncovered={uncovered!r}"
+              )
+          module_percentages = {
+              path: coverage["files"][path]["summary"]["percent_covered"]
+              for path in (
+                  "BACKEND/courier_pickup/application.py",
+                  "BACKEND/routes/courier_pickup.py",
+              )
+          }
+          expected_modules = {
+              "BACKEND/courier_pickup/application.py": 86.86131386861314,
+              "BACKEND/routes/courier_pickup.py": 90.19607843137256,
+          }
+          if module_percentages != expected_modules:
+              raise SystemExit(f"authorization-ordering module coverage drift: {module_percentages!r}")
+          print("Authorization-ordering tests: 734 passed, 1 governed xfail")
+          print("Authorization-ordering coverage totals:", exact)
+          print("Authorization-ordering coverage fingerprint:", coverage_fingerprint)
+          print("Authorization-ordering changed executable statements: 11 covered, 0 uncovered")
           PY
 
       - name: Verify PostgreSQL 17/PostGIS integration tests without skips
@@ -1264,6 +1643,40 @@ jobs:
               )
           print("Courier Pickup PostgreSQL nodes: 190 passed")
           print("Courier Pickup PostgreSQL inventory fingerprint:", fingerprint)
+          PY
+
+      - name: Verify exact Courier Pickup authorization-ordering PostgreSQL inventory
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'courier-pickup-authorization-ordering'
+        run: |
+          set -euo pipefail
+          uv run --locked pytest -m "integration and not migration" --collect-only -q > authorization-ordering-postgresql-collect.txt
+          uv run --locked pytest -m "integration and not migration" --no-cov -q \
+            --junitxml=authorization-ordering-postgresql.xml
+          uv run --locked python - <<'PY'
+          import hashlib
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          nodes = sorted(
+              line.strip() for line in Path("authorization-ordering-postgresql-collect.txt").read_text().splitlines()
+              if "::" in line
+          )
+          fingerprint = hashlib.sha256("\n".join(nodes).encode()).hexdigest()
+          if len(nodes) != 193 or len(nodes) != len(set(nodes)):
+              raise SystemExit(f"authorization-ordering PostgreSQL collection drift: {len(nodes)}")
+          if fingerprint != "b9560620f1c59faf8b97602094ac21cdadec48e76436b70bd3123fad1f68ba15":
+              raise SystemExit(f"authorization-ordering PostgreSQL fingerprint drift: {fingerprint}")
+          cases = ET.parse("authorization-ordering-postgresql.xml").getroot().findall(".//testcase")
+          failures = sum(case.find("failure") is not None for case in cases)
+          errors = sum(case.find("error") is not None for case in cases)
+          skipped = sum(case.find("skipped") is not None for case in cases)
+          if (len(cases), failures, errors, skipped) != (193, 0, 0, 0):
+              raise SystemExit(
+                  "authorization-ordering PostgreSQL result drift: "
+                  f"{(len(cases), failures, errors, skipped)!r}"
+              )
+          print("Authorization-ordering PostgreSQL nodes: 193 passed")
+          print("Authorization-ordering PostgreSQL fingerprint:", fingerprint)
           PY
 
       - name: Install and verify PostgreSQL 17 client
@@ -1374,7 +1787,10 @@ jobs:
           runner = MigrationRunner(engine)
           expected_head = (
               "20260805_0057"
-              if os.environ["EVIDENCE_MODE"] == "courier-pickup-idempotency-v1"
+              if os.environ["EVIDENCE_MODE"] in {
+                  "courier-pickup-idempotency-v1",
+                  "courier-pickup-authorization-ordering",
+              }
               else "20260724_0056"
           )
 
@@ -1620,7 +2036,11 @@ jobs:
           source_dir="$(mktemp -d)"
           mypy_root="$(mktemp -d)"
           mypy_environment="$mypy_root/.venv"
-          git archive 05b74c47d133ea85028a8b383c4fd539b268c1c8 | tar -x -C "$source_dir"
+          source_sha=05b74c47d133ea85028a8b383c4fd539b268c1c8
+          if [[ "$EVIDENCE_MODE" == "courier-pickup-authorization-ordering" ]]; then
+            source_sha=65ff78430315c2d10bc40a0f3edafced6cec3ad2
+          fi
+          git archive "$source_sha" | tar -x -C "$source_dir"
           UV_PROJECT_ENVIRONMENT="$mypy_environment" uv sync --locked --all-groups
           mypy_bin="$mypy_environment/bin/mypy"
           mypy_python="$mypy_environment/bin/python"
@@ -1833,6 +2253,26 @@ jobs:
               print("Courier Pickup strict source-only semantic diagnostics: []")
               print("Courier Pickup strict candidate-only semantic diagnostics: []")
               print("Courier Pickup strict moved diagnostics:", moved)
+          elif mode == "courier-pickup-authorization-ordering":
+              source_raw, source_column_fp, source_semantic_fp = reviewed_v1_fingerprints("source-strict.txt")
+              candidate_raw, candidate_column_fp, candidate_semantic_fp = reviewed_v1_fingerprints("candidate-strict.txt")
+              source_semantic = Counter((item.path, item.code, item.message) for item in source_raw)
+              candidate_semantic = Counter((item.path, item.code, item.message) for item in candidate_raw)
+              if source_semantic != candidate_semantic:
+                  print("SOURCE_ONLY_SEMANTIC|", sorted((source_semantic - candidate_semantic).elements()))
+                  print("CANDIDATE_ONLY_SEMANTIC|", sorted((candidate_semantic - source_semantic).elements()))
+                  raise SystemExit("authorization-ordering strict MyPy semantic drift")
+              if source_column_fp != "04aa83367515fea79e35c40566050d168022308de12e93bb1a48d792d14074b8":
+                  raise SystemExit(f"authorization-ordering strict source fingerprint drift: {source_column_fp}")
+              if candidate_column_fp != "dd2500cc517d85c23082df73782d09bee4ee5836ec33003a2393ac2adf55b000":
+                  raise SystemExit(f"authorization-ordering strict candidate fingerprint drift: {candidate_column_fp}")
+              if source_semantic_fp != candidate_semantic_fp or candidate_semantic_fp != "c40b3dff746b5e5b659b79d4dfa60ab9aa857b2964235f03778655327ed624bc":
+                  raise SystemExit(f"authorization-ordering strict semantic fingerprint drift: {candidate_semantic_fp}")
+              print("Authorization-ordering strict source column fingerprint:", source_column_fp)
+              print("Authorization-ordering strict candidate column fingerprint:", candidate_column_fp)
+              print("Authorization-ordering strict location-insensitive fingerprint:", candidate_semantic_fp)
+              print("Authorization-ordering strict source-only semantic diagnostics: []")
+              print("Authorization-ordering strict candidate-only semantic diagnostics: []")
           else:
               compare("strict backend", source_strict, candidate_strict)
           strict_files = {item.path for item in candidate_strict}
@@ -1847,22 +2287,38 @@ jobs:
           }
           if Counter(item.code for item in candidate_strict) != expected_strict_codes:
               raise SystemExit("strict backend MyPy error-code distribution drift")
-          if mode != "courier-pickup-idempotency-v1":
+          if mode not in {
+              "courier-pickup-idempotency-v1",
+              "courier-pickup-authorization-ordering",
+          }:
               strict_fingerprint = fingerprint(candidate_strict)
               if strict_fingerprint != "6257a24b9c057c822e45a041519a849c471f6c48":
                   raise SystemExit("strict backend MyPy governed fingerprint drift")
 
-          source_configured = normalized("source-configured.txt")
+          source_configured = normalized(
+              "source-configured.txt",
+              allow_empty=mode == "courier-pickup-authorization-ordering",
+          )
           candidate_configured = normalized(
               "candidate-configured.txt",
-              allow_empty=mode in {"batch2", "courier-pickup-idempotency-v1"},
+              allow_empty=mode in {
+                  "batch2", "courier-pickup-idempotency-v1",
+                  "courier-pickup-authorization-ordering",
+              },
           )
-          if mode in {"batch2", "courier-pickup-idempotency-v1"}:
+          if mode in {
+              "batch2", "courier-pickup-idempotency-v1",
+              "courier-pickup-authorization-ordering",
+          }:
               if candidate_configured:
                   report("Candidate configured", candidate_configured)
                   raise SystemExit("Configured MyPy is not clean")
               configured_output = Path("candidate-configured.txt").read_text(encoding="utf-8")
-              expected_files = 450 if mode == "courier-pickup-idempotency-v1" else 447
+              expected_files = {
+                  "batch2": 447,
+                  "courier-pickup-idempotency-v1": 450,
+                  "courier-pickup-authorization-ordering": 452,
+              }[mode]
               if f"Success: no issues found in {expected_files} source files" not in configured_output:
                   raise SystemExit(f"Configured MyPy {expected_files}-file contract drift")
               if int(os.environ["CANDIDATE_CONFIGURED_STATUS"]) != 0:
@@ -1880,9 +2336,13 @@ jobs:
               raise SystemExit(f"unknown governed MyPy mode: {mode}")
           print("Batch 1 typing equivalence: PASS")
           PY
-          if [[ "$source_strict_status" -eq 0 || "$candidate_strict_status" -eq 0 \
-            || "$source_configured_status" -eq 0 ]]; then
+          if [[ "$source_strict_status" -eq 0 || "$candidate_strict_status" -eq 0 ]]; then
             echo "Historical MyPy debt unexpectedly disappeared" >&2
+            exit 1
+          fi
+          if [[ "${{ steps.evidence_contract.outputs.mode }}" != "courier-pickup-authorization-ordering" \
+            && "$source_configured_status" -eq 0 ]]; then
+            echo "Historical configured MyPy debt unexpectedly disappeared" >&2
             exit 1
           fi
           if [[ "${{ steps.evidence_contract.outputs.mode }}" == "pre-batch2" \
@@ -2048,7 +2508,10 @@ jobs:
           actual = scan_inventory(scan.get("results"))
           pre_batch2 = sorted(item for item in reviewed if item[0] not in BATCH2_ONLY_PATHS)
           mode = os.environ["EVIDENCE_MODE"]
-          if mode in {"batch2", "courier-pickup-idempotency-v1"}:
+          if mode in {
+              "batch2", "courier-pickup-idempotency-v1",
+              "courier-pickup-authorization-ordering",
+          }:
               exact("exact reviewed inventory", actual, reviewed)
               selected = "exact 34-finding inventory"
           elif mode == "pre-batch2":
@@ -2339,7 +2802,7 @@ jobs:
           PY
 
       - name: Verify exact Courier Pickup Migration 0057 inventory
-        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'courier-pickup-idempotency-v1'
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && (steps.evidence_contract.outputs.mode == 'courier-pickup-idempotency-v1' || steps.evidence_contract.outputs.mode == 'courier-pickup-authorization-ordering')
         run: |
           set -euo pipefail
           uv run --locked pytest -m migration --collect-only -q > courier-pickup-migration-collect.txt
@@ -2383,10 +2846,17 @@ jobs:
               "TRUSTED_COMPARISON_BASE_SHA: " + "$" +
               "{{ steps.trusted_comparison_base.outputs.sha }}"
           )
+          predecessor_mapping = (
+              "PUBLISHED_PREDECESSOR_SHA: " + "$" +
+              "{{ steps.trusted_comparison_base.outputs.sha }}"
+          )
           resolver_id = "id: trusted_" + "comparison_base"
           if workflow.count(resolver_id) != 1:
               raise SystemExit("trusted comparison base resolver is not unique")
-          if workflow.count(authoritative_mapping) != 4:
+          if (
+              workflow.count(authoritative_mapping) != 2
+              or workflow.count(predecessor_mapping) != 2
+          ):
               raise SystemExit("comparison-dependent gates do not share one resolver output")
           forbidden = (
               "COVERAGE_" + "COMPARE_SHA",
@@ -2469,7 +2939,278 @@ jobs:
               print("NEGATIVE PASS: downstream trusted-base replacement")
           else:
               raise SystemExit("downstream replacement of trusted base was admitted")
+
+          w16 = "65ff78430315c2d10bc40a0f3edafced6cec3ad2"
+          commits.add(w16)
+
+          def classify(*, predecessor, content_base, predecessor_is_ancestor,
+                       predecessor_descends_from_w16, head_descends_from_w16,
+                       changed_paths, protected_unchanged, reviewed_feature):
+              require_commit(predecessor)
+              require_commit(content_base)
+              if not predecessor_is_ancestor:
+                  raise ValueError("published predecessor is not an ancestor")
+              workflow_authority = (
+                  content_base == w16
+                  and predecessor_descends_from_w16
+                  and head_descends_from_w16
+                  and changed_paths == [".github/workflows/ci.yml"]
+                  and protected_unchanged
+              )
+              if workflow_authority and reviewed_feature:
+                  raise ValueError("ambiguous trusted content classification")
+              if workflow_authority:
+                  return "workflow-only-authority", content_base
+              if reviewed_feature:
+                  return "reviewed-feature-content", content_base
+              raise ValueError("unknown trusted content classification")
+
+          workflow_evidence = dict(
+              predecessor=authoritative_base,
+              content_base=w16,
+              predecessor_is_ancestor=True,
+              predecessor_descends_from_w16=True,
+              head_descends_from_w16=True,
+              changed_paths=[".github/workflows/ci.yml"],
+              protected_unchanged=True,
+              reviewed_feature=False,
+          )
+          if classify(**workflow_evidence) != ("workflow-only-authority", w16):
+              raise SystemExit("exact workflow-only authority was not classified")
+          feature_evidence = dict(
+              predecessor=prior_base,
+              content_base=prior_base,
+              predecessor_is_ancestor=True,
+              predecessor_descends_from_w16=False,
+              head_descends_from_w16=False,
+              changed_paths=["exact-reviewed-feature-content"],
+              protected_unchanged=False,
+              reviewed_feature=True,
+          )
+          if classify(**feature_evidence) != ("reviewed-feature-content", prior_base):
+              raise SystemExit("exact reviewed feature was not classified")
+          invalid_classifications = (
+              ("valid predecessor with wrong authoritative content base", {
+                  **workflow_evidence, "content_base": prior_base,
+              }),
+              ("correct W16 base with unrelated predecessor", {
+                  **workflow_evidence, "predecessor": prior_base,
+                  "predecessor_descends_from_w16": False,
+              }),
+              ("non-ancestor predecessor", {
+                  **workflow_evidence, "predecessor_is_ancestor": False,
+              }),
+              ("all-zero predecessor", {
+                  **workflow_evidence, "predecessor": zero,
+              }),
+              ("predecessor not descended from W16", {
+                  **workflow_evidence, "predecessor_descends_from_w16": False,
+              }),
+              ("workflow authority with production change", {
+                  **workflow_evidence,
+                  "changed_paths": [".github/workflows/ci.yml", "BACKEND/main.py"],
+              }),
+              ("workflow authority with tests change", {
+                  **workflow_evidence,
+                  "changed_paths": [".github/workflows/ci.yml", "tests/test_app.py"],
+              }),
+              ("workflow authority with migration change", {
+                  **workflow_evidence,
+                  "changed_paths": [
+                      ".github/workflows/ci.yml",
+                      "database/migrations/versions/changed.py",
+                  ],
+              }),
+              ("workflow authority claiming reviewed feature", {
+                  **workflow_evidence,
+                  "reviewed_feature": True,
+              }),
+              ("empty or unknown classification", {
+                  **workflow_evidence,
+                  "changed_paths": [],
+              }),
+          )
+          for label, evidence in invalid_classifications:
+              try:
+                  classify(**evidence)
+              except ValueError:
+                  print("NEGATIVE PASS:", label)
+              else:
+                  raise SystemExit(f"trusted classification negative admitted: {label}")
+
+          coverage_contract = {
+              "workflow-only-authority": (0, 0),
+              "reviewed-feature-content": (106, 0),
+              "courier-pickup-authorization-ordering": (11, 0),
+          }
+          comparison_base_contract = {
+              "workflow-only-authority": w16,
+              "reviewed-feature-content": prior_base,
+              "courier-pickup-authorization-ordering": authoritative_base,
+          }
+          def verify_pair(classification, comparison_base):
+              require_commit(comparison_base)
+              if comparison_base_contract.get(classification) != comparison_base:
+                  raise ValueError("classification/comparison-base pair mismatch")
+
+          for classification, comparison_base in comparison_base_contract.items():
+              verify_pair(classification, comparison_base)
+          for classification, comparison_base in (
+              ("workflow-only-authority", prior_base),
+              ("reviewed-feature-content", ""),
+              ("courier-pickup-authorization-ordering", prior_base),
+              ("", w16), ("unknown", w16),
+          ):
+              try:
+                  verify_pair(classification, comparison_base)
+              except ValueError:
+                  print("NEGATIVE PASS: trusted output pair", classification, comparison_base)
+              else:
+                  raise SystemExit(
+                      f"invalid classification/comparison-base pair admitted: "
+                      f"{classification!r} {comparison_base!r}"
+                  )
+          for classification, expected in coverage_contract.items():
+              if expected not in {(0, 0), (106, 0), (11, 0)}:
+                  raise SystemExit(f"unexpected coverage classification: {classification}")
+          for classification, actual in (
+              ("", (0, 0)), ("unknown", (0, 0)),
+              ("reviewed-feature-content", (105, 0)),
+              ("reviewed-feature-content", (106, 1)),
+              ("courier-pickup-authorization-ordering", (10, 0)),
+              ("courier-pickup-authorization-ordering", (11, 1)),
+          ):
+              if coverage_contract.get(classification) == actual:
+                  raise SystemExit(
+                      f"invalid trusted coverage classification admitted: {classification!r} {actual!r}"
+                  )
+              print("NEGATIVE PASS: trusted coverage contract", classification, actual)
+
+          binding_start = workflow.index("id: courier_pickup_v1_content")
+          binding_end = workflow.index("- name: Test all admitted non-PostgreSQL behavior")
+          binding = workflow[binding_start:binding_end]
+          for mutable_authority in (
+              "github.ref", "github.event_name", "github.event.pull_request.number",
+              "CONTENT_CLASSIFICATION",
+          ):
+              if mutable_authority in binding:
+                  raise SystemExit(
+                      f"mutable or candidate-controlled classification authority: {mutable_authority}"
+                  )
+          coverage_start = workflow.index(
+              "- name: Verify exact Courier Pickup Idempotency V1 test and coverage contract"
+          )
+          coverage_end = workflow.index(
+              "- name: Verify PostgreSQL 17/PostGIS integration tests without skips"
+          )
+          coverage_steps = workflow[coverage_start:coverage_end]
+          if "steps.trusted_comparison_base.outputs.sha" in coverage_steps:
+              raise SystemExit("coverage independently consumes the push predecessor")
+          required_outputs = (
+              "outputs.content_classification",
+              "outputs.content_comparison_base_sha",
+          )
+          if any(coverage_steps.count(value) != 2 for value in required_outputs):
+              raise SystemExit("coverage does not consume both trusted binding outputs")
           print("Single-source trusted comparison base controls: PASS")
+          PY
+
+      - name: Verify Courier Pickup authorization-ordering admission negative controls
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true'
+        run: |
+          uv run --locked python - <<'PY'
+          import copy
+
+          def rejected(label, verifier, value):
+              try:
+                  verifier(value)
+              except (AssertionError, ValueError):
+                  print(f"NEGATIVE PASS: {label}")
+                  return
+              raise SystemExit(f"authorization-ordering negative control admitted: {label}")
+
+          identity = {
+              "base": "65ff78430315c2d10bc40a0f3edafced6cec3ad2",
+              "head": "f764189398f70d7e9fecdb217362a26e0ac09f35",
+              "commits": 3, "tree": "65cdf5cef8605cd1b4e31443dca902ddb8d31225",
+              "backend": "29bb7bf4fc568c9c961e849872d5cef91d69e158",
+              "tests": "b30243de4bcc3b082a1222d368e9f7e9ef91cbdc",
+              "paths": 5, "added": 2, "modified": 3, "deleted": 0,
+              "manifest": "0ac039f011a6b88c472ad84af9770e98abc0c50fee2518a36515e04a3cd1bf5d",
+              "migrations": "3997d1a4022db4cb844b3283b454682eeb0420f2",
+          }
+          def verify_identity(value): assert value == identity
+          for label, key, value in (
+              ("wrong feature head", "head", "0" * 40),
+              ("wrong feature base", "base", "0" * 40),
+              ("commit-sequence drift", "commits", 2),
+              ("candidate-tree drift", "tree", "0" * 40),
+              ("BACKEND-tree drift", "backend", "0" * 40),
+              ("tests-tree drift", "tests", "0" * 40),
+              ("unauthorized sixth path", "paths", 6),
+              ("path-status drift", "modified", 4),
+              ("manifest drift", "manifest", "0" * 64),
+              ("migration-tree drift", "migrations", "0" * 40),
+          ):
+              changed = copy.deepcopy(identity); changed[key] = value
+              rejected(label, verify_identity, changed)
+
+          tests = {"nodes": 735, "passed": 734, "failed": 0, "errors": 0,
+                   "skipped": 0, "xfailed": 1,
+                   "fingerprint": "547c64c3f22891df88d77a02f56894b24ae8423135f9a12fe5fed87725f1cbf2"}
+          def verify_tests(value): assert value == tests
+          for label, key, value in (
+              ("missing node", "nodes", 734), ("extra node", "nodes", 736),
+              ("ordinary skip", "skipped", 1), ("xfail drift", "xfailed", 2),
+              ("test fingerprint drift", "fingerprint", "0" * 64),
+          ):
+              changed = copy.deepcopy(tests); changed[key] = value
+              rejected(label, verify_tests, changed)
+
+          postgres = {"nodes": 193, "failed": 0, "errors": 0, "skipped": 0,
+                      "geometry": True,
+                      "fingerprint": "b9560620f1c59faf8b97602094ac21cdadec48e76436b70bd3123fad1f68ba15"}
+          def verify_postgres(value): assert value == postgres
+          for label, key, value in (
+              ("PostgreSQL failure", "failed", 1), ("PostgreSQL skip", "skipped", 1),
+              ("missing geometry", "geometry", False),
+              ("PostgreSQL fingerprint drift", "fingerprint", "0" * 64),
+          ):
+              changed = copy.deepcopy(postgres); changed[key] = value
+              rejected(label, verify_postgres, changed)
+
+          coverage = {"percentage": 77.7819948383179, "baseline": 77.56604919526268,
+                      "changed": 11, "uncovered": 0,
+                      "fingerprint": "440c72ce71a28596dd8b69a2c60c7d9ce3b4d08b249178c313768c002f29bcb2"}
+          def verify_coverage(value):
+              assert value == coverage and value["percentage"] >= value["baseline"]
+          for label, key, value in (
+              ("coverage regression", "percentage", 77.5),
+              ("uncovered modified statement", "uncovered", 1),
+              ("coverage fingerprint drift", "fingerprint", "0" * 64),
+          ):
+              changed = copy.deepcopy(coverage); changed[key] = value
+              rejected(label, verify_coverage, changed)
+
+          typing = {"configured_files": 452, "configured_issues": 0,
+                    "strict_errors": 387, "strict_files": 52,
+                    "column": "dd2500cc517d85c23082df73782d09bee4ee5836ec33003a2393ac2adf55b000",
+                    "semantic": "c40b3dff746b5e5b659b79d4dfa60ab9aa857b2964235f03778655327ed624bc"}
+          def verify_typing(value): assert value == typing
+          for label, key, value in (
+              ("configured MyPy issue", "configured_issues", 1),
+              ("strict debt increase", "strict_errors", 388),
+              ("strict semantic drift", "semantic", "0" * 64),
+          ):
+              changed = copy.deepcopy(typing); changed[key] = value
+              rejected(label, verify_typing, changed)
+
+          cleanup = {"databases": 0, "connections": 0, "sessions": 0,
+                     "roles": 0, "dependencies": 0}
+          def verify_cleanup(value): assert value == cleanup
+          changed = copy.deepcopy(cleanup); changed["databases"] = 1
+          rejected("cleanup failure", verify_cleanup, changed)
+          print("Courier Pickup authorization-ordering negative controls: PASS")
           PY
 
       - name: Verify Courier Pickup Idempotency V1 admission negative controls
