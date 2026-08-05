@@ -1491,7 +1491,7 @@ jobs:
 
           contracts = {
               "authorization-ordering-all-collect.txt": (735, "547c64c3f22891df88d77a02f56894b24ae8423135f9a12fe5fed87725f1cbf2"),
-              "authorization-ordering-nonpostgresql-collect.txt": (508, "888c1fcbda58d8de06d04d15bd29eca0804813a5636412156fe3494280ce82c8f"),
+              "authorization-ordering-nonpostgresql-collect.txt": (508, "888c1fcbda58d8de06d04d15bd29eca0804813a5636412156fe3494280ce82c8"),
               "authorization-ordering-focused-collect.txt": (16, "3f5ed78283db6682033a9f795e6a06a2877ffb5ec4cb74249f5e1a4631acb516"),
           }
           for path, expected in contracts.items():
