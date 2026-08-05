@@ -61,6 +61,7 @@ KEY = "postgres-idempotency-contention-0001"
 HASH = "c" * 64
 ROLE = UUID("20000000-0000-4000-8000-00000000000c")
 ROLE_ASSIGNMENT = UUID("20000000-0000-4000-8000-00000000000d")
+PERMISSION = UUID("20000000-0000-4000-8000-00000000000e")
 
 
 def snapshot() -> dict:
@@ -308,11 +309,14 @@ def _seed_command_state(engine) -> None:
                 updated_at=NOW,
             )
         )
-        permission_id = connection.execute(
-            select(permissions.c.permission_id).where(
-                permissions.c.code == "courier_pickup.manage_assigned"
+        connection.execute(
+            insert(permissions).values(
+                permission_id=PERMISSION,
+                code="courier_pickup.manage_assigned",
+                description="Manage arrival state as the assigned authenticated courier.",
+                created_at=NOW,
             )
-        ).scalar_one()
+        )
         connection.execute(
             insert(roles).values(
                 role_id=ROLE,
@@ -326,7 +330,7 @@ def _seed_command_state(engine) -> None:
         connection.execute(
             insert(role_permissions).values(
                 role_id=ROLE,
-                permission_id=permission_id,
+                permission_id=PERMISSION,
                 granted_at=NOW,
             )
         )
@@ -352,6 +356,9 @@ def _cleanup_command_state(engine) -> None:
             delete(role_permissions).where(role_permissions.c.role_id == ROLE)
         )
         connection.execute(delete(roles).where(roles.c.role_id == ROLE))
+        connection.execute(
+            delete(permissions).where(permissions.c.permission_id == PERMISSION)
+        )
         connection.execute(
             delete(audit_events).where(
                 audit_events.c.resource_type == "courier_pickup",
