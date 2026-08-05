@@ -18,7 +18,7 @@ def audit_event(**changes) -> AuditEvent:
         "source_module": "rides",
     }
     values.update(changes)
-    return AuditEvent(**values)
+    return AuditEvent.model_validate(values)
 
 
 def test_contract_has_uuid_identifiers_utc_timestamps_and_links() -> None:
@@ -74,6 +74,22 @@ def test_metadata_allowlist_rejects_unknown_nested_and_unsafe_values() -> None:
     ):
         with pytest.raises(ValidationError):
             audit_event(safe_metadata=metadata)
+
+
+def test_governed_policy_transition_metadata_is_valid_without_domain_expansion() -> (
+    None
+):
+    event = audit_event(
+        resource_type="eat_availability_policy",
+        resource_id=str(uuid4()),
+        safe_metadata={"policy_version": 1, "state_to": "available"},
+    )
+    assert event.safe_metadata == {"policy_version": 1, "state_to": "available"}
+
+    with pytest.raises(ValidationError, match="not allowlisted"):
+        audit_event(safe_metadata={"merchant_id": str(uuid4())})
+    with pytest.raises(ValidationError, match="not allowlisted"):
+        audit_event(safe_metadata={"state": "available"})
 
 
 def test_contract_is_immutable_and_taxonomies_are_complete() -> None:

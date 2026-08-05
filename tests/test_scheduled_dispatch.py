@@ -39,7 +39,7 @@ NOW = datetime(2026, 7, 16, 12, tzinfo=UTC)
 
 
 def policy(**values: object) -> ReservationPolicy:
-    return ReservationPolicy(version="scheduled.v1", **values)
+    return ReservationPolicy.model_validate({"version": "scheduled.v1"} | values)
 
 
 def reservation(**values: object) -> ScheduledReservation:
@@ -60,7 +60,7 @@ def reservation(**values: object) -> ScheduledReservation:
         "updated_at": NOW,
     }
     defaults.update(values)
-    return ScheduledReservation(**defaults)
+    return ScheduledReservation.model_validate(defaults)
 
 
 def candidate(**values: object) -> ScheduledCandidate:
@@ -75,7 +75,7 @@ def candidate(**values: object) -> ScheduledCandidate:
         "location_observed_at": NOW,
     }
     defaults.update(values)
-    return ScheduledCandidate(**defaults)
+    return ScheduledCandidate.model_validate(defaults)
 
 
 def decision(**values: object) -> CandidateDecision:
@@ -89,7 +89,7 @@ def decision(**values: object) -> CandidateDecision:
         "reason_codes": ("eligible",),
     }
     defaults.update(values)
-    return CandidateDecision(**defaults)
+    return CandidateDecision.model_validate(defaults)
 
 
 def participants(item: ScheduledReservation, *, third_party: bool = False):

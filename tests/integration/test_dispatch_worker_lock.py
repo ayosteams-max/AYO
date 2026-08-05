@@ -1,6 +1,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from threading import Event
+from typing import cast
 
 import pytest
 
@@ -9,7 +10,7 @@ from BACKEND.dispatch.scheduler import (
     PostgresRecoveryWorkerLock,
     WorkerHealth,
 )
-from BACKEND.dispatch.worker import RecoveryResult
+from BACKEND.dispatch.worker import DispatchRecoveryWorker, RecoveryResult
 
 pytestmark = pytest.mark.integration
 
@@ -40,13 +41,13 @@ def test_postgres_advisory_lock_prevents_overlapping_recovery(postgres_engine) -
     entered = Event()
     release = Event()
     first = DispatchRecoveryCoordinator(
-        BlockingWorker(entered, release),
+        cast(DispatchRecoveryWorker, BlockingWorker(entered, release)),
         PostgresRecoveryWorkerLock(postgres_engine),
         WorkerHealth(),
     )
     second_worker = CountingWorker()
     second = DispatchRecoveryCoordinator(
-        second_worker,
+        cast(DispatchRecoveryWorker, second_worker),
         PostgresRecoveryWorkerLock(postgres_engine),
         WorkerHealth(),
     )

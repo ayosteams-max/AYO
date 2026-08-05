@@ -541,14 +541,16 @@ def test_concurrent_final_calculation_is_single_and_outbox_atomic(
     assignment_id, rider, driver = assigned(postgres_composition)
     lifecycle = ActiveRideLifecycleApplication(postgres_composition.unit_of_work)
     ride = lifecycle.start_from_assignment(assignment_id, now=NOW)
+    assert ride.ride_request_id is not None
+    ride_request_id = ride.ride_request_id
     with postgres_composition.unit_of_work() as unit:
-        source = unit.pricing.ride_request_source(ride.ride_request_id)
+        source = unit.pricing.ride_request_source(ride_request_id)
     assert source is not None
     app = PricingApplication(postgres_composition)
     policy = published_policy(app, source["service_zone_id"])
     estimate = app.estimate(
         rider,
-        ride_request_id=ride.ride_request_id,
+        ride_request_id=ride_request_id,
         policy_id=policy.policy_id,
         metrics=route(),
         idempotency_key=f"estimate-{uuid4()}",
