@@ -36,7 +36,11 @@ from BACKEND.persistence.tables import (
     courier_dispatch_assignments,
     courier_dispatch_offers,
     identities,
+    identity_role_assignments,
     merchant_profiles,
+    permissions,
+    role_permissions,
+    roles,
 )
 
 pytestmark = pytest.mark.integration
@@ -55,6 +59,8 @@ CORRELATION = UUID("20000000-0000-4000-8000-00000000000a")
 CAUSATION = UUID("20000000-0000-4000-8000-00000000000b")
 KEY = "postgres-idempotency-contention-0001"
 HASH = "c" * 64
+ROLE = UUID("20000000-0000-4000-8000-00000000000c")
+ROLE_ASSIGNMENT = UUID("20000000-0000-4000-8000-00000000000d")
 
 
 def snapshot() -> dict:
@@ -302,10 +308,50 @@ def _seed_command_state(engine) -> None:
                 updated_at=NOW,
             )
         )
+        permission_id = connection.execute(
+            select(permissions.c.permission_id).where(
+                permissions.c.code == "courier_pickup.manage_assigned"
+            )
+        ).scalar_one()
+        connection.execute(
+            insert(roles).values(
+                role_id=ROLE,
+                code="courier_pickup_idempotency_test",
+                description="Synthetic Courier Pickup idempotency test role",
+                system_managed=False,
+                created_at=NOW,
+                version=1,
+            )
+        )
+        connection.execute(
+            insert(role_permissions).values(
+                role_id=ROLE,
+                permission_id=permission_id,
+                granted_at=NOW,
+            )
+        )
+        connection.execute(
+            insert(identity_role_assignments).values(
+                assignment_id=ROLE_ASSIGNMENT,
+                identity_id=ACTOR,
+                role_id=ROLE,
+                assigned_by_identity_id=ACTOR,
+                assigned_at=NOW,
+            )
+        )
 
 
 def _cleanup_command_state(engine) -> None:
     with engine.begin() as connection:
+        connection.execute(
+            delete(identity_role_assignments).where(
+                identity_role_assignments.c.assignment_id == ROLE_ASSIGNMENT
+            )
+        )
+        connection.execute(
+            delete(role_permissions).where(role_permissions.c.role_id == ROLE)
+        )
+        connection.execute(delete(roles).where(roles.c.role_id == ROLE))
         connection.execute(
             delete(audit_events).where(
                 audit_events.c.resource_type == "courier_pickup",
@@ -622,6 +668,68 @@ def test_post_commit_uncertainty_and_restart_replay_are_snapshot_only(
             request_hash="f" * 64,
             at=NOW,
         )
+    assert _effect_counts(postgres_engine) == (1, 1, 1, 1, 1)
+
+
+def test_application_replay_returns_persisted_snapshot_after_revalidation(
+    postgres_engine, postgres_composition, command_state
+) -> None:
+    del command_state
+    first = CourierPickupApplication(postgres_composition).courier_command(
+        _subject(),
+        pickup_id=PICKUP,
+        expected_version=1,
+        action=CourierPickupAction.START_TRAVEL,
+        idempotency_key=KEY,
+        at=NOW,
+    )
+    assert _effect_counts(postgres_engine) == (1, 1, 1, 1, 1)
+
+    with postgres_engine.begin() as connection:
+        connection.execute(
+            update(identity_role_assignments)
+            .where(identity_role_assignments.c.assignment_id == ROLE_ASSIGNMENT)
+            .values(
+                revoked_at=NOW, revoked_by_identity_id=ACTOR, revocation_reason="test"
+            )
+        )
+    with pytest.raises(CourierPickupConflict, match="access_denied"):
+        CourierPickupApplication(postgres_composition).courier_command(
+            _subject(),
+            pickup_id=PICKUP,
+            expected_version=1,
+            action=CourierPickupAction.START_TRAVEL,
+            idempotency_key=KEY,
+            at=NOW.replace(year=2027),
+        )
+
+    with postgres_engine.begin() as connection:
+        connection.execute(
+            update(identity_role_assignments)
+            .where(identity_role_assignments.c.assignment_id == ROLE_ASSIGNMENT)
+            .values(
+                revoked_at=None,
+                revoked_by_identity_id=None,
+                revocation_reason=None,
+            )
+        )
+        connection.execute(
+            update(commerce_courier_pickups)
+            .where(commerce_courier_pickups.c.pickup_id == PICKUP)
+            .values(version=3, state=CourierPickupState.ARRIVED.value)
+        )
+
+    fresh_composition = type(postgres_composition)(postgres_engine)
+    replay = CourierPickupApplication(fresh_composition).courier_command(
+        _subject(),
+        pickup_id=PICKUP,
+        expected_version=1,
+        action=CourierPickupAction.START_TRAVEL,
+        idempotency_key=KEY,
+        at=NOW.replace(year=2027),
+    )
+    assert replay == first
+    assert replay.model_dump(mode="json") == first.model_dump(mode="json")
     assert _effect_counts(postgres_engine) == (1, 1, 1, 1, 1)
 
 

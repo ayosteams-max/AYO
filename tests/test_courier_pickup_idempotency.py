@@ -1,9 +1,14 @@
 from datetime import UTC, datetime, timedelta, timezone
+from types import SimpleNamespace
 from uuid import UUID
 
 import pytest
 from pydantic import ValidationError
 
+from BACKEND.audit.models import ActorType
+from BACKEND.authorization.contracts import AuthorizationSubject
+from BACKEND.courier_pickup.application import CourierPickupApplication
+from BACKEND.courier_pickup.engine import CourierPickupConflict
 from BACKEND.courier_pickup.idempotency import (
     DIGEST_VERSION,
     SNAPSHOT_MAX_BYTES,
@@ -16,6 +21,7 @@ from BACKEND.courier_pickup.models import (
     CourierPickupState,
     CourierPickupView,
 )
+from BACKEND.identity.models import IdentityType
 
 PICKUP_ID = UUID("10000000-0000-4000-8000-000000000001")
 ACTOR_ID = UUID("10000000-0000-4000-8000-000000000002")
@@ -208,3 +214,69 @@ def test_snapshot_round_trip_is_bounded_and_fail_closed() -> None:
     )
     with pytest.raises(ValueError, match="size limit"):
         CourierPickupReplaySnapshotV1(response=oversized).encode()
+
+
+def test_application_rejects_missing_assignment_before_any_write() -> None:
+    invalid = view().pickup.model_copy(
+        update={
+            "assignment_id": None,
+            "state": CourierPickupState.ASSIGNED,
+            "version": 1,
+        }
+    )
+    calls = {"reserve": 0, "transition": 0}
+
+    class Repository:
+        def get(self, pickup_id, *, lock=False):
+            assert lock is True
+            return invalid if pickup_id == invalid.pickup_id else None
+
+        def reserve(self, **kwargs):
+            del kwargs
+            calls["reserve"] += 1
+            return None
+
+        def transition(self, *args, **kwargs):
+            del args, kwargs
+            calls["transition"] += 1
+            raise AssertionError("transition must not execute")
+
+    audit_events: list[object] = []
+    unit = SimpleNamespace(
+        courier_pickup=Repository(),
+        authorization=SimpleNamespace(has_permission=lambda *args, **kwargs: True),
+        custody=SimpleNamespace(get_by_order=lambda order_id: None),
+        audit_events=audit_events,
+        __enter__=lambda self: self,
+        __exit__=lambda self, *args: None,
+    )
+
+    class UnitContext:
+        def __enter__(self):
+            return unit
+
+        def __exit__(self, *args):
+            return None
+
+    composition = SimpleNamespace(unit_of_work=lambda: UnitContext())
+    app = CourierPickupApplication(composition)
+    subject = AuthorizationSubject(
+        identity_id=ACTOR_ID,
+        identity_type=IdentityType.DRIVER,
+        actor_type=ActorType.DRIVER,
+    )
+
+    with pytest.raises(
+        CourierPickupConflict, match="courier_pickup_assignment_invalid"
+    ):
+        app.courier_command(
+            subject,
+            pickup_id=invalid.pickup_id,
+            expected_version=1,
+            action=CourierPickupAction.START_TRAVEL,
+            idempotency_key="missing-assignment-0001",
+            at=NOW,
+        )
+
+    assert calls == {"reserve": 0, "transition": 0}
+    assert audit_events == []
