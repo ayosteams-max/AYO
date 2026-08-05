@@ -96,7 +96,7 @@ def test_replay_rechecks_current_permission_without_disclosing_snapshot(
     with postgres_engine.begin() as connection:
         connection.execute(
             text(
-                "DELETE FROM ayo.auth_role_permissions "
+                "DELETE FROM ayo.role_permissions "
                 "WHERE role_id = CAST(:role_id AS uuid)"
             ),
             {"role_id": str(ROLE)},
