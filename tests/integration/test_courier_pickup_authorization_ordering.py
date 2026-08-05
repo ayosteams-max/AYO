@@ -12,6 +12,7 @@ from BACKEND.persistence.tables import commerce_courier_pickups
 from tests.integration.test_courier_pickup_idempotency import (
     ACTOR,
     KEY,
+    MERCHANT_OWNER,
     NOW,
     PICKUP,
     ROLE,
@@ -113,7 +114,7 @@ def test_postgres_replay_rechecks_ownership_and_exact_current_permission(
 def test_postgres_assignment_change_has_no_route_application_gap(
     postgres_engine,
 ) -> None:
-    replacement = uuid4()
+    replacement = MERCHANT_OWNER
     with postgres_engine.begin() as connection:
         connection.execute(
             update(commerce_courier_pickups)
