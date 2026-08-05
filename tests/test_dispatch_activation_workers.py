@@ -1,5 +1,6 @@
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
+from typing import cast
 from uuid import uuid4
 
 import pytest
@@ -13,8 +14,9 @@ from BACKEND.dispatch.scheduler import (
     DispatchRecoveryCoordinator,
     WorkerHealth,
 )
-from BACKEND.dispatch.worker import RecoveryResult
+from BACKEND.dispatch.worker import DispatchRecoveryWorker, RecoveryResult
 from BACKEND.observability import InMemoryMetricsSink, NullMetricsSink, safe_event
+from BACKEND.persistence.composition import PostgresRepositoryComposition
 
 NOW = datetime(2026, 7, 16, 10, tzinfo=UTC)
 
@@ -110,7 +112,7 @@ def test_local_outbox_delivery_is_idempotent_and_observable() -> None:
     publisher = LocalIdempotentPublisher()
     metrics = InMemoryMetricsSink()
     worker = OutboxDeliveryWorker(
-        FakeComposition(repository),
+        cast(PostgresRepositoryComposition, FakeComposition(repository)),
         publisher,
         worker_id="worker-1",
         metrics=metrics,
@@ -126,7 +128,7 @@ def test_outbox_retry_and_dead_letter_are_bounded() -> None:
     repository = FakeOutboxRepository([message()])
     metrics = InMemoryMetricsSink()
     worker = OutboxDeliveryWorker(
-        FakeComposition(repository),
+        cast(PostgresRepositoryComposition, FakeComposition(repository)),
         FailingPublisher(),
         worker_id="worker-1",
         metrics=metrics,
@@ -161,14 +163,18 @@ class FakeRecoveryWorker:
 def test_recovery_coordinator_skips_overlap_and_reports_health() -> None:
     skipped_health = WorkerHealth()
     skipped = DispatchRecoveryCoordinator(
-        FakeRecoveryWorker(), FixedLock(False), skipped_health
+        cast(DispatchRecoveryWorker, FakeRecoveryWorker()),
+        FixedLock(False),
+        skipped_health,
     ).run_once(now=NOW)
     assert not skipped.ran
     assert skipped_health.snapshot().skipped_overlap_count == 1
 
     health = WorkerHealth()
     worker = FakeRecoveryWorker()
-    result = DispatchRecoveryCoordinator(worker, FixedLock(), health).run_once(now=NOW)
+    result = DispatchRecoveryCoordinator(
+        cast(DispatchRecoveryWorker, worker), FixedLock(), health
+    ).run_once(now=NOW)
     assert result.ran and result.recovery == RecoveryResult(2, 1, 3)
     assert health.snapshot().ready(now=NOW)
 
@@ -191,7 +197,10 @@ def test_request_size_limit_rejects_declared_and_streamed_oversize() -> None:
 def test_worker_policy_bounds_are_fail_closed() -> None:
     with pytest.raises(ValueError):
         OutboxDeliveryWorker(
-            FakeComposition(FakeOutboxRepository([])),
+            cast(
+                PostgresRepositoryComposition,
+                FakeComposition(FakeOutboxRepository([])),
+            ),
             LocalIdempotentPublisher(),
             worker_id="worker-1",
             maximum_attempts=0,

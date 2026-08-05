@@ -157,13 +157,18 @@ def test_token_identity_rejects_unsafe_time_bounds() -> None:
         "key_id": "key-1",
     }
     with pytest.raises(ValueError):
-        VerifiedTokenIdentity(**base, expires_at=now)
+        VerifiedTokenIdentity.model_validate(base | {"expires_at": now})
     with pytest.raises(ValueError):
-        VerifiedTokenIdentity(**base, expires_at=now + timedelta(minutes=16))
+        VerifiedTokenIdentity.model_validate(
+            base | {"expires_at": now + timedelta(minutes=16)}
+        )
     with pytest.raises(ValueError):
-        VerifiedTokenIdentity(
-            **{**base, "issued_at": now.replace(tzinfo=None)},
-            expires_at=now + timedelta(minutes=5),
+        VerifiedTokenIdentity.model_validate(
+            base
+            | {
+                "issued_at": now.replace(tzinfo=None),
+                "expires_at": now + timedelta(minutes=5),
+            }
         )
 
 
