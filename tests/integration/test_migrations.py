@@ -295,7 +295,10 @@ def test_upgrade_empty_database_matches_metadata_and_postgresql_17(
                     not (
                         reflected
                         and type_ == "table"
-                        and name in {VERSION_TABLE, "spatial_ref_sys"}
+                        and (
+                            name in {VERSION_TABLE, "spatial_ref_sys"}
+                            or obj.schema != AYO_SCHEMA
+                        )
                     )
                 ),
             },
