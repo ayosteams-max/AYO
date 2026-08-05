@@ -14,6 +14,7 @@ from BACKEND.authorization.contracts import AuthorizationSubject
 from BACKEND.courier_pickup.application import CourierPickupApplication
 from BACKEND.courier_pickup.engine import CourierPickupConflict
 from BACKEND.courier_pickup.models import (
+    CourierPickupAction,
     CourierPickupEvent,
     CourierPickupEvidence,
     CourierPickupEvidenceKind,
@@ -340,6 +341,9 @@ def test_conflicts_map_to_minimal_safe_public_codes(internal, status, public) ->
 class _ReadUnit:
     def __init__(self, view: CourierPickupView, owner: UUID) -> None:
         self.courier_pickup = SimpleNamespace(
+            get=lambda pickup_id, lock=False: (
+                view.pickup if pickup_id == view.pickup.pickup_id else None
+            ),
             view=lambda pickup_id: view if pickup_id == view.pickup.pickup_id else None,
             get_by_order=lambda order_id: (
                 view if order_id == view.pickup.order_id else None
@@ -375,5 +379,41 @@ def test_missing_and_cross_owner_reads_share_the_same_internal_classification() 
             merchant, merchant_id=view.pickup.merchant_id, order_id=uuid4()
         ),
     ):
+        with pytest.raises(CourierPickupConflict, match="^courier_pickup_unavailable$"):
+            operation()
+
+
+def test_command_and_read_ownership_guards_share_unavailable_classification() -> None:
+    view = _view()
+    owner = uuid4()
+    app = CourierPickupApplication(
+        SimpleNamespace(unit_of_work=lambda: _ReadUnit(view, owner))
+    )
+    wrong_courier = _subject(uuid4(), IdentityType.DRIVER)
+    wrong_merchant = _subject(uuid4(), IdentityType.MERCHANT)
+    operations = (
+        lambda: app.merchant_detail(
+            wrong_merchant,
+            merchant_id=view.pickup.merchant_id,
+            order_id=view.pickup.order_id,
+        ),
+        lambda: app.courier_command(
+            wrong_courier,
+            pickup_id=uuid4(),
+            expected_version=1,
+            action=CourierPickupAction.START_TRAVEL,
+            idempotency_key="missing-pickup-command-0001",
+            at=NOW,
+        ),
+        lambda: app.courier_command(
+            wrong_courier,
+            pickup_id=view.pickup.pickup_id,
+            expected_version=view.pickup.version,
+            action=CourierPickupAction.START_TRAVEL,
+            idempotency_key="wrong-courier-command-0001",
+            at=NOW,
+        ),
+    )
+    for operation in operations:
         with pytest.raises(CourierPickupConflict, match="^courier_pickup_unavailable$"):
             operation()
