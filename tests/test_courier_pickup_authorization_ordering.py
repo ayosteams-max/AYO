@@ -158,6 +158,45 @@ def test_status_reads_check_ownership_before_exact_permission() -> None:
     assert permissions == ["courier_pickup.read_own_merchant"]
 
 
+def test_missing_merchant_pickup_is_unavailable_before_permission_lookup() -> None:
+    app_value, value, _, merchant_owner = application(permissions=set())
+    unit = app_value._composition.unit
+    unit.courier_pickup.get_by_order = lambda order_id: None
+    permissions = _record_permissions(app_value)
+    original_pickup = unit.courier_pickup.value
+
+    with pytest.raises(CourierPickupConflict, match="^courier_pickup_unavailable$"):
+        app_value.merchant_detail(
+            subject(merchant_owner, IdentityType.MERCHANT),
+            merchant_id=value.merchant_id,
+            order_id=uuid4(),
+        )
+
+    assert permissions == []
+    assert unit.courier_pickup.value == original_pickup
+    assert unit.courier_pickup.replays == {}
+    assert unit.audit_events == []
+
+
+def test_missing_courier_pickup_is_unavailable_before_permission_lookup() -> None:
+    app_value, _, courier_id, _ = application(
+        permissions={"courier_pickup.manage_assigned"}
+    )
+    unit = app_value._composition.unit
+    permissions = _record_permissions(app_value)
+    original_pickup = unit.courier_pickup.value
+
+    with pytest.raises(CourierPickupConflict, match="^courier_pickup_unavailable$"):
+        app_value.courier_detail(
+            subject(courier_id, IdentityType.DRIVER), pickup_id=uuid4()
+        )
+
+    assert permissions == []
+    assert unit.courier_pickup.value == original_pickup
+    assert unit.courier_pickup.replays == {}
+    assert unit.audit_events == []
+
+
 @pytest.mark.parametrize(
     ("actor", "expected_permission"),
     [
