@@ -1,5 +1,5 @@
 from datetime import UTC, datetime
-from typing import Any, cast
+from typing import Any
 from uuid import UUID
 
 from BACKEND.audit.models import AuditEvent, AuditOutcome
@@ -9,6 +9,7 @@ from BACKEND.courier_pickup.engine import (
     CourierPickupPolicy,
     target_state,
 )
+from BACKEND.courier_pickup.idempotency import CourierPickupCommandDigestV1
 from BACKEND.courier_pickup.models import (
     CourierPickupAction,
     CourierPickupExceptionReason,
@@ -95,15 +96,11 @@ class CourierPickupApplication:
             location_evidence_version,
             location_evidence_observed_at,
         )
-        if any(value is not None for value in supplied):
-            if action is not CourierPickupAction.MARK_ARRIVED or any(
-                value is None for value in supplied
-            ):
-                raise CourierPickupConflict("location_evidence_invalid")
-            self._policy.validate_location_evidence(
-                observed_at=cast(datetime, location_evidence_observed_at),
-                evaluated_at=self._at(at),
-            )
+        if any(value is not None for value in supplied) and (
+            action is not CourierPickupAction.MARK_ARRIVED
+            or any(value is None for value in supplied)
+        ):
+            raise CourierPickupConflict("location_evidence_invalid")
         return self._command(
             subject,
             pickup_id=pickup_id,
@@ -201,22 +198,47 @@ class CourierPickupApplication:
                 subject.identity_id, permission, at=instant
             ):
                 raise CourierPickupConflict("access_denied")
-            custody = unit.custody.get_by_order(current.order_id)
-            if custody is not None and custody.custody.state is CustodyState.ACCEPTED:
-                raise CourierPickupConflict("pickup_authority_ended_at_custody")
+            if current.assignment_id is None:
+                raise CourierPickupConflict("courier_pickup_assignment_invalid")
+            digest = CourierPickupCommandDigestV1(
+                pickup_id=pickup_id,
+                actor_identity_id=subject.identity_id,
+                acting_for_identity_id=None,
+                action=action,
+                expected_version=expected_version,
+                merchant_id=merchant_id,
+                assigned_courier_identity_id=current.assigned_courier_identity_id,
+                assignment_id=current.assignment_id,
+                assignment_version=current.assignment_version,
+                location_evidence_reference=location_evidence_reference,
+                location_evidence_version=location_evidence_version,
+                location_evidence_observed_at=location_evidence_observed_at,
+                reason=reason,
+                assignment_source_reference=current.assignment_id,
+                assignment_source_version=current.assignment_version,
+                pickup_policy_code=current.policy_code,
+                pickup_policy_version=current.policy_version,
+            )
             replay = unit.courier_pickup.reserve(
                 actor_id=subject.identity_id,
                 pickup_id=pickup_id,
                 key=idempotency_key,
                 action=action,
-                expected_version=expected_version,
+                request_hash=digest.hexdigest(),
                 at=instant,
-                reason=reason,
             )
             if replay is not None:
                 return replay
+            custody = unit.custody.get_by_order(current.order_id)
+            if custody is not None and custody.custody.state is CustodyState.ACCEPTED:
+                raise CourierPickupConflict("pickup_authority_ended_at_custody")
             if current.version != expected_version:
                 raise CourierPickupConflict("courier_pickup_version_conflict")
+            if location_evidence_observed_at is not None:
+                self._policy.validate_location_evidence(
+                    observed_at=location_evidence_observed_at,
+                    evaluated_at=instant,
+                )
             result = unit.courier_pickup.transition(
                 current,
                 target=target_state(current.state, action),

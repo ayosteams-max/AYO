@@ -1,4 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
+from unittest.mock import patch
 
 import pytest
 from alembic.autogenerate import compare_metadata
@@ -27,15 +28,6 @@ pytestmark = [pytest.mark.integration, pytest.mark.migration]
 
 def _is_governed_courier_pickup_metadata_difference(difference: tuple) -> bool:
     kind = difference[0]
-    if kind == "remove_column":
-        _, schema, table, column = difference
-        return (
-            schema == AYO_SCHEMA
-            and table == "commerce_courier_pickup_events"
-            and column.name in {"correlation_id", "causation_id"}
-            and column.type.__class__.__name__ == "UUID"
-            and column.nullable
-        )
     if kind in {"remove_constraint", "add_constraint"}:
         constraint = difference[1]
         return (
@@ -49,6 +41,17 @@ def _is_governed_courier_pickup_metadata_difference(difference: tuple) -> bool:
             }
         )
     return False
+
+
+def _governed_courier_pickup_metadata_identity(difference: tuple) -> tuple:
+    kind, constraint = difference
+    return (
+        kind,
+        constraint.table.schema,
+        constraint.table.name,
+        constraint.name,
+        tuple(constraint.columns.keys()),
+    )
 
 
 def _unexpected_schema_differences(differences: list[tuple]) -> list[tuple]:
@@ -65,6 +68,34 @@ def _governed_constraint_name(engine, *, table_name: str, logical_name: str) -> 
     constraint = CheckConstraint("state IS NOT NULL", name=logical_name)
     table.append_constraint(constraint)
     return engine.dialect.identifier_preparer.format_constraint(constraint)
+
+
+def _run_governed_downgrade(runner, engine, revision: str) -> None:
+    """Execute a downgrade inside MigrationRunner's advisory-locked connection."""
+    from alembic import command
+
+    def downgrade_with_runner_connection(config, _requested_revision: str) -> None:
+        with engine.connect() as probe:
+            lock_available = bool(
+                probe.execute(
+                    text("SELECT pg_try_advisory_lock(:lock_id)"),
+                    {"lock_id": MIGRATION_LOCK_ID},
+                ).scalar_one()
+            )
+            if lock_available:
+                probe.execute(
+                    text("SELECT pg_advisory_unlock(:lock_id)"),
+                    {"lock_id": MIGRATION_LOCK_ID},
+                )
+                probe.commit()
+        assert not lock_available, "MigrationRunner advisory lock was not held"
+        command.downgrade(config, revision)
+
+    with patch(
+        "BACKEND.persistence.migrations.command.upgrade",
+        side_effect=downgrade_with_runner_connection,
+    ):
+        runner.upgrade("head")
 
 
 @pytest.fixture
@@ -264,7 +295,10 @@ def test_upgrade_empty_database_matches_metadata_and_postgresql_17(
                     not (
                         reflected
                         and type_ == "table"
-                        and name in {VERSION_TABLE, "spatial_ref_sys"}
+                        and (
+                            name in {VERSION_TABLE, "spatial_ref_sys"}
+                            or obj.schema != AYO_SCHEMA
+                        )
                     )
                 ),
             },
@@ -275,7 +309,25 @@ def test_upgrade_empty_database_matches_metadata_and_postgresql_17(
             for difference in differences
             if _is_governed_courier_pickup_metadata_difference(difference)
         ]
-        assert len(governed) == 4
+        assert {
+            _governed_courier_pickup_metadata_identity(difference)
+            for difference in governed
+        } == {
+            (
+                "remove_constraint",
+                AYO_SCHEMA,
+                "commerce_courier_pickups",
+                "uq_courier_pickup_assignment",
+                ("assignment_id",),
+            ),
+            (
+                "add_constraint",
+                AYO_SCHEMA,
+                "commerce_courier_pickups",
+                "uq_commerce_courier_pickups_assignment_id",
+                ("assignment_id",),
+            ),
+        }
         assert _unexpected_schema_differences(differences) == []
         synthetic_drift = ("remove_column", AYO_SCHEMA, "unexpected", object())
         assert _unexpected_schema_differences([*differences, synthetic_drift]) == [
@@ -321,7 +373,7 @@ def test_canonical_compatibility_upgrades_from_previous_revision(
     } <= after
     readiness = SchemaVersionReadinessChecker(postgres_engine).check()
     assert readiness.ready
-    assert readiness.current_revision == "20260724_0056"
+    assert readiness.current_revision == "20260805_0057"
     assert readiness.current_revision == expected_schema_revision()
 
 
@@ -1474,3 +1526,73 @@ def test_courier_pickup_increment_one_migrates_additively(
         "courier_pickup.correct_own_merchant",
         "courier_pickup.close_own_merchant",
     } <= permissions
+
+
+def test_courier_pickup_idempotency_v1_migrates_and_refuses_evidence_loss(
+    postgres_engine, empty_database
+) -> None:
+    from alembic import command
+
+    runner = MigrationRunner(postgres_engine)
+    runner.upgrade("20260724_0056")
+    with postgres_engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO ayo.commerce_courier_pickup_idempotency "
+                "(actor_identity_id,pickup_id,action,idempotency_key,request_hash,created_at) "
+                "VALUES ('30000000-0000-4000-8000-000000000001',"
+                "'30000000-0000-4000-8000-000000000002','legacy','legacy-key',"
+                "repeat('a',64),now())"
+            )
+        )
+    runner.upgrade("20260805_0057")
+    with postgres_engine.connect() as connection:
+        legacy = connection.execute(
+            text(
+                "SELECT request_hash,digest_version,response_schema_version,"
+                "response_snapshot "
+                "FROM ayo.commerce_courier_pickup_idempotency"
+            )
+        ).one()
+        assert legacy == ("a" * 64, 0, 0, None)
+        assert SchemaVersionReadinessChecker(
+            postgres_engine
+        ).check().current_revision == ("20260805_0057")
+        assert expected_schema_revision() == "20260805_0057"
+        assert expected_schema_revision() != "20260724_0056"
+    with pytest.raises(
+        RuntimeError,
+        match="Alembic requires an advisory-locked connection from MigrationRunner",
+    ):
+        command.downgrade(alembic_config(), "20260724_0056")
+    _run_governed_downgrade(runner, postgres_engine, "20260724_0056")
+    assert SchemaVersionReadinessChecker(postgres_engine).check().current_revision == (
+        "20260724_0056"
+    )
+    runner.upgrade("20260805_0057")
+    with postgres_engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO ayo.commerce_courier_pickup_idempotency "
+                "(actor_identity_id,pickup_id,action,idempotency_key,request_hash,"
+                "digest_version,response_schema_version,response_version,response_snapshot,created_at) "
+                "VALUES ('30000000-0000-4000-8000-000000000003',"
+                "'30000000-0000-4000-8000-000000000004','start_travel','v1-key',"
+                "repeat('b',64),1,1,2,'{}'::jsonb,now())"
+            )
+        )
+    with pytest.raises(Exception, match="committed Courier Pickup V1 replay evidence"):
+        _run_governed_downgrade(runner, postgres_engine, "20260724_0056")
+    readiness = SchemaVersionReadinessChecker(postgres_engine).check()
+    assert readiness.ready
+    assert readiness.current_revision == "20260805_0057"
+    with postgres_engine.connect() as connection:
+        preserved = connection.execute(
+            text(
+                "SELECT request_hash,digest_version,response_schema_version,"
+                "response_version,response_snapshot "
+                "FROM ayo.commerce_courier_pickup_idempotency "
+                "WHERE idempotency_key='v1-key'"
+            )
+        ).one()
+    assert preserved == ("b" * 64, 1, 1, 2, {})
