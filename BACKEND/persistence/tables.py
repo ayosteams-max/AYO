@@ -15,6 +15,7 @@ from sqlalchemy import (
     LargeBinary,
     MetaData,
     Numeric,
+    SmallInteger,
     String,
     Table,
     UniqueConstraint,
@@ -5572,6 +5573,8 @@ commerce_courier_pickup_events = Table(
     ),
     Column("version", Integer, nullable=False),
     Column("occurred_at", DateTime(timezone=True), nullable=False),
+    Column("correlation_id", UUID(as_uuid=True)),
+    Column("causation_id", UUID(as_uuid=True)),
     schema=AYO_SCHEMA,
 )
 Index(
@@ -5587,13 +5590,42 @@ commerce_courier_pickup_idempotency = Table(
     Column("action", String(48), nullable=False, server_default="legacy"),
     Column("idempotency_key", String(128), nullable=False),
     Column("request_hash", String(64), nullable=False),
+    Column("digest_version", SmallInteger, nullable=False, server_default=text("0")),
+    Column(
+        "response_schema_version",
+        SmallInteger,
+        nullable=False,
+        server_default=text("0"),
+    ),
     Column("response_version", Integer),
+    Column("response_snapshot", JSONB(none_as_null=True)),
     Column("created_at", DateTime(timezone=True), nullable=False),
     UniqueConstraint(
         "actor_identity_id",
         "action",
         "idempotency_key",
         name="uq_courier_pickup_actor_action_idempotency",
+    ),
+    CheckConstraint(
+        "digest_version BETWEEN 0 AND 32767",
+        name="courier_pickup_idempotency_digest_version_valid",
+    ),
+    CheckConstraint(
+        "response_schema_version BETWEEN 0 AND 32767",
+        name="courier_pickup_idempotency_response_schema_version_valid",
+    ),
+    CheckConstraint(
+        "(digest_version = 0 AND response_schema_version = 0 "
+        "AND response_snapshot IS NULL) OR "
+        "(digest_version = 1 AND response_schema_version = 1)",
+        name="courier_pickup_idempotency_version_pair_valid",
+    ),
+    CheckConstraint(
+        "digest_version = 0 OR "
+        "((response_version IS NULL AND response_snapshot IS NULL) OR "
+        "(response_version IS NOT NULL AND response_snapshot IS NOT NULL "
+        "AND octet_length(response_snapshot::text) <= 65536))",
+        name="courier_pickup_idempotency_completion_valid",
     ),
     schema=AYO_SCHEMA,
 )
