@@ -1,5 +1,6 @@
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
+from queue import Queue
 from time import monotonic, sleep
 from uuid import UUID
 
@@ -480,16 +481,16 @@ def _effect_counts(engine) -> tuple[int, int, int, int, int]:
         )
 
 
-def _wait_for_real_lock(engine, application_name: str) -> None:
+def _wait_for_real_lock(engine, backend_pid: int) -> None:
     deadline = monotonic() + 10
     while monotonic() < deadline:
         with engine.connect() as connection:
             waiting = connection.execute(
                 text(
                     "SELECT count(*) FROM pg_stat_activity "
-                    "WHERE application_name=:name AND wait_event_type='Lock'"
+                    "WHERE pid=:pid AND wait_event_type='Lock'"
                 ),
-                {"name": application_name},
+                {"pid": backend_pid},
             ).scalar_one()
         if waiting:
             return
@@ -502,12 +503,12 @@ def test_real_postgresql_contention_executes_once(
     postgres_engine, command_state, conflicting
 ) -> None:
     del command_state
-    contender_name = f"pickup-contender-{'conflict' if conflicting else 'same'}"
+    contender_pid: Queue[int] = Queue(maxsize=1)
 
     def contend():
         with postgres_engine.begin() as connection:
-            connection.execute(
-                text("SET LOCAL application_name=:name"), {"name": contender_name}
+            contender_pid.put(
+                connection.execute(text("SELECT pg_backend_pid()")).scalar_one()
             )
             return _execute_on_connection(
                 connection, request_hash="e" * 64 if conflicting else HASH
@@ -520,7 +521,7 @@ def test_real_postgresql_contention_executes_once(
         assert repository.get(PICKUP, lock=True) is not None
         with ThreadPoolExecutor(max_workers=1) as executor:
             future = executor.submit(contend)
-            _wait_for_real_lock(postgres_engine, contender_name)
+            _wait_for_real_lock(postgres_engine, contender_pid.get(timeout=5))
             first = _execute_on_connection(first_connection)
             transaction.commit()
             if conflicting:

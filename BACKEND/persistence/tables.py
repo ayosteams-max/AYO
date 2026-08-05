@@ -5573,6 +5573,8 @@ commerce_courier_pickup_events = Table(
     ),
     Column("version", Integer, nullable=False),
     Column("occurred_at", DateTime(timezone=True), nullable=False),
+    Column("correlation_id", UUID(as_uuid=True)),
+    Column("causation_id", UUID(as_uuid=True)),
     schema=AYO_SCHEMA,
 )
 Index(
