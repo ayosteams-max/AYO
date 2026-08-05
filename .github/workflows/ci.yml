@@ -433,15 +433,16 @@ jobs:
           print("Historical non-PostgreSQL diagnostic fingerprint:", fingerprint)
           PY
 
-      - name: Resolve trusted coverage comparison base
+      - name: Resolve trusted comparison base
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true'
-        id: coverage_base
+        id: trusted_comparison_base
         env:
           EVENT_NAME: ${{ github.event_name }}
           EVENT_BEFORE: ${{ github.event.before || '' }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || '' }}
           EVENT_HEAD_SHA: ${{ github.sha }}
+          DISPATCH_BASE_SHA: ${{ inputs.expected_base_sha || '' }}
         run: |
           set -euo pipefail
           zero=0000000000000000000000000000000000000000
@@ -519,8 +520,19 @@ jobs:
               fi
               ;;
             workflow_dispatch)
-              comparison_sha=""
-              mode=certified-dispatch-tree
+              require_commit "$DISPATCH_BASE_SHA" "dispatch base SHA"
+              require_commit "$EVENT_HEAD_SHA" "dispatch workflow source SHA"
+              if [[ "$DISPATCH_BASE_SHA" != "$EVENT_HEAD_SHA" ]]; then
+                echo "dispatch base differs from the trusted workflow source SHA" >&2
+                exit 1
+              fi
+              mapfile -t parents < <(git show -s --format='%P' "$checked_out_head" | tr ' ' '\n')
+              if [[ "${#parents[@]}" -ne 2 || "${parents[0]}" != "$DISPATCH_BASE_SHA" ]]; then
+                echo "dispatch target first parent differs from the verified dispatch base" >&2
+                exit 1
+              fi
+              comparison_sha="$DISPATCH_BASE_SHA"
+              mode=certified-dispatch-base
               ;;
             *)
               echo "unsupported event for coverage comparison: $EVENT_NAME" >&2
@@ -528,16 +540,21 @@ jobs:
               ;;
           esac
 
+          require_commit "$comparison_sha" "resolved trusted comparison base"
+          git merge-base --is-ancestor "$comparison_sha" "$checked_out_head" || {
+            echo "resolved trusted comparison base is not an ancestor of the tested tree" >&2
+            exit 1
+          }
           echo "sha=$comparison_sha" >> "$GITHUB_OUTPUT"
           echo "mode=$mode" >> "$GITHUB_OUTPUT"
-          echo "Coverage comparison mode: $mode"
-          echo "Coverage comparison SHA: ${comparison_sha:-certified-tree-contract}"
+          echo "Trusted comparison mode: $mode"
+          echo "Trusted comparison base SHA: $comparison_sha"
 
       - name: Bind tested Courier Pickup tree to trusted authoritative base
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'courier-pickup-idempotency-v1'
         env:
           TESTED_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          TRUSTED_BASE_SHA: ${{ steps.coverage_base.outputs.sha }}
+          TRUSTED_COMPARISON_BASE_SHA: ${{ steps.trusted_comparison_base.outputs.sha }}
         run: |
           set -euo pipefail
           uv run --locked python - <<'PY'
@@ -567,7 +584,8 @@ jobs:
               return subprocess.run(
                   ["git", *args], check=True, capture_output=True, text=True,
               ).stdout.strip()
-          head, base = os.environ["TESTED_HEAD_SHA"], os.environ["TRUSTED_BASE_SHA"]
+          head = os.environ["TESTED_HEAD_SHA"]
+          base = os.environ["TRUSTED_COMPARISON_BASE_SHA"]
           if not head or not base or git("merge-base", head, base) != base:
               raise SystemExit("Courier Pickup tested head is not bound to its trusted base")
           changed = git("diff", "--name-only", base, head).splitlines()
@@ -589,7 +607,7 @@ jobs:
       - name: Test all admitted non-PostgreSQL behavior with coverage
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'pre-batch2'
         env:
-          COVERAGE_COMPARE_SHA: ${{ steps.coverage_base.outputs.sha }}
+          TRUSTED_COMPARISON_BASE_SHA: ${{ steps.trusted_comparison_base.outputs.sha }}
         run: |
           set +e
           set -o pipefail
@@ -882,7 +900,7 @@ jobs:
               if uncollected != expected_uncollected | expected_preexisting_uncollected:
                   raise SystemExit(f"historical uncollected-file inventory drift: {sorted(uncollected)!r}")
           else:
-              compare_sha = os.environ.get("COVERAGE_COMPARE_SHA", "")
+              compare_sha = os.environ.get("TRUSTED_COMPARISON_BASE_SHA", "")
               if not compare_sha or set(compare_sha) == {"0"}:
                   raise SystemExit("changed BACKEND tree lacks an exact coverage comparison base")
               changed = subprocess.run(
@@ -934,7 +952,7 @@ jobs:
       - name: Verify exact Batch 2 test and coverage contract
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'batch2'
         env:
-          COVERAGE_COMPARE_SHA: ${{ steps.coverage_base.outputs.sha }}
+          TRUSTED_COMPARISON_BASE_SHA: ${{ steps.trusted_comparison_base.outputs.sha }}
         run: |
           set -euo pipefail
           uv run --locked pytest --junitxml=batch2-results.xml \
@@ -1015,15 +1033,7 @@ jobs:
           if totals["percent_covered"] < 77.19024018299658:
               raise SystemExit("coverage fell below the certified Batch 2 floor")
 
-          compare_sha = os.environ.get("COVERAGE_COMPARE_SHA", "")
-          if not compare_sha:
-              parents = subprocess.run(
-                  ["git", "show", "-s", "--format=%P", "HEAD"],
-                  check=True, capture_output=True, text=True,
-              ).stdout.split()
-              if len(parents) != 2:
-                  raise SystemExit("dispatch Batch 2 target lacks an exact first-parent base")
-              compare_sha = parents[0]
+          compare_sha = os.environ.get("TRUSTED_COMPARISON_BASE_SHA", "")
           if not compare_sha:
               raise SystemExit("Batch 2 authoritative base binding is missing")
           subprocess.run(
@@ -1098,7 +1108,7 @@ jobs:
       - name: Verify exact Courier Pickup Idempotency V1 test and coverage contract
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'courier-pickup-idempotency-v1'
         env:
-          COVERAGE_COMPARE_SHA: ${{ steps.coverage_base.outputs.sha }}
+          TRUSTED_COMPARISON_BASE_SHA: ${{ steps.trusted_comparison_base.outputs.sha }}
         run: |
           set -euo pipefail
           uv run --locked pytest --collect-only -q > courier-pickup-all-collect.txt
@@ -1178,9 +1188,9 @@ jobs:
           if totals["percent_covered"] < 77.56604919526268:
               raise SystemExit("Courier Pickup coverage fell below its reviewed floor")
 
-          compare_sha = os.environ.get("COVERAGE_COMPARE_SHA")
-          if compare_sha != "4eda7c5e80907eba9b60c20d64561087ef50c84b":
-              raise SystemExit(f"Courier Pickup coverage base drift: {compare_sha}")
+          compare_sha = os.environ.get("TRUSTED_COMPARISON_BASE_SHA", "")
+          if not re.fullmatch(r"[0-9a-f]{40}", compare_sha) or set(compare_sha) == {"0"}:
+              raise SystemExit(f"Courier Pickup trusted comparison base is invalid: {compare_sha!r}")
           diff = subprocess.run(
               ["git", "diff", "--unified=0", compare_sha, "HEAD", "--", "BACKEND"],
               check=True, capture_output=True, text=True,
@@ -2359,6 +2369,107 @@ jobs:
               )
           print("Courier Pickup migration nodes: 34 passed")
           print("Courier Pickup migration inventory fingerprint:", fingerprint)
+          PY
+
+      - name: Verify single-source trusted comparison base controls
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true'
+        run: |
+          uv run --locked python - <<'PY'
+          import re
+          from pathlib import Path
+
+          workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
+          authoritative_mapping = (
+              "TRUSTED_COMPARISON_BASE_SHA: " + "$" +
+              "{{ steps.trusted_comparison_base.outputs.sha }}"
+          )
+          resolver_id = "id: trusted_" + "comparison_base"
+          if workflow.count(resolver_id) != 1:
+              raise SystemExit("trusted comparison base resolver is not unique")
+          if workflow.count(authoritative_mapping) != 4:
+              raise SystemExit("comparison-dependent gates do not share one resolver output")
+          forbidden = (
+              "COVERAGE_" + "COMPARE_SHA",
+              "steps.coverage_" + "base.outputs.sha",
+              'if compare_sha ' + '!= "4eda7c5e80907eba9b60c20d64561087ef50c84b"',
+              'comparison_sha=' + '""',
+              "dispatch Batch 2 target lacks " + "an exact first-parent base",
+          )
+          for stale in forbidden:
+              if stale in workflow:
+                  raise SystemExit(f"duplicated or stale comparison-base mechanism: {stale}")
+
+          zero = "0" * 40
+          prior_base = "a" * 40
+          authoritative_base = "b" * 40
+          head = "c" * 40
+          commits = {prior_base, authoritative_base, head}
+
+          def require_commit(value):
+              if not re.fullmatch(r"[0-9a-f]{40}", value or "") or value == zero:
+                  raise ValueError("invalid comparison base")
+              if value not in commits:
+                  raise ValueError("unavailable comparison base")
+
+          def resolve(*, event, event_base, expected_base, first_parent, merge_base, ancestor=True):
+              require_commit(event_base)
+              if not ancestor:
+                  raise ValueError("comparison base is not an ancestor")
+              if event == "first-push" and not (
+                  event_base == expected_base == first_parent == merge_base
+              ):
+                  raise ValueError("first-push base mismatch")
+              if event == "pull-request" and event_base != expected_base:
+                  raise ValueError("pull-request base mismatch")
+              if event == "subsequent-push" and event_base != first_parent:
+                  raise ValueError("push predecessor mismatch")
+              if event == "dispatch" and event_base != first_parent:
+                  raise ValueError("dispatch first-parent mismatch")
+              return event_base
+
+          def consume(resolved, supplied):
+              if supplied != resolved:
+                  raise ValueError("downstream trusted-base replacement")
+              require_commit(supplied)
+              return supplied
+
+          valid = (
+              ("first-push", authoritative_base, authoritative_base, authoritative_base, authoritative_base),
+              ("pull-request", authoritative_base, authoritative_base, authoritative_base, authoritative_base),
+              ("subsequent-push", authoritative_base, authoritative_base, authoritative_base, authoritative_base),
+              ("dispatch", prior_base, prior_base, prior_base, prior_base),
+          )
+          for event, event_base, expected_base, first_parent, merge_base in valid:
+              resolved = resolve(
+                  event=event, event_base=event_base, expected_base=expected_base,
+                  first_parent=first_parent, merge_base=merge_base,
+              )
+              assert consume(resolved, resolved) == event_base
+
+          invalid = (
+              ("missing trusted-base output", dict(event="pull-request", event_base="", expected_base=authoritative_base, first_parent=authoritative_base, merge_base=authoritative_base)),
+              ("malformed trusted base", dict(event="pull-request", event_base="not-a-sha", expected_base=authoritative_base, first_parent=authoritative_base, merge_base=authoritative_base)),
+              ("all-zero trusted base", dict(event="pull-request", event_base=zero, expected_base=authoritative_base, first_parent=authoritative_base, merge_base=authoritative_base)),
+              ("forged trusted base", dict(event="pull-request", event_base="f" * 40, expected_base=authoritative_base, first_parent=authoritative_base, merge_base=authoritative_base)),
+              ("wrong first-push parent", dict(event="first-push", event_base=prior_base, expected_base=authoritative_base, first_parent=prior_base, merge_base=authoritative_base)),
+              ("pull-request base mismatch", dict(event="pull-request", event_base=prior_base, expected_base=authoritative_base, first_parent=authoritative_base, merge_base=authoritative_base)),
+              ("force-pushed ancestry", dict(event="subsequent-push", event_base=authoritative_base, expected_base=authoritative_base, first_parent=authoritative_base, merge_base=authoritative_base, ancestor=False)),
+              ("ambiguous push predecessor", dict(event="subsequent-push", event_base=prior_base, expected_base=authoritative_base, first_parent=authoritative_base, merge_base=authoritative_base)),
+          )
+          for label, arguments in invalid:
+              try:
+                  resolve(**arguments)
+              except ValueError:
+                  print("NEGATIVE PASS:", label)
+              else:
+                  raise SystemExit(f"trusted-base negative control admitted: {label}")
+          try:
+              consume(authoritative_base, prior_base)
+          except ValueError:
+              print("NEGATIVE PASS: downstream trusted-base replacement")
+          else:
+              raise SystemExit("downstream replacement of trusted base was admitted")
+          print("Single-source trusted comparison base controls: PASS")
           PY
 
       - name: Verify Courier Pickup Idempotency V1 admission negative controls
