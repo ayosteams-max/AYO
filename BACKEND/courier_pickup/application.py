@@ -1,5 +1,5 @@
 from datetime import UTC, datetime
-from typing import Any, cast
+from typing import Any
 from uuid import UUID
 
 from BACKEND.audit.models import AuditEvent, AuditOutcome
@@ -236,7 +236,7 @@ class CourierPickupApplication:
                 raise CourierPickupConflict("courier_pickup_version_conflict")
             if location_evidence_observed_at is not None:
                 self._policy.validate_location_evidence(
-                    observed_at=cast(datetime, location_evidence_observed_at),
+                    observed_at=location_evidence_observed_at,
                     evaluated_at=instant,
                 )
             result = unit.courier_pickup.transition(

@@ -5596,7 +5596,7 @@ commerce_courier_pickup_idempotency = Table(
         server_default=text("0"),
     ),
     Column("response_version", Integer),
-    Column("response_snapshot", JSONB),
+    Column("response_snapshot", JSONB(none_as_null=True)),
     Column("created_at", DateTime(timezone=True), nullable=False),
     UniqueConstraint(
         "actor_identity_id",
