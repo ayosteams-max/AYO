@@ -654,7 +654,7 @@ jobs:
         id: courier_pickup_v1_content
         env:
           TESTED_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          TRUSTED_COMPARISON_BASE_SHA: ${{ steps.trusted_comparison_base.outputs.sha }}
+          PUBLISHED_PREDECESSOR_SHA: ${{ steps.trusted_comparison_base.outputs.sha }}
         run: |
           set -euo pipefail
           uv run --locked python - <<'PY'
@@ -685,25 +685,40 @@ jobs:
                   ["git", *args], check=True, capture_output=True, text=True,
               ).stdout.strip()
           head = os.environ["TESTED_HEAD_SHA"]
-          base = os.environ["TRUSTED_COMPARISON_BASE_SHA"]
-          if not head or not base or git("merge-base", head, base) != base:
-              raise SystemExit("Courier Pickup tested head is not bound to its trusted base")
-          changed = git("diff", "--name-only", base, head).splitlines()
+          predecessor = os.environ["PUBLISHED_PREDECESSOR_SHA"]
+          authoritative_base = "65ff78430315c2d10bc40a0f3edafced6cec3ad2"
+          if not head or not predecessor or git("merge-base", head, predecessor) != predecessor:
+              raise SystemExit("Courier Pickup tested head does not preserve published ancestry")
+          predecessor_descends_from_w16 = (
+              git("merge-base", predecessor, authoritative_base) == authoritative_base
+          )
+          head_descends_from_w16 = (
+              git("merge-base", head, authoritative_base) == authoritative_base
+          )
+          cumulative_changed = (
+              git("diff", "--name-only", authoritative_base, head).splitlines()
+              if head_descends_from_w16 else []
+          )
           workflow_only_admission = (
-              base == "65ff78430315c2d10bc40a0f3edafced6cec3ad2"
-              and changed == [".github/workflows/ci.yml"]
+              predecessor_descends_from_w16
+              and head_descends_from_w16
+              and
+              cumulative_changed == [".github/workflows/ci.yml"]
           )
           if workflow_only_admission:
               for subtree in ("BACKEND", "tests", "database/migrations"):
-                  if git("rev-parse", f"{base}:{subtree}") != git("rev-parse", f"{head}:{subtree}"):
+                  if git("rev-parse", f"{authoritative_base}:{subtree}") != git("rev-parse", f"{head}:{subtree}"):
                       raise SystemExit(f"workflow-only admission altered {subtree}")
               for path in ("pyproject.toml", "uv.lock", ".secrets.baseline"):
-                  if git("rev-parse", f"{base}:{path}") != git("rev-parse", f"{head}:{path}"):
+                  if git("rev-parse", f"{authoritative_base}:{path}") != git("rev-parse", f"{head}:{path}"):
                       raise SystemExit(f"workflow-only admission altered {path}")
               with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
                   output.write("content_classification=workflow-only-authority\n")
+                  output.write(f"content_comparison_base_sha={authoritative_base}\n")
               print("Courier Pickup W16 content preserved by workflow-only admission")
               raise SystemExit(0)
+          base = predecessor
+          changed = git("diff", "--name-only", base, head).splitlines()
           if changed != expected_paths:
               raise SystemExit(f"Courier Pickup tested ten-path boundary drift: {changed!r}")
           fingerprint = hashlib.sha256("\n".join(changed).encode()).hexdigest()
@@ -717,6 +732,7 @@ jobs:
               raise SystemExit("Courier Pickup tested Migration 0057 blob drift")
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
               output.write("content_classification=reviewed-feature-content\n")
+              output.write(f"content_comparison_base_sha={base}\n")
           print("Courier Pickup tested content is exactly bound to trusted base:", base)
           print("Courier Pickup tested ten-path manifest fingerprint:", fingerprint)
           PY
@@ -726,7 +742,7 @@ jobs:
         id: courier_pickup_authorization_ordering_content
         env:
           TESTED_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          TRUSTED_COMPARISON_BASE_SHA: ${{ steps.trusted_comparison_base.outputs.sha }}
+          PUBLISHED_PREDECESSOR_SHA: ${{ steps.trusted_comparison_base.outputs.sha }}
         run: |
           set -euo pipefail
           uv run --locked python - <<'PY'
@@ -761,7 +777,7 @@ jobs:
               ).stdout.strip()
 
           head = os.environ["TESTED_HEAD_SHA"]
-          base = os.environ["TRUSTED_COMPARISON_BASE_SHA"]
+          base = os.environ["PUBLISHED_PREDECESSOR_SHA"]
           if not head or not base or git("merge-base", head, base) != base:
               raise SystemExit("authorization-ordering tested head is not bound to trusted base")
           changed = git("diff", "--name-only", base, head).splitlines()
@@ -788,6 +804,7 @@ jobs:
                   raise SystemExit(f"authorization-ordering forbidden tested drift: {path}")
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
               output.write("content_classification=courier-pickup-authorization-ordering\n")
+              output.write(f"content_comparison_base_sha={base}\n")
           print("Authorization-ordering tested content bound to trusted base:", base)
           print("Authorization-ordering tested five-path fingerprint:", fingerprint)
           PY
@@ -1297,7 +1314,7 @@ jobs:
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'courier-pickup-idempotency-v1'
         env:
           CONTENT_CLASSIFICATION: ${{ steps.courier_pickup_v1_content.outputs.content_classification }}
-          TRUSTED_COMPARISON_BASE_SHA: ${{ steps.trusted_comparison_base.outputs.sha }}
+          CONTENT_COMPARISON_BASE_SHA: ${{ steps.courier_pickup_v1_content.outputs.content_comparison_base_sha }}
         run: |
           set -euo pipefail
           uv run --locked pytest --collect-only -q > courier-pickup-all-collect.txt
@@ -1377,7 +1394,7 @@ jobs:
           if totals["percent_covered"] < 77.56604919526268:
               raise SystemExit("Courier Pickup coverage fell below its reviewed floor")
 
-          compare_sha = os.environ.get("TRUSTED_COMPARISON_BASE_SHA", "")
+          compare_sha = os.environ.get("CONTENT_COMPARISON_BASE_SHA", "")
           classification = os.environ.get("CONTENT_CLASSIFICATION", "")
           expected_statements = {
               "workflow-only-authority": 0,
@@ -1385,6 +1402,14 @@ jobs:
           }.get(classification)
           if expected_statements is None:
               raise SystemExit(f"unknown or absent trusted content classification: {classification!r}")
+          expected_base = {
+              "workflow-only-authority": "65ff78430315c2d10bc40a0f3edafced6cec3ad2",
+              "reviewed-feature-content": "4eda7c5e80907eba9b60c20d64561087ef50c84b",
+          }[classification]
+          if compare_sha != expected_base:
+              raise SystemExit(
+                  f"trusted classification/base pair drift: {classification!r} {compare_sha!r}"
+              )
           if not re.fullmatch(r"[0-9a-f]{40}", compare_sha) or set(compare_sha) == {"0"}:
               raise SystemExit(f"Courier Pickup trusted comparison base is invalid: {compare_sha!r}")
           diff = subprocess.run(
@@ -1434,7 +1459,7 @@ jobs:
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'courier-pickup-authorization-ordering'
         env:
           CONTENT_CLASSIFICATION: ${{ steps.courier_pickup_authorization_ordering_content.outputs.content_classification }}
-          TRUSTED_COMPARISON_BASE_SHA: ${{ steps.trusted_comparison_base.outputs.sha }}
+          CONTENT_COMPARISON_BASE_SHA: ${{ steps.courier_pickup_authorization_ordering_content.outputs.content_comparison_base_sha }}
         run: |
           set -euo pipefail
           uv run --locked pytest --collect-only -q > authorization-ordering-all-collect.txt
@@ -1527,7 +1552,7 @@ jobs:
           if totals["percent_covered"] - baseline != 0.21594564305522113:
               raise SystemExit("authorization-ordering coverage increase drift")
 
-          compare_sha = os.environ.get("TRUSTED_COMPARISON_BASE_SHA", "")
+          compare_sha = os.environ.get("CONTENT_COMPARISON_BASE_SHA", "")
           classification = os.environ.get("CONTENT_CLASSIFICATION", "")
           if classification != "courier-pickup-authorization-ordering":
               raise SystemExit(f"authorization-ordering trusted classification drift: {classification!r}")
@@ -2821,10 +2846,17 @@ jobs:
               "TRUSTED_COMPARISON_BASE_SHA: " + "$" +
               "{{ steps.trusted_comparison_base.outputs.sha }}"
           )
+          predecessor_mapping = (
+              "PUBLISHED_PREDECESSOR_SHA: " + "$" +
+              "{{ steps.trusted_comparison_base.outputs.sha }}"
+          )
           resolver_id = "id: trusted_" + "comparison_base"
           if workflow.count(resolver_id) != 1:
               raise SystemExit("trusted comparison base resolver is not unique")
-          if workflow.count(authoritative_mapping) != 6:
+          if (
+              workflow.count(authoritative_mapping) != 2
+              or workflow.count(predecessor_mapping) != 2
+          ):
               raise SystemExit("comparison-dependent gates do not share one resolver output")
           forbidden = (
               "COVERAGE_" + "COMPARE_SHA",
@@ -2908,37 +2940,72 @@ jobs:
           else:
               raise SystemExit("downstream replacement of trusted base was admitted")
 
-          def classify(*, base, changed_paths, protected_unchanged, reviewed_feature):
+          w16 = "65ff78430315c2d10bc40a0f3edafced6cec3ad2"
+          commits.add(w16)
+
+          def classify(*, predecessor, content_base, predecessor_is_ancestor,
+                       predecessor_descends_from_w16, head_descends_from_w16,
+                       changed_paths, protected_unchanged, reviewed_feature):
+              require_commit(predecessor)
+              require_commit(content_base)
+              if not predecessor_is_ancestor:
+                  raise ValueError("published predecessor is not an ancestor")
               workflow_authority = (
-                  base == "65ff78430315c2d10bc40a0f3edafced6cec3ad2"
+                  content_base == w16
+                  and predecessor_descends_from_w16
+                  and head_descends_from_w16
                   and changed_paths == [".github/workflows/ci.yml"]
                   and protected_unchanged
               )
               if workflow_authority and reviewed_feature:
                   raise ValueError("ambiguous trusted content classification")
               if workflow_authority:
-                  return "workflow-only-authority"
+                  return "workflow-only-authority", content_base
               if reviewed_feature:
-                  return "reviewed-feature-content"
+                  return "reviewed-feature-content", content_base
               raise ValueError("unknown trusted content classification")
 
           workflow_evidence = dict(
-              base="65ff78430315c2d10bc40a0f3edafced6cec3ad2",
+              predecessor=authoritative_base,
+              content_base=w16,
+              predecessor_is_ancestor=True,
+              predecessor_descends_from_w16=True,
+              head_descends_from_w16=True,
               changed_paths=[".github/workflows/ci.yml"],
               protected_unchanged=True,
               reviewed_feature=False,
           )
-          if classify(**workflow_evidence) != "workflow-only-authority":
+          if classify(**workflow_evidence) != ("workflow-only-authority", w16):
               raise SystemExit("exact workflow-only authority was not classified")
           feature_evidence = dict(
-              base=authoritative_base,
+              predecessor=prior_base,
+              content_base=prior_base,
+              predecessor_is_ancestor=True,
+              predecessor_descends_from_w16=False,
+              head_descends_from_w16=False,
               changed_paths=["exact-reviewed-feature-content"],
               protected_unchanged=False,
               reviewed_feature=True,
           )
-          if classify(**feature_evidence) != "reviewed-feature-content":
+          if classify(**feature_evidence) != ("reviewed-feature-content", prior_base):
               raise SystemExit("exact reviewed feature was not classified")
           invalid_classifications = (
+              ("valid predecessor with wrong authoritative content base", {
+                  **workflow_evidence, "content_base": prior_base,
+              }),
+              ("correct W16 base with unrelated predecessor", {
+                  **workflow_evidence, "predecessor": prior_base,
+                  "predecessor_descends_from_w16": False,
+              }),
+              ("non-ancestor predecessor", {
+                  **workflow_evidence, "predecessor_is_ancestor": False,
+              }),
+              ("all-zero predecessor", {
+                  **workflow_evidence, "predecessor": zero,
+              }),
+              ("predecessor not descended from W16", {
+                  **workflow_evidence, "predecessor_descends_from_w16": False,
+              }),
               ("workflow authority with production change", {
                   **workflow_evidence,
                   "changed_paths": [".github/workflows/ci.yml", "BACKEND/main.py"],
@@ -2976,6 +3043,33 @@ jobs:
               "reviewed-feature-content": (106, 0),
               "courier-pickup-authorization-ordering": (11, 0),
           }
+          comparison_base_contract = {
+              "workflow-only-authority": w16,
+              "reviewed-feature-content": prior_base,
+              "courier-pickup-authorization-ordering": authoritative_base,
+          }
+          def verify_pair(classification, comparison_base):
+              require_commit(comparison_base)
+              if comparison_base_contract.get(classification) != comparison_base:
+                  raise ValueError("classification/comparison-base pair mismatch")
+
+          for classification, comparison_base in comparison_base_contract.items():
+              verify_pair(classification, comparison_base)
+          for classification, comparison_base in (
+              ("workflow-only-authority", prior_base),
+              ("reviewed-feature-content", ""),
+              ("courier-pickup-authorization-ordering", prior_base),
+              ("", w16), ("unknown", w16),
+          ):
+              try:
+                  verify_pair(classification, comparison_base)
+              except ValueError:
+                  print("NEGATIVE PASS: trusted output pair", classification, comparison_base)
+              else:
+                  raise SystemExit(
+                      f"invalid classification/comparison-base pair admitted: "
+                      f"{classification!r} {comparison_base!r}"
+                  )
           for classification, expected in coverage_contract.items():
               if expected not in {(0, 0), (106, 0), (11, 0)}:
                   raise SystemExit(f"unexpected coverage classification: {classification}")
@@ -3003,6 +3097,21 @@ jobs:
                   raise SystemExit(
                       f"mutable or candidate-controlled classification authority: {mutable_authority}"
                   )
+          coverage_start = workflow.index(
+              "- name: Verify exact Courier Pickup Idempotency V1 test and coverage contract"
+          )
+          coverage_end = workflow.index(
+              "- name: Verify PostgreSQL 17/PostGIS integration tests without skips"
+          )
+          coverage_steps = workflow[coverage_start:coverage_end]
+          if "steps.trusted_comparison_base.outputs.sha" in coverage_steps:
+              raise SystemExit("coverage independently consumes the push predecessor")
+          required_outputs = (
+              "outputs.content_classification",
+              "outputs.content_comparison_base_sha",
+          )
+          if any(coverage_steps.count(value) != 2 for value in required_outputs):
+              raise SystemExit("coverage does not consume both trusted binding outputs")
           print("Single-source trusted comparison base controls: PASS")
           PY
 
