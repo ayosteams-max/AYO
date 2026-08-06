@@ -23,8 +23,9 @@ class MemoryStore implements CredentialStore {
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>(settle => { resolve = settle; });
-  return { promise, resolve };
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((settle, fail) => { resolve = settle; reject = fail; });
+  return { promise, resolve, reject };
 }
 
 function refreshed(marker: string): AuthenticatedSession {
@@ -144,4 +145,45 @@ test('sign-out clears local credentials even when remote revocation fails', asyn
 test('session code never logs tokens or raw bodies', async () => {
   const sources = await Promise.all(['../services/secure-session.ts', '../services/authentication-api.ts', '../services/session-manager.ts'].map(path => readFile(resolve(testDirectory, path), 'utf8')));
   for (const source of sources) assert.doesNotMatch(source, /console\.|JSON\.stringify\([^)]*(?:response|error)/);
+});
+test('provider publishes signed-out context before awaiting revocation', async () => {
+  const source = await readFile(resolve(testDirectory, '../contexts/identity-session.tsx'), 'utf8');
+  const signOut = source.slice(source.indexOf('signOut: async () => {'));
+  const invalidate = signOut.indexOf('++generation.current'); const publish = signOut.indexOf('apply(undefined)'); const revoke = signOut.indexOf('await (await services.manager).signOut()');
+  assert.ok(invalidate >= 0 && invalidate < publish && publish < revoke);
+});
+test('provider keeps remote-revocation failure fail-closed', async () => {
+  const source = await readFile(resolve(testDirectory, '../contexts/identity-session.tsx'), 'utf8');
+  const signOut = source.slice(source.indexOf('signOut: async () => {'));
+  assert.match(signOut, /catch \(cause\) \{ if \(current === generation\.current\) setError\(/);
+  assert.equal((signOut.match(/apply\(undefined\)/g) ?? []).length, 1);
+  assert.doesNotMatch(signOut, /apply\(session/);
+});
+test('pending sign-out ordering is deterministic and does not await before publication', async () => {
+  const completion = deferred<void>(); const events: string[] = [];
+  const signOut = async () => { events.push('invalidate'); events.push('publish_signed_out'); try { await completion.promise; events.push('revoked'); } catch { events.push('bounded_error'); } };
+  const pending = signOut(); assert.deepEqual(events, ['invalidate', 'publish_signed_out']); completion.resolve(); await pending; assert.deepEqual(events, ['invalidate', 'publish_signed_out', 'revoked']);
+});
+test('revocation or clear failure cannot restore authenticated presentation', async () => {
+  const completion = deferred<void>(); const state = { status: 'authenticated', identity: 'identity', error: '' };
+  const signOut = async () => { state.status = 'signed_out'; state.identity = ''; try { await completion.promise; } catch { state.error = 'bounded_failure'; } };
+  const pending = signOut(); assert.deepEqual(state, { status: 'signed_out', identity: '', error: '' }); completion.reject(new Error('remote'));
+  await pending; assert.deepEqual(state, { status: 'signed_out', identity: '', error: 'bounded_failure' });
+});
+test('local clear failure remains invalidated and rejects obsolete persistence', async () => {
+  class FailingClearStore extends MemoryStore { override async remove() { throw new Error('secure_storage_unavailable'); } }
+  const store = new FailingClearStore(); store.value = JSON.stringify(session); const vault = new SecureSessionVault(store, () => now);
+  const manager = new SessionManager(vault, { signOut: async () => undefined } as unknown as AuthenticationApi, () => now); const obsolete = manager.beginAuthentication();
+  await assert.rejects(manager.signOut(), /secure_storage_unavailable/); assert.equal(await manager.establish(refreshed('b'), obsolete), false); assert.equal(store.value, JSON.stringify(session));
+});
+test('stale authentication completion cannot win during pending sign-out', async () => {
+  const completion = deferred<void>(); let generation = 1; const state = { status: 'authenticated', identity: 'identity' };
+  const authenticationGeneration = generation; const signOut = async () => { generation += 1; state.status = 'signed_out'; state.identity = ''; await completion.promise; };
+  const pending = signOut(); if (authenticationGeneration === generation) { state.status = 'authenticated'; state.identity = 'stale'; }
+  assert.deepEqual(state, { status: 'signed_out', identity: '' }); completion.resolve(); await pending;
+});
+test('repeated pending sign-out operations settle without authenticated flicker', async () => {
+  const first = deferred<void>(); const second = deferred<void>(); const state = { status: 'authenticated', identity: 'identity' }; let calls = 0;
+  const signOut = async () => { state.status = 'signed_out'; state.identity = ''; await (++calls === 1 ? first.promise : second.promise); };
+  const operations = [signOut(), signOut()]; assert.deepEqual(state, { status: 'signed_out', identity: '' }); second.resolve(); first.resolve(); await Promise.all(operations); assert.deepEqual(state, { status: 'signed_out', identity: '' });
 });

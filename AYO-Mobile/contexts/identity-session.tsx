@@ -57,7 +57,13 @@ export function IdentitySessionProvider({ children }: PropsWithChildren) {
     catch (cause) { if (current === generation.current) { setError(cause instanceof Error ? cause.message : 'temporary_failure'); apply(undefined); } throw cause; }
   }, [apply, services]);
   const verificationApi = useCallback(async () => { const session = await (await services.manager).restore(); if (!session) throw new Error('authentication_required'); return { api: await services.api, session }; }, [services]);
-  const value = useMemo<IdentityContextValue>(() => ({ status, identity, error, signIn: (c) => authenticate('signIn', c), register: (c) => authenticate('register', c), prepareVerification: async (kind, contact) => { const { api, session } = await verificationApi(); return api.prepareVerification(session.accessToken, kind, contact); }, completeVerification: async (challengeId, code) => { const { api, session } = await verificationApi(); const progress = await api.completeVerification(session.accessToken, challengeId, code); apply(session, progress.activated); }, retry: restore, signOut: async () => { ++generation.current; try { await (await services.manager).signOut(); } finally { apply(undefined); } } }), [apply, authenticate, error, identity, restore, services, status, verificationApi]);
+  const value = useMemo<IdentityContextValue>(() => ({ status, identity, error, signIn: (c) => authenticate('signIn', c), register: (c) => authenticate('register', c), prepareVerification: async (kind, contact) => { const { api, session } = await verificationApi(); return api.prepareVerification(session.accessToken, kind, contact); }, completeVerification: async (challengeId, code) => { const { api, session } = await verificationApi(); const progress = await api.completeVerification(session.accessToken, challengeId, code); apply(session, progress.activated); }, retry: restore, signOut: async () => {
+    const current = ++generation.current;
+    setError(undefined);
+    apply(undefined);
+    try { await (await services.manager).signOut(); }
+    catch (cause) { if (current === generation.current) setError(cause instanceof Error ? cause.message : 'temporary_failure'); }
+  } }), [apply, authenticate, error, identity, restore, services, status, verificationApi]);
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
 
