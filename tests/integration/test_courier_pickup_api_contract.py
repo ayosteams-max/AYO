@@ -1,3 +1,5 @@
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 from typing import cast
 from uuid import UUID, uuid4
 
@@ -23,6 +25,7 @@ from BACKEND.persistence.composition import PostgresRepositoryComposition
 from BACKEND.persistence.custody_repository import PostgresCustodyRepository
 from BACKEND.persistence.tables import (
     commerce_courier_pickup_events,
+    commerce_courier_pickup_idempotency,
     commerce_courier_pickups,
     commerce_custody_events,
     commerce_custody_records,
@@ -34,6 +37,7 @@ from BACKEND.persistence.tables import (
 )
 from tests.integration.test_courier_pickup_idempotency import (
     ACTOR,
+    CUSTOMER,
     KEY,
     MERCHANT,
     MERCHANT_OWNER,
@@ -358,6 +362,248 @@ def test_custody_activation_failure_rolls_back_merchant_acknowledgement(
                 )
             ).scalar_one()
             == 0
+        )
+
+
+@pytest.mark.usefixtures("api_contract_state")
+@pytest.mark.parametrize("custody_state", ["missing", "mismatched"])
+def test_completed_acknowledgement_replay_never_repairs_custody(
+    postgres_engine,
+    postgres_composition,
+    custody_state,
+) -> None:
+    courier = CourierPickupApplication(postgres_composition)
+    travelling = courier.courier_command(
+        _subject(),
+        pickup_id=PICKUP,
+        expected_version=1,
+        action=CourierPickupAction.START_TRAVEL,
+        idempotency_key="replay-integrity-travel-0001",
+        at=NOW,
+    )
+    arrived = courier.courier_command(
+        _subject(),
+        pickup_id=PICKUP,
+        expected_version=travelling.pickup.version,
+        action=CourierPickupAction.MARK_ARRIVED,
+        idempotency_key="replay-integrity-arrival-0001",
+        at=NOW,
+    )
+    merchant = _client(postgres_composition, _merchant_subject())
+    path = f"/api/mobile/merchants/{MERCHANT}/courier-pickups/{PICKUP}/acknowledge"
+    headers = {"Idempotency-Key": "replay-integrity-merchant-0001"}
+    body = {
+        "expected_version": arrived.pickup.version,
+        "action": "acknowledge_arrival",
+    }
+    assert merchant.post(path, headers=headers, json=body).status_code == 200
+
+    with postgres_engine.begin() as connection:
+        custody_id = connection.execute(
+            select(commerce_custody_records.c.custody_id).where(
+                commerce_custody_records.c.pickup_id == PICKUP
+            )
+        ).scalar_one()
+        if custody_state == "missing":
+            connection.execute(
+                delete(commerce_custody_events).where(
+                    commerce_custody_events.c.custody_id == custody_id
+                )
+            )
+            connection.execute(
+                delete(commerce_order_outbox).where(
+                    commerce_order_outbox.c.order_id == ORDER,
+                    commerce_order_outbox.c.event_type == "commerce.custody.activated",
+                )
+            )
+            connection.execute(
+                delete(commerce_custody_records).where(
+                    commerce_custody_records.c.custody_id == custody_id
+                )
+            )
+        else:
+            connection.execute(
+                update(commerce_custody_records)
+                .where(commerce_custody_records.c.custody_id == custody_id)
+                .values(courier_identity_id=CUSTOMER)
+            )
+        before_pickup = connection.execute(
+            select(
+                commerce_courier_pickups.c.state,
+                commerce_courier_pickups.c.version,
+            ).where(commerce_courier_pickups.c.pickup_id == PICKUP)
+        ).one()
+        before_idempotency = tuple(
+            connection.execute(
+                select(commerce_courier_pickup_idempotency).where(
+                    commerce_courier_pickup_idempotency.c.pickup_id == PICKUP
+                )
+            ).mappings()
+        )
+        before_events = connection.execute(
+            select(func.count())
+            .select_from(commerce_custody_events)
+            .where(commerce_custody_events.c.custody_id == custody_id)
+        ).scalar_one()
+        before_outbox = connection.execute(
+            select(func.count())
+            .select_from(commerce_order_outbox)
+            .where(
+                commerce_order_outbox.c.order_id == ORDER,
+                commerce_order_outbox.c.event_type == "commerce.custody.activated",
+            )
+        ).scalar_one()
+
+    replay = merchant.post(path, headers=headers, json=body)
+    assert replay.status_code == 409
+    assert replay.json() == {
+        "detail": {"code": "courier_pickup_temporarily_unavailable"}
+    }
+    with postgres_engine.connect() as connection:
+        custody_rows = (
+            connection.execute(
+                select(commerce_custody_records).where(
+                    commerce_custody_records.c.pickup_id == PICKUP
+                )
+            )
+            .mappings()
+            .all()
+        )
+        assert len(custody_rows) == (0 if custody_state == "missing" else 1)
+        if custody_rows:
+            assert custody_rows[0]["courier_identity_id"] == CUSTOMER
+        assert (
+            connection.execute(
+                select(
+                    commerce_courier_pickups.c.state,
+                    commerce_courier_pickups.c.version,
+                ).where(commerce_courier_pickups.c.pickup_id == PICKUP)
+            ).one()
+            == before_pickup
+        )
+        assert (
+            tuple(
+                connection.execute(
+                    select(commerce_courier_pickup_idempotency).where(
+                        commerce_courier_pickup_idempotency.c.pickup_id == PICKUP
+                    )
+                ).mappings()
+            )
+            == before_idempotency
+        )
+        assert (
+            connection.execute(
+                select(func.count())
+                .select_from(commerce_custody_events)
+                .where(commerce_custody_events.c.custody_id == custody_id)
+            ).scalar_one()
+            == before_events
+        )
+        assert (
+            connection.execute(
+                select(func.count())
+                .select_from(commerce_order_outbox)
+                .where(
+                    commerce_order_outbox.c.order_id == ORDER,
+                    commerce_order_outbox.c.event_type == "commerce.custody.activated",
+                )
+            ).scalar_one()
+            == before_outbox
+        )
+
+
+@pytest.mark.usefixtures("api_contract_state")
+def test_concurrent_merchant_acknowledgements_create_one_custody(
+    postgres_engine,
+    postgres_composition,
+) -> None:
+    courier = CourierPickupApplication(postgres_composition)
+    travelling = courier.courier_command(
+        _subject(),
+        pickup_id=PICKUP,
+        expected_version=1,
+        action=CourierPickupAction.START_TRAVEL,
+        idempotency_key="concurrent-ack-travel-0001",
+        at=NOW,
+    )
+    arrived = courier.courier_command(
+        _subject(),
+        pickup_id=PICKUP,
+        expected_version=travelling.pickup.version,
+        action=CourierPickupAction.MARK_ARRIVED,
+        idempotency_key="concurrent-ack-arrival-0001",
+        at=NOW,
+    )
+    barrier = Barrier(2)
+
+    def acknowledge():
+        barrier.wait(timeout=10)
+        return CourierPickupApplication(
+            PostgresRepositoryComposition(postgres_engine)
+        ).merchant_acknowledge(
+            _merchant_subject(),
+            merchant_id=MERCHANT,
+            pickup_id=PICKUP,
+            expected_version=arrived.pickup.version,
+            idempotency_key="concurrent-merchant-ack-0001",
+            at=NOW,
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = tuple(executor.map(lambda _: acknowledge(), range(2)))
+    assert results[0] == results[1]
+    assert results[0].pickup.state.value == "waiting_for_pickup"
+    with postgres_engine.connect() as connection:
+        custody_id = connection.execute(
+            select(commerce_custody_records.c.custody_id).where(
+                commerce_custody_records.c.pickup_id == PICKUP,
+                commerce_custody_records.c.order_id == ORDER,
+                commerce_custody_records.c.merchant_id == MERCHANT,
+                commerce_custody_records.c.courier_identity_id == ACTOR,
+            )
+        ).scalar_one()
+        assert (
+            connection.execute(
+                select(func.count())
+                .select_from(commerce_courier_pickup_events)
+                .where(
+                    commerce_courier_pickup_events.c.pickup_id == PICKUP,
+                    commerce_courier_pickup_events.c.event_type
+                    == "commerce.courier_pickup.merchant_acknowledged",
+                )
+            ).scalar_one()
+            == 1
+        )
+        assert (
+            connection.execute(
+                select(func.count())
+                .select_from(commerce_custody_records)
+                .where(commerce_custody_records.c.pickup_id == PICKUP)
+            ).scalar_one()
+            == 1
+        )
+        assert (
+            connection.execute(
+                select(func.count())
+                .select_from(commerce_custody_events)
+                .where(
+                    commerce_custody_events.c.custody_id == custody_id,
+                    commerce_custody_events.c.event_type
+                    == "commerce.custody.activated",
+                )
+            ).scalar_one()
+            == 1
+        )
+        assert (
+            connection.execute(
+                select(func.count())
+                .select_from(commerce_order_outbox)
+                .where(
+                    commerce_order_outbox.c.order_id == ORDER,
+                    commerce_order_outbox.c.event_type == "commerce.custody.activated",
+                )
+            ).scalar_one()
+            == 1
         )
 
 

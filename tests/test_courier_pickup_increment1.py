@@ -138,6 +138,7 @@ class FakeUnit:
         )
         self.custody.get_by_order = lambda order_id: self.custody.value
         self.custody.activate = self._activate_custody
+        self.custody.require_existing_for_pickup = self._require_existing_custody
         self.courier_dispatch = SimpleNamespace(
             get=lambda dispatch_id, lock=False: SimpleNamespace(
                 dispatch_id=repository.value.dispatch_id,
@@ -172,6 +173,16 @@ class FakeUnit:
                     state=CustodyState.WAITING,
                 )
             )
+        return self.custody.value
+
+    def _require_existing_custody(self, *, pickup_id):
+        if (
+            self.custody.value is None
+            or self.custody.value.custody.pickup_id != pickup_id
+        ):
+            from BACKEND.custody.engine import CustodyConflict
+
+            raise CustodyConflict("custody_replay_record_missing")
         return self.custody.value
 
     def __enter__(self):

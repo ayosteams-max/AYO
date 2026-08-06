@@ -50,6 +50,11 @@ class CustodyApplication:
             pickup_id=pickup_id, actor_identity_id=actor_identity_id, at=at
         )
 
+    @staticmethod
+    def require_existing_from_waiting_in(unit: Any, *, pickup_id: UUID) -> CustodyView:
+        """Validate completed-replay custody without creating or emitting evidence."""
+        return unit.custody.require_existing_for_pickup(pickup_id=pickup_id)
+
     def merchant_detail(
         self, subject: AuthorizationSubject, *, merchant_id: UUID, order_id: UUID
     ) -> CustodyView:

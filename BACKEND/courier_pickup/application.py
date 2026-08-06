@@ -246,12 +246,7 @@ class CourierPickupApplication:
             )
             if replay is not None:
                 if action is CourierPickupAction.ACKNOWLEDGE_ARRIVAL:
-                    self._activate_custody(
-                        unit,
-                        pickup_id=pickup_id,
-                        actor_identity_id=subject.identity_id,
-                        at=instant,
-                    )
+                    self._require_replay_custody(unit, pickup_id=pickup_id)
                 return replay
             custody = unit.custody.get_by_order(current.order_id)
             if custody is not None:
@@ -310,6 +305,17 @@ class CourierPickupApplication:
                 pickup_id=pickup_id,
                 actor_identity_id=actor_identity_id,
                 at=at,
+            )
+        except CustodyConflict as error:
+            raise CourierPickupConflict(
+                "courier_pickup_custody_activation_conflict"
+            ) from error
+
+    @staticmethod
+    def _require_replay_custody(unit: Any, *, pickup_id: UUID) -> None:
+        try:
+            CustodyApplication.require_existing_from_waiting_in(
+                unit, pickup_id=pickup_id
             )
         except CustodyConflict as error:
             raise CourierPickupConflict(
