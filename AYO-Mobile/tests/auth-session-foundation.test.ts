@@ -21,6 +21,16 @@ class MemoryStore implements CredentialStore {
   async remove() { this.removed += 1; this.value = null; }
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>(settle => { resolve = settle; });
+  return { promise, resolve };
+}
+
+function refreshed(marker: string): AuthenticatedSession {
+  return { ...session, accessToken: marker.repeat(64), refreshToken: marker.toUpperCase().repeat(64) };
+}
+
 test('authentication parser returns only the bounded opaque session', () => {
   assert.deepEqual(Object.keys(session).sort(), ['accessExpiresAt', 'accessToken', 'identityId', 'identityKind', 'refreshExpiresAt', 'refreshToken', 'sessionId'].sort());
   assert.equal(JSON.stringify(session).includes('internal_permissions'), false);
@@ -59,6 +69,67 @@ test('session restoration refreshes once and concurrent callers share the refres
   let refreshes = 0; const api = { refresh: async () => { refreshes += 1; await new Promise(resolve => setTimeout(resolve, 5)); return session; }, signOut: async () => undefined } as unknown as AuthenticationApi;
   const manager = new SessionManager(vault, api, () => now); const [one, two] = await Promise.all([manager.restore(), manager.restore()]);
   assert.deepEqual(one, session); assert.deepEqual(two, session); assert.equal(refreshes, 1);
+});
+test('refresh completing after sign-out cannot restore credentials', async () => {
+  const store = new MemoryStore(); const vault = new SecureSessionVault(store, () => now);
+  store.value = JSON.stringify({ ...session, accessExpiresAt: '2026-08-05T00:00:00Z' });
+  const responseGate = deferred<AuthenticatedSession>(); const started = deferred<void>();
+  const api = { refresh: async () => { started.resolve(); return responseGate.promise; }, signOut: async () => undefined } as unknown as AuthenticationApi;
+  const manager = new SessionManager(vault, api, () => now); const restoring = manager.restore(); await started.promise;
+  await manager.signOut(); responseGate.resolve(refreshed('b'));
+  assert.equal(await restoring, undefined); assert.equal(store.value, null); assert.equal(await manager.restore(), undefined);
+});
+test('authentication completing after sign-out is rejected before persistence', async () => {
+  const store = new MemoryStore(); const vault = new SecureSessionVault(store, () => now);
+  const manager = new SessionManager(vault, { signOut: async () => undefined } as unknown as AuthenticationApi, () => now);
+  const operation = manager.beginAuthentication(); await manager.signOut();
+  assert.equal(await manager.establish(session, operation), false); assert.equal(store.value, null); assert.equal(await manager.restore(), undefined);
+});
+test('sign-out during an asynchronous save clears the completed stale write', async () => {
+  const writeStarted = deferred<void>(); const releaseWrite = deferred<void>();
+  class BlockingStore extends MemoryStore { override async set(key: string, value: string) { writeStarted.resolve(); await releaseWrite.promise; return super.set(key, value); } }
+  const store = new BlockingStore(); const vault = new SecureSessionVault(store, () => now);
+  const manager = new SessionManager(vault, { signOut: async () => undefined } as unknown as AuthenticationApi, () => now);
+  const operation = manager.beginAuthentication(); const saving = manager.establish(session, operation); await writeStarted.promise;
+  const signingOut = manager.signOut(); releaseWrite.resolve();
+  assert.equal(await saving, false); await signingOut; assert.equal(store.value, null); assert.equal(await manager.restore(), undefined);
+});
+test('an old refresh cannot overwrite a newer login', async () => {
+  const store = new MemoryStore(); const vault = new SecureSessionVault(store, () => now);
+  store.value = JSON.stringify({ ...session, accessExpiresAt: '2026-08-05T00:00:00Z' });
+  const responseGate = deferred<AuthenticatedSession>(); const started = deferred<void>();
+  const api = { refresh: async () => { started.resolve(); return responseGate.promise; }, signOut: async () => undefined } as unknown as AuthenticationApi;
+  const manager = new SessionManager(vault, api, () => now); const oldRefresh = manager.restore(); await started.promise; await manager.signOut();
+  const newSession = refreshed('c'); const operation = manager.beginAuthentication(); assert.equal(await manager.establish(newSession, operation), true);
+  responseGate.resolve(refreshed('b')); assert.equal(await oldRefresh, undefined); assert.deepEqual(await vault.load(), newSession);
+});
+test('an old authentication cannot overwrite a newer authentication', async () => {
+  const store = new MemoryStore(); const vault = new SecureSessionVault(store, () => now);
+  const manager = new SessionManager(vault, { signOut: async () => undefined } as unknown as AuthenticationApi, () => now);
+  const oldOperation = manager.beginAuthentication(); await manager.signOut(); const newOperation = manager.beginAuthentication();
+  const newSession = refreshed('c'); assert.equal(await manager.establish(newSession, newOperation), true);
+  assert.equal(await manager.establish(refreshed('b'), oldOperation), false); assert.deepEqual(await vault.load(), newSession);
+});
+test('sign-out invalidates every caller sharing an in-flight refresh', async () => {
+  const store = new MemoryStore(); const vault = new SecureSessionVault(store, () => now);
+  store.value = JSON.stringify({ ...session, accessExpiresAt: '2026-08-05T00:00:00Z' });
+  const responseGate = deferred<AuthenticatedSession>(); const started = deferred<void>(); let refreshes = 0;
+  const api = { refresh: async () => { refreshes += 1; started.resolve(); return responseGate.promise; }, signOut: async () => undefined } as unknown as AuthenticationApi;
+  const manager = new SessionManager(vault, api, () => now); const callers = [manager.restore(), manager.restore()]; await started.promise; await manager.signOut(); responseGate.resolve(refreshed('b'));
+  assert.deepEqual(await Promise.all(callers), [undefined, undefined]); assert.equal(refreshes, 1); assert.equal(store.value, null);
+});
+test('new authentication after sign-out persists normally', async () => {
+  const store = new MemoryStore(); const vault = new SecureSessionVault(store, () => now);
+  const manager = new SessionManager(vault, { signOut: async () => undefined } as unknown as AuthenticationApi, () => now);
+  await manager.signOut(); const operation = manager.beginAuthentication(); assert.equal(await manager.establish(session, operation), true); assert.deepEqual(await manager.restore(), session);
+});
+test('invalidation during refresh, save and sign-out settles without deadlock', async () => {
+  const store = new MemoryStore(); const vault = new SecureSessionVault(store, () => now);
+  store.value = JSON.stringify({ ...session, accessExpiresAt: '2026-08-05T00:00:00Z' });
+  const responseGate = deferred<AuthenticatedSession>(); const started = deferred<void>();
+  const api = { refresh: async () => { started.resolve(); return responseGate.promise; }, signOut: async () => undefined } as unknown as AuthenticationApi;
+  const manager = new SessionManager(vault, api, () => now); const refresh = manager.restore(); await started.promise; const signOut = manager.signOut(); responseGate.resolve(refreshed('b'));
+  assert.deepEqual(await Promise.all([refresh, signOut]), [undefined, undefined]); assert.equal(store.value, null);
 });
 test('failed refresh clears authentication and cannot loop', async () => {
   const store = new MemoryStore(); const vault = new SecureSessionVault(store, () => now); await vault.save({ ...session, accessExpiresAt: '2026-08-05T00:00:00Z' });

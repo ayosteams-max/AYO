@@ -29,26 +29,35 @@ export function IdentitySessionProvider({ children }: PropsWithChildren) {
       if (!deviceId) { if (!globalThis.crypto?.randomUUID) throw new Error('secure_device_identity_unavailable'); deviceId = globalThis.crypto.randomUUID(); await store.set(DEVICE_KEY, deviceId); }
       return { deviceId, operatingSystemFamily: Platform.OS, applicationVersion: Constants.expoConfig?.version ?? 'unknown' };
     };
-    return { store, vault, device };
+    const api = device().then(context => new AuthenticationApi(baseUrl(), context));
+    const manager = api.then(client => new SessionManager(vault, client));
+    return { api, manager };
   }, []);
-  const manager = useCallback(async () => new SessionManager(services.vault, new AuthenticationApi(baseUrl(), await services.device())), [services]);
   const apply = useCallback((session: Awaited<ReturnType<SessionManager['restore']>>, activated = true) => {
     if (session) { setIdentity({ identityId: session.identityId, identityKind: session.identityKind }); setStatus(activated ? 'authenticated' : 'verification_required'); }
     else { setIdentity(undefined); setStatus('signed_out'); }
   }, []);
   const restore = useCallback(async () => {
     const current = ++generation.current; setError(undefined);
-    try { const instance = await manager(); const session = await instance.restore(); const activated = session ? (await new AuthenticationApi(baseUrl(), await services.device()).activation(session.accessToken)).activated : false; if (current === generation.current) apply(session, activated); }
+    try { const instance = await services.manager; const session = await instance.restore(); const activated = session ? (await (await services.api).activation(session.accessToken)).activated : false; if (current === generation.current) apply(session, activated); }
     catch (cause) { if (current === generation.current) { setError(cause instanceof Error ? cause.message : 'temporary_failure'); apply(undefined); } }
-  }, [apply, manager]);
+  }, [apply, services]);
   useEffect(() => { void restore(); }, [restore]);
   const authenticate = useCallback(async (mode: 'signIn' | 'register', credentials: Credentials) => {
     const current = ++generation.current; setError(undefined);
-    try { const api = new AuthenticationApi(baseUrl(), await services.device()); const session = await api[mode](credentials); await services.vault.save(session); const activated = (await api.activation(session.accessToken)).activated; if (current === generation.current) apply(session, activated); }
+    try {
+      const [api, manager] = await Promise.all([services.api, services.manager]);
+      if (current !== generation.current) return;
+      const operation = manager.beginAuthentication();
+      const session = await api[mode](credentials);
+      const activated = (await api.activation(session.accessToken)).activated;
+      if (current !== generation.current || !(await manager.establish(session, operation))) return;
+      if (current === generation.current) apply(session, activated);
+    }
     catch (cause) { if (current === generation.current) { setError(cause instanceof Error ? cause.message : 'temporary_failure'); apply(undefined); } throw cause; }
   }, [apply, services]);
-  const verificationApi = useCallback(async () => { const instance = await manager(); const session = await instance.restore(); if (!session) throw new Error('authentication_required'); return { api: new AuthenticationApi(baseUrl(), await services.device()), session }; }, [manager, services]);
-  const value = useMemo<IdentityContextValue>(() => ({ status, identity, error, signIn: (c) => authenticate('signIn', c), register: (c) => authenticate('register', c), prepareVerification: async (kind, contact) => { const { api, session } = await verificationApi(); return api.prepareVerification(session.accessToken, kind, contact); }, completeVerification: async (challengeId, code) => { const { api, session } = await verificationApi(); const progress = await api.completeVerification(session.accessToken, challengeId, code); apply(session, progress.activated); }, retry: restore, signOut: async () => { ++generation.current; try { await (await manager()).signOut(); } finally { apply(undefined); } } }), [apply, authenticate, error, identity, manager, restore, status, verificationApi]);
+  const verificationApi = useCallback(async () => { const session = await (await services.manager).restore(); if (!session) throw new Error('authentication_required'); return { api: await services.api, session }; }, [services]);
+  const value = useMemo<IdentityContextValue>(() => ({ status, identity, error, signIn: (c) => authenticate('signIn', c), register: (c) => authenticate('register', c), prepareVerification: async (kind, contact) => { const { api, session } = await verificationApi(); return api.prepareVerification(session.accessToken, kind, contact); }, completeVerification: async (challengeId, code) => { const { api, session } = await verificationApi(); const progress = await api.completeVerification(session.accessToken, challengeId, code); apply(session, progress.activated); }, retry: restore, signOut: async () => { ++generation.current; try { await (await services.manager).signOut(); } finally { apply(undefined); } } }), [apply, authenticate, error, identity, restore, services, status, verificationApi]);
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
 
