@@ -279,9 +279,9 @@ def test_postgres_composed_http_exposes_exact_caller_contracts(
     courier_custody = courier.get(f"/api/mobile/courier-pickups/{PICKUP}/custody")
     assert merchant_custody.status_code == courier_custody.status_code == 200
     assert set(merchant_custody.json()) == CUSTODY_COMMON_FIELDS
-    assert set(courier_custody.json()) == CUSTODY_COMMON_FIELDS | {
-        "supported_verification_methods"
-    } - {"custody_id", "order_id"}
+    assert set(courier_custody.json()) == (
+        CUSTODY_COMMON_FIELDS - {"custody_id", "order_id"}
+    ) | {"supported_verification_methods"}
     assert merchant_custody.json()["order_id"] == str(ORDER)
     assert merchant_custody.json()["state"] == "waiting_for_pickup"
     assert merchant_custody.json()["required_action"] == "seal_order"
