@@ -275,7 +275,7 @@ def _seed_command_state(engine) -> None:
                 order_id=ORDER,
                 merchant_id=MERCHANT,
                 readiness_message_id=UUID(int=31),
-                state="assigned",
+                state="courier_assigned",
                 version=1,
                 policy_code="AYO_COURIER_DISPATCH_POLICY_V1",
                 policy_version=1,
