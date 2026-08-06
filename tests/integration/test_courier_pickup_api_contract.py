@@ -457,7 +457,7 @@ def test_completed_acknowledgement_replay_never_repairs_custody(
     replay = merchant.post(path, headers=headers, json=body)
     assert replay.status_code == 409
     assert replay.json() == {
-        "detail": {"code": "courier_pickup_temporarily_unavailable"}
+        "error": {"code": "courier_pickup_temporarily_unavailable"}
     }
     with postgres_engine.connect() as connection:
         custody_rows = (
