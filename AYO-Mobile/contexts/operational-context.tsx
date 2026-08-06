@@ -16,6 +16,7 @@ type OperationalContextValue = Readonly<{
   refresh(): Promise<void>;
   selectArea(key: OperationalArea['key']): void;
   showChooser(): void;
+  invalidateCourier(pickupId: string): void;
 }>;
 
 const Context = createContext<OperationalContextValue | undefined>(undefined);
@@ -99,6 +100,24 @@ export function OperationalContextProvider({ children, service: suppliedService 
 
   const areas = useMemo(() => snapshot ? operationalAreas(snapshot) : [], [snapshot]);
   const selected = areas.find((area) => area.key === selectedKey && area.enterable);
+  const invalidateCourier = useCallback((pickupId: string) => {
+    const current = snapshotRef.current;
+    if (!current?.courier || current.courier.pickupId !== pickupId) return;
+    generation.current += 1;
+    controllerRef.current?.abort();
+    controllerRef.current = undefined;
+    requestRef.current = undefined;
+    const next = Object.freeze({ personal: current.personal, merchants: current.merchants });
+    snapshotRef.current = next;
+    setSnapshot(next);
+    const nextAreas = operationalAreas(next);
+    const selection = reconcileAreaSelection(nextAreas, selectedKeyRef.current);
+    selectedKeyRef.current = selection.selectedKey;
+    setSelectedKey(selection.selectedKey);
+    setChooserVisible(selection.chooserVisible);
+    setRefreshing(false);
+    setStatus(nextAreas.length === 0 ? 'empty' : 'ready');
+  }, []);
   const value = useMemo<OperationalContextValue>(() => ({
     status, areas, selected, chooserVisible, refreshing, refresh: load,
     selectArea: (key) => {
@@ -107,7 +126,8 @@ export function OperationalContextProvider({ children, service: suppliedService 
       if (area) { selectedKeyRef.current = area.key; setSelectedKey(area.key); setChooserVisible(false); }
     },
     showChooser: () => setChooserVisible(true),
-  }), [areas, chooserVisible, load, refreshing, selected, status]);
+    invalidateCourier,
+  }), [areas, chooserVisible, invalidateCourier, load, refreshing, selected, status]);
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
 

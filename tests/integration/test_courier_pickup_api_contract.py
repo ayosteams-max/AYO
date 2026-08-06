@@ -30,6 +30,7 @@ from BACKEND.persistence.tables import (
     commerce_custody_events,
     commerce_custody_records,
     commerce_order_outbox,
+    courier_dispatch_assignments,
     identity_role_assignments,
     merchant_profiles,
     permissions,
@@ -37,6 +38,7 @@ from BACKEND.persistence.tables import (
 )
 from tests.integration.test_courier_pickup_idempotency import (
     ACTOR,
+    ASSIGNMENT,
     CUSTOMER,
     KEY,
     MERCHANT,
@@ -236,6 +238,11 @@ def test_postgres_composed_http_exposes_exact_caller_contracts(
 ) -> None:
     courier = _client(postgres_composition, _subject())
     courier_status = courier.get(f"/api/mobile/courier-pickups/{PICKUP}")
+    before_no_custody = _effect_counts(postgres_engine)
+    no_custody = courier.get(f"/api/mobile/courier-pickups/{PICKUP}/custody")
+    assert no_custody.status_code == 200
+    assert no_custody.json() == {"availability": "not_started"}
+    assert _effect_counts(postgres_engine) == before_no_custody
     courier_start = courier.post(
         f"/api/mobile/courier-pickups/{PICKUP}/actions",
         headers={"Idempotency-Key": KEY},
@@ -274,18 +281,12 @@ def test_postgres_composed_http_exposes_exact_caller_contracts(
     assert set(merchant_custody.json()) == CUSTODY_COMMON_FIELDS
     assert set(courier_custody.json()) == CUSTODY_COMMON_FIELDS | {
         "supported_verification_methods"
-    }
-    assert merchant_custody.json() == {
-        "custody_id": courier_custody.json()["custody_id"],
-        "order_id": str(ORDER),
-        "state": "waiting_for_pickup",
-        "version": 1,
-        "required_action": "seal_order",
-        "waiting_for": "merchant",
-        "recovery": None,
-        "challenge_available": False,
-        "challenge_expires_at": None,
-    }
+    } - {"custody_id", "order_id"}
+    assert merchant_custody.json()["order_id"] == str(ORDER)
+    assert merchant_custody.json()["state"] == "waiting_for_pickup"
+    assert merchant_custody.json()["required_action"] == "seal_order"
+    assert "custody_id" not in courier_custody.json()
+    assert "order_id" not in courier_custody.json()
     assert courier_custody.json()["required_action"] == "wait_for_merchant"
     assert courier_custody.json()["supported_verification_methods"] == []
     assert _effect_counts(postgres_engine) == before_status_reads
@@ -322,6 +323,31 @@ def test_postgres_composed_http_exposes_exact_caller_contracts(
             ).scalar_one()
             == 1
         )
+
+
+@pytest.mark.usefixtures("api_contract_state")
+def test_postgres_custody_read_distinguishes_absent_from_released_assignment(
+    postgres_engine,
+    postgres_composition,
+) -> None:
+    courier = _client(postgres_composition, _subject())
+    current = courier.get(f"/api/mobile/courier-pickups/{PICKUP}/custody")
+    assert current.status_code == 200
+    assert current.json() == {"availability": "not_started"}
+
+    before = _effect_counts(postgres_engine)
+    with postgres_engine.begin() as connection:
+        connection.execute(
+            update(courier_dispatch_assignments)
+            .where(courier_dispatch_assignments.c.assignment_id == ASSIGNMENT)
+            .values(state="released", version=2)
+        )
+    released = _client(PostgresRepositoryComposition(postgres_engine), _subject()).get(
+        f"/api/mobile/courier-pickups/{PICKUP}/custody"
+    )
+    assert released.status_code == 404
+    assert released.json() == {"error": {"code": "custody_unavailable"}}
+    assert _effect_counts(postgres_engine) == before
 
 
 @pytest.mark.usefixtures("api_contract_state")

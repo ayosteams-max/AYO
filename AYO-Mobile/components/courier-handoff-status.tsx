@@ -5,7 +5,7 @@ import { ActivityIndicator, Pressable, SafeAreaView, ScrollView, StyleSheet, Tex
 import { useAuthenticatedRead } from '@/contexts/identity-session';
 import { useLanguage } from '@/contexts/language';
 import { useOperationalContext } from '@/contexts/operational-context';
-import { CourierHandoffConflictError, CourierHandoffContractError, type CourierHandoffSnapshot } from '@/domain/courier-handoff-status';
+import { CourierHandoffConflictError, CourierHandoffContractError, CourierHandoffNoLongerCurrentError, type CourierHandoffSnapshot } from '@/domain/courier-handoff-status';
 import { courierHandoffCopy, guidanceKey } from '@/localization/courier-handoff-status';
 import { CourierHandoffStatusService } from '@/services/courier-handoff-status';
 
@@ -14,6 +14,7 @@ type ViewStatus = 'loading' | 'fresh' | 'stale' | 'unavailable' | 'malformed' | 
 export function CourierHandoffStatus({ pickupId }: { pickupId: string }) {
   const read = useAuthenticatedRead();
   const operational = useOperationalContext();
+  const invalidateCourier = operational.invalidateCourier;
   const { locale } = useLanguage();
   const copy = courierHandoffCopy[locale];
   const service = useMemo(() => new CourierHandoffStatusService(read), [read]);
@@ -36,6 +37,9 @@ export function CourierHandoffStatus({ pickupId }: { pickupId: string }) {
       snapshotRef.current = next; setSnapshot(next); setViewStatus('fresh');
     }).catch((error: unknown) => {
       if (current !== generation.current || abort.signal.aborted) return;
+      if (error instanceof CourierHandoffNoLongerCurrentError) {
+        snapshotRef.current = undefined; setSnapshot(undefined); invalidateCourier(pickupId); return;
+      }
       if (snapshotRef.current) setViewStatus('stale');
       else if (error instanceof CourierHandoffConflictError) setViewStatus('conflicting');
       else if (error instanceof CourierHandoffContractError) setViewStatus('malformed');
@@ -46,7 +50,7 @@ export function CourierHandoffStatus({ pickupId }: { pickupId: string }) {
       if (current === generation.current) setRefreshing(false);
     });
     request.current = operation; return operation;
-  }, [pickupId, service]);
+  }, [invalidateCourier, pickupId, service]);
 
   useEffect(() => {
     generation.current += 1; controller.current?.abort(); request.current = undefined; snapshotRef.current = undefined; setSnapshot(undefined); setViewStatus('loading'); setRefreshing(false); void refresh();

@@ -8,6 +8,7 @@ export type CourierHandoffSnapshot = Readonly<{ status: HandoffStatusCategory; p
 
 export class CourierHandoffContractError extends Error { constructor() { super('malformed_courier_handoff_status'); } }
 export class CourierHandoffConflictError extends Error { constructor() { super('conflicting_courier_handoff_status'); } }
+export class CourierHandoffNoLongerCurrentError extends Error { constructor() { super('courier_handoff_no_longer_current'); } }
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const own = (value: object, key: string) => Object.prototype.hasOwnProperty.call(value, key);
@@ -44,8 +45,7 @@ export function parseCourierPickup(value: unknown): CourierPickupSnapshot {
 const custodyStates = new Set<CustodyState>(['waiting_for_pickup', 'order_sealed', 'pickup_verified', 'merchant_released', 'courier_custody_accepted']);
 const actions = new Set(['verify_pickup', 'accept_custody', 'wait_for_merchant', 'handoff_complete', 'none']);
 export function parseCourierCustody(value: unknown): CourierCustodySnapshot {
-  const item = object(value, ['custody_id', 'order_id', 'state', 'version', 'required_action', 'waiting_for', 'recovery', 'challenge_available', 'challenge_expires_at', 'supported_verification_methods']);
-  identifier(item.custody_id); identifier(item.order_id);
+  const item = object(value, ['state', 'version', 'required_action', 'waiting_for', 'recovery', 'challenge_available', 'challenge_expires_at', 'supported_verification_methods']);
   if (typeof item.state !== 'string' || !custodyStates.has(item.state as CustodyState) || typeof item.required_action !== 'string' || !actions.has(item.required_action)) throw new CourierHandoffContractError();
   if (item.waiting_for !== null && item.waiting_for !== 'merchant' && item.waiting_for !== 'courier') throw new CourierHandoffContractError();
   if (item.recovery !== null && item.recovery !== 'verification_expired' && item.recovery !== 'temporarily_unavailable') throw new CourierHandoffContractError();
@@ -63,6 +63,15 @@ export function parseCourierCustody(value: unknown): CourierCustodySnapshot {
     if (!healthy && !recovering) throw new CourierHandoffContractError();
   }
   return Object.freeze({ state: item.state as CustodyState, version: version(item.version), requiredAction: item.required_action as CourierCustodySnapshot['requiredAction'], waitingFor: item.waiting_for ?? undefined, recovery: item.recovery ?? undefined });
+}
+
+export function parseCourierCustodyRead(value: unknown): CourierCustodySnapshot | undefined {
+  if (value && typeof value === 'object' && !Array.isArray(value) && own(value, 'availability')) {
+    const item = object(value, ['availability']);
+    if (item.availability !== 'not_started') throw new CourierHandoffContractError();
+    return undefined;
+  }
+  return parseCourierCustody(value);
 }
 
 export function projectCourierHandoff(pickup: CourierPickupSnapshot, custody?: CourierCustodySnapshot): CourierHandoffSnapshot {

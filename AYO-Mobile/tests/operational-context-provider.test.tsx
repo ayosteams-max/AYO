@@ -43,7 +43,8 @@ const personal = { personal: { available: true }, merchants: [], courier: null }
 const merchant = { personal: null, merchants: [{ merchant_id: '33333333-3333-4333-8333-333333333333', display_name: 'AYO Market', availability: 'available' }], courier: null };
 const courier = { personal: null, merchants: [], courier: { pickup_id: '44444444-4444-4444-8444-444444444444', availability: 'current_pickup' } };
 const pickupStatus = { pickup_id: '44444444-4444-4444-8444-444444444444', state: 'waiting_for_pickup', version: 4, assigned_at: '2026-08-07T01:00:00Z', travelling_at: '2026-08-07T01:05:00Z', arrived_at: '2026-08-07T01:15:00Z', merchant_acknowledged_at: '2026-08-07T01:16:00Z', waiting_duration_seconds: 60, terminal_reason: null, updated_at: '2026-08-07T01:16:00Z' };
-const custodyStatus = { custody_id: '55555555-5555-4555-8555-555555555555', order_id: '66666666-6666-4666-8666-666666666666', state: 'order_sealed', version: 2, required_action: 'verify_pickup', waiting_for: 'courier', recovery: null, challenge_available: true, challenge_expires_at: '2026-08-07T01:30:00Z', supported_verification_methods: ['qr_code', 'barcode'] };
+const arrivedPickupStatus = { ...pickupStatus, state: 'arrived_at_merchant', merchant_acknowledged_at: null, waiting_duration_seconds: null, updated_at: '2026-08-07T01:15:00Z' };
+const custodyStatus = { state: 'order_sealed', version: 2, required_action: 'verify_pickup', waiting_for: 'courier', recovery: null, challenge_available: true, challenge_expires_at: '2026-08-07T01:30:00Z', supported_verification_methods: ['qr_code', 'barcode'] };
 
 class MemoryStore implements CredentialStore {
   value: string | null = null;
@@ -283,4 +284,21 @@ test('sign-out clears the real courier status while its pickup read is pending a
   expect(screen.queryByText('Ready for handoff')).toBeNull();
   remoteSignOut.resolve();
   await act(async () => { await Promise.all(operations); });
+});
+
+test('assignment replacement between Pickup and Custody reads revokes the courier area immediately', async () => {
+  const context = deferred<unknown>(); const pickup = deferred<unknown>(); const replaced = deferred<unknown>();
+  const mounted = await mount({ initial: session, reads: [context, pickup, replaced], renderShell: true });
+  await act(async () => { context.resolve(courier); });
+  await waitFor(() => expect(mounted.readCount()).toBe(2));
+  await act(async () => { pickup.resolve(arrivedPickupStatus); });
+  await waitFor(() => expect(mounted.readCount()).toBe(3));
+  await act(async () => { replaced.reject(new PublicApiError('not_found', 404)); });
+  await waitFor(() => expect(screen.queryByText('Handoff status')).toBeNull());
+  expect(screen.getByTestId('area-kinds').props.children).toBe('');
+  expect(screen.getByTestId('selected-area').props.children).toBe('none');
+  expect(screen.getByText('No available area')).toBeTruthy();
+  const rendered = JSON.stringify(screen.toJSON());
+  expect(rendered).not.toContain('44444444-4444-4444-8444-444444444444');
+  expect(rendered).not.toContain('At the merchant');
 });
