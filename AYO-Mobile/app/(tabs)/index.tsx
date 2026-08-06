@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link, useLocalSearchParams } from "expo-router";
+import { OperationalShell } from "@/components/operational-shell";
 import {
   Alert,
   Pressable,
@@ -37,6 +38,10 @@ const rideOptions = [
 ];
 
 export default function HomeScreen() {
+  return <OperationalShell personal={<PersonalArea />} />;
+}
+
+function PersonalArea() {
   const { destination } = useLocalSearchParams<{ destination?: string }>();
   const [selectedRide, setSelectedRide] = useState<RideType>("AYO Go");
 

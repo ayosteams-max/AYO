@@ -57,7 +57,7 @@
   "jest": {
     "preset": "jest-expo",
     "roots": ["<rootDir>/tests"],
-    "testMatch": ["**/identity-session-provider.test.tsx"],
+    "testMatch": ["**/*-provider.test.tsx"],
     "moduleNameMapper": {
       "^@/(.*)$": "<rootDir>/$1"
     },
