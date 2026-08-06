@@ -69,6 +69,14 @@ class CustodyView(BaseModel):
     events: tuple[CustodyEvent, ...]
 
 
+class CustodyStatusSnapshot(BaseModel):
+    """Bounded read projection for actor-facing status endpoints."""
+
+    model_config = ConfigDict(frozen=True)
+    custody: CustodyRecord
+    challenge: PickupChallenge | None
+
+
 class IssuedPickupCode(BaseModel):
     model_config = ConfigDict(frozen=True)
     view: CustodyView
