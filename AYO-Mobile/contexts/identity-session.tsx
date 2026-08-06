@@ -13,15 +13,18 @@ type SessionStatus = 'restoring' | 'signed_out' | 'verification_required' | 'aut
 type IdentityContextValue = Readonly<{ status: SessionStatus; identity?: SessionIdentity; error?: string; signIn(c: Credentials): Promise<void>; register(c: Credentials): Promise<void>; prepareVerification(kind: Credentials['contactKind'], contact: string): Promise<string>; completeVerification(challengeId: string, code: string): Promise<void>; retry(): Promise<void>; signOut(): Promise<void> }>;
 const Context = createContext<IdentityContextValue | undefined>(undefined);
 const DEVICE_KEY = 'ayo.mobile.installation-id.v1';
+export type IdentitySessionServices = Readonly<{ api: Promise<AuthenticationApi>; manager: Promise<SessionManager> }>;
+type IdentitySessionProviderProps = PropsWithChildren<{ services?: IdentitySessionServices }>;
 
 function baseUrl() { const value = process.env.EXPO_PUBLIC_AYO_API_URL; if (!value) throw new Error('authentication_service_not_configured'); return value; }
 
-export function IdentitySessionProvider({ children }: PropsWithChildren) {
+export function IdentitySessionProvider({ children, services: suppliedServices }: IdentitySessionProviderProps) {
   const [status, setStatus] = useState<SessionStatus>('restoring');
   const [identity, setIdentity] = useState<SessionIdentity>();
   const [error, setError] = useState<string>();
   const generation = useRef(0);
   const services = useMemo(() => {
+    if (suppliedServices) return suppliedServices;
     const store = new ExpoSecureCredentialStore();
     const vault = new SecureSessionVault(store);
     const device = async () => {
@@ -32,7 +35,7 @@ export function IdentitySessionProvider({ children }: PropsWithChildren) {
     const api = device().then(context => new AuthenticationApi(baseUrl(), context));
     const manager = api.then(client => new SessionManager(vault, client));
     return { api, manager };
-  }, []);
+  }, [suppliedServices]);
   const apply = useCallback((session: Awaited<ReturnType<SessionManager['restore']>>, activated = true) => {
     if (session) { setIdentity({ identityId: session.identityId, identityKind: session.identityKind }); setStatus(activated ? 'authenticated' : 'verification_required'); }
     else { setIdentity(undefined); setStatus('signed_out'); }
