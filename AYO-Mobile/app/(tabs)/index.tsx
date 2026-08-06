@@ -64,9 +64,11 @@ export default function HomeScreen() {
             <Text style={styles.name}>Where are you going?</Text>
           </View>
 
-          <Pressable style={styles.profileButton}>
-            <Text style={styles.profileText}>I</Text>
-          </Pressable>
+          <Link href="/auth" asChild>
+            <Pressable accessibilityLabel="Open account" accessibilityRole="button" style={styles.profileButton}>
+              <Text style={styles.profileText}>I</Text>
+            </Pressable>
+          </Link>
         </View>
 
         <View style={styles.locationCard}>
