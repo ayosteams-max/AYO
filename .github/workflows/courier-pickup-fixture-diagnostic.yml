@@ -77,9 +77,22 @@ jobs:
           set -euo pipefail
           expected_branch="agent/courier-pickup-fixture-diagnostic-clean"
           expected_path=".github/workflows/courier-pickup-fixture-diagnostic.yml"
+          approved_first="1752dacc48900ff3939c129c7df4a2edb3b1e976"
+          approved_second="0f0d9c31da44ca72dd79b4082e00855ae632a74e"
+          expected_head_subject="ci: bind diagnostic authority history"
           [[ "$(git rev-parse HEAD)" == "$RESOLVED_HEAD" ]]
-          [[ "$(git rev-parse HEAD^)" == "$AUTHORITY_BASE" ]]
-          [[ "$(git rev-list --count "$AUTHORITY_BASE..$RESOLVED_HEAD")" == "1" ]]
+          [[ "$(git rev-parse HEAD^)" == "$approved_second" ]]
+          [[ "$(git rev-parse HEAD^^)" == "$approved_first" ]]
+          [[ "$(git rev-parse HEAD^^^)" == "$AUTHORITY_BASE" ]]
+          mapfile -t authority_commits < <(git rev-list --reverse "$AUTHORITY_BASE..$RESOLVED_HEAD")
+          [[ "${#authority_commits[@]}" == "3" ]]
+          [[ "${authority_commits[0]}" == "$approved_first" ]]
+          [[ "${authority_commits[1]}" == "$approved_second" ]]
+          [[ "${authority_commits[2]}" == "$RESOLVED_HEAD" ]]
+          [[ "$(git show -s --format=%s "$RESOLVED_HEAD")" == "$expected_head_subject" ]]
+          mapfile -t head_changes < <(git diff --name-status "$approved_second" "$RESOLVED_HEAD")
+          [[ "${#head_changes[@]}" == "1" ]]
+          [[ "${head_changes[0]}" == $'M\t'"$expected_path" ]]
           [[ "$(git merge-base "$AUTHORITY_BASE" "$RESOLVED_HEAD")" == "$AUTHORITY_BASE" ]]
           if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
             [[ "$EVENT_BASE" == "$AUTHORITY_BASE" ]]
