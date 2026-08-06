@@ -19,7 +19,15 @@ export function OperationalShell({ personal }: { personal: ReactNode }) {
   if (context.status === 'loading' || context.status === 'idle') return <StatusScreen busy message={copy.loading} />;
   if (context.chooserVisible || !context.selected) return <Chooser />;
 
-  if (context.selected.kind === 'personal') return <View key={context.selected.key} style={styles.fill}>{personal}<AreaFooter /></View>;
+  if (context.selected.kind === 'personal') return <View key={context.selected.key} style={styles.fill}>
+    {context.status === 'stale' ? <View style={styles.personalStale}>
+      <Text accessibilityLiveRegion="assertive" style={styles.warning}>{copy.stale}</Text>
+      <Pressable accessibilityLabel={copy.refresh} accessibilityRole="button" disabled={context.refreshing} onPress={() => void context.refresh()} style={styles.secondaryButton}>
+        <Text style={styles.secondaryText}>{context.refreshing ? copy.refreshing : copy.refresh}</Text>
+      </Pressable>
+    </View> : null}
+    {personal}<AreaFooter />
+  </View>;
   return <Placeholder key={context.selected.key} area={context.selected} />;
 }
 
@@ -103,6 +111,7 @@ function StatusScreen({ message, busy }: { message: string; busy?: boolean }) {
 
 const styles = StyleSheet.create({
   fill: { flex: 1, backgroundColor: '#07111F' }, safe: { flex: 1, backgroundColor: '#07111F' },
+  personalStale: { gap: 10, paddingHorizontal: 20, paddingTop: 12 },
   content: { padding: 24, paddingTop: 54, paddingBottom: 44 }, placeholder: { flex: 1, padding: 24, justifyContent: 'center' },
   status: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16, padding: 24 },
   badge: { alignSelf: 'flex-start', color: '#C4B5FD', backgroundColor: '#2E1065', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, fontSize: 12, fontWeight: '800', letterSpacing: 0.8, overflow: 'hidden', marginBottom: 20 },

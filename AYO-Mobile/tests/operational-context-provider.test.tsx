@@ -2,6 +2,8 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-
 import { Pressable, Text, View } from 'react-native';
 
 import { IdentitySessionProvider, type IdentitySessionServices, useIdentitySession } from '@/contexts/identity-session';
+import { OperationalShell } from '@/components/operational-shell';
+import { LanguageProvider } from '@/contexts/language';
 import { OperationalContextProvider, useOperationalContext } from '@/contexts/operational-context';
 import type { AuthenticatedSession } from '@/domain/auth-session';
 import { AuthenticationApi } from '@/services/authentication-api';
@@ -46,7 +48,7 @@ function Consumer() {
   </View>;
 }
 
-async function mount(options: { initial?: AuthenticatedSession; reads?: Array<ReturnType<typeof deferred<unknown>>>; signOut?: Promise<void> } = {}) {
+async function mount(options: { initial?: AuthenticatedSession; reads?: Array<ReturnType<typeof deferred<unknown>>>; signOut?: Promise<void>; renderShell?: boolean } = {}) {
   operations.length = 0;
   const store = new MemoryStore();
   const vault = new SecureSessionVault(store);
@@ -59,7 +61,7 @@ async function mount(options: { initial?: AuthenticatedSession; reads?: Array<Re
     api: Promise.resolve(api), manager: Promise.resolve(manager),
     read: async () => { readCount += 1; const next = reads.shift(); if (!next) throw new Error('unexpected_context_read'); return next.promise; },
   };
-  await act(async () => { render(<IdentitySessionProvider services={services}><OperationalContextProvider><Consumer /></OperationalContextProvider></IdentitySessionProvider>); await Promise.resolve(); });
+  await act(async () => { render(<IdentitySessionProvider services={services}><OperationalContextProvider><Consumer />{options.renderShell ? <LanguageProvider><OperationalShell personal={<Text testID="personal-content">Personal content</Text>} /></LanguageProvider> : null}</OperationalContextProvider></IdentitySessionProvider>); await Promise.resolve(); });
   await waitFor(() => expect(screen.getByTestId('identity-status').props.children).not.toBe('restoring'));
   return { readCount: () => readCount };
 }
@@ -126,6 +128,32 @@ test('refresh failure retains only a stale non-enterable presentation and manual
   await act(async () => { recovered.resolve(merchant); await operations[1]; });
   expect(screen.getByTestId('operational-status').props.children).toBe('ready');
   expect(screen.getByTestId('selected-area').props.children).toBe('merchant');
+});
+
+test('selected Personal surface visibly and accessibly discloses stale context until recovery', async () => {
+  const first = deferred<unknown>(); const failed = deferred<unknown>(); const recovered = deferred<unknown>();
+  const mounted = await mount({ initial: session, reads: [first, failed, recovered], renderShell: true });
+  await waitFor(() => expect(mounted.readCount()).toBe(1));
+  await act(async () => { first.resolve(personal); });
+  await waitFor(() => expect(screen.getByTestId('personal-content')).toBeTruthy());
+  expect(screen.queryByText('Information may be out of date')).toBeNull();
+
+  await act(async () => { fireEvent.press(screen.getByTestId('refresh')); });
+  await waitFor(() => expect(mounted.readCount()).toBe(2));
+  await act(async () => { failed.reject(new Error('offline')); await operations[0]; });
+
+  expect(screen.getByTestId('personal-content')).toBeTruthy();
+  const warning = screen.getByText('Information may be out of date');
+  expect(warning.props.accessibilityLiveRegion).toBe('assertive');
+  expect(screen.getByLabelText('Refresh')).toBeTruthy();
+  expect(JSON.stringify(screen.toJSON())).not.toContain('11111111-1111-4111-8111-111111111111');
+
+  await act(async () => { fireEvent.press(screen.getByLabelText('Refresh')); });
+  await waitFor(() => expect(mounted.readCount()).toBe(3));
+  await act(async () => { recovered.resolve(merchant); await operations[1]; });
+  await waitFor(() => expect(screen.getByText('AYO Market')).toBeTruthy());
+  expect(screen.queryByTestId('personal-content')).toBeNull();
+  expect(screen.queryByText('Information may be out of date')).toBeNull();
 });
 
 test('expired authenticated read fails closed through the existing session sign-out path', async () => {
