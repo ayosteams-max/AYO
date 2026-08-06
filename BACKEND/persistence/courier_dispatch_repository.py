@@ -154,6 +154,17 @@ class PostgresCourierDispatchRepository:
         row = self._connection.execute(statement).mappings().one_or_none()
         return None if row is None else CourierDispatchRequest.model_validate(dict(row))
 
+    def get_assignment(
+        self, assignment_id: UUID, *, lock: bool = False
+    ) -> CourierAssignment | None:
+        statement = select(courier_dispatch_assignments).where(
+            courier_dispatch_assignments.c.assignment_id == assignment_id
+        )
+        if lock:
+            statement = statement.with_for_update()
+        row = self._connection.execute(statement).mappings().one_or_none()
+        return None if row is None else CourierAssignment.model_validate(dict(row))
+
     def get_by_order(self, order_id: UUID) -> MerchantCourierDispatchView | None:
         row = self._connection.execute(
             select(commerce_courier_dispatch_requests.c.dispatch_id).where(

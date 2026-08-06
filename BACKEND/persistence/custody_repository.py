@@ -29,16 +29,10 @@ class PostgresCustodyRepository:
     def __init__(self, connection: Connection) -> None:
         self._connection = connection
 
-    def activate(self, *, pickup_id: UUID, at: datetime) -> CustodyView:
-        pickup = (
-            self._connection.execute(
-                select(commerce_courier_pickups).where(
-                    commerce_courier_pickups.c.pickup_id == pickup_id
-                )
-            )
-            .mappings()
-            .one_or_none()
-        )
+    def activate(
+        self, *, pickup_id: UUID, actor_identity_id: UUID, at: datetime
+    ) -> CustodyView:
+        pickup = self._pickup(pickup_id)
         if pickup is None or pickup["state"] != CourierPickupState.WAITING.value:
             raise CustodyConflict("pickup_not_waiting")
         custody_id = uuid4()
@@ -64,10 +58,70 @@ class PostgresCustodyRepository:
         ).scalar_one_or_none()
         if inserted is None:
             existing = self.get_by_order(pickup["order_id"])
-            if existing is None or existing.custody.pickup_id != pickup_id:
-                raise CustodyConflict("custody_activation_conflict")
-            return existing
+            return self._require_binding(existing, pickup)
+        self._connection.execute(
+            insert(commerce_custody_events).values(
+                event_id=uuid4(),
+                custody_id=custody_id,
+                order_id=pickup["order_id"],
+                event_type="commerce.custody.activated",
+                from_state=CustodyState.WAITING.value,
+                to_state=CustodyState.WAITING.value,
+                actor_identity_id=actor_identity_id,
+                version=1,
+                occurred_at=at,
+            )
+        )
+        self._connection.execute(
+            insert(commerce_order_outbox).values(
+                message_id=uuid4(),
+                order_id=pickup["order_id"],
+                event_type="commerce.custody.activated",
+                safe_payload={
+                    "order_id": str(pickup["order_id"]),
+                    "pickup_id": str(pickup_id),
+                    "custody_id": str(custody_id),
+                    "state": CustodyState.WAITING.value,
+                    "version": 1,
+                },
+                occurred_at=at,
+                attempt_count=0,
+            )
+        )
         return self._required(custody_id)
+
+    def require_existing_for_pickup(self, *, pickup_id: UUID) -> CustodyView:
+        pickup = self._pickup(pickup_id)
+        if pickup is None or pickup["state"] != CourierPickupState.WAITING.value:
+            raise CustodyConflict("pickup_not_waiting")
+        existing = self.get_by_order(pickup["order_id"])
+        if existing is None:
+            raise CustodyConflict("custody_replay_record_missing")
+        return self._require_binding(existing, pickup)
+
+    def _pickup(self, pickup_id: UUID):
+        return (
+            self._connection.execute(
+                select(commerce_courier_pickups).where(
+                    commerce_courier_pickups.c.pickup_id == pickup_id
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+
+    @staticmethod
+    def _require_binding(existing: CustodyView | None, pickup) -> CustodyView:
+        if (
+            existing is None
+            or existing.custody.pickup_id != pickup["pickup_id"]
+            or existing.custody.order_id != pickup["order_id"]
+            or existing.custody.merchant_id != pickup["merchant_id"]
+            or existing.custody.courier_identity_id
+            != pickup["assigned_courier_identity_id"]
+        ):
+            raise CustodyConflict("custody_activation_conflict")
+        return existing
 
     def get(self, custody_id: UUID, *, lock: bool = False) -> CustodyRecord | None:
         statement = select(commerce_custody_records).where(

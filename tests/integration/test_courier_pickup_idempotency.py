@@ -31,6 +31,10 @@ from BACKEND.persistence.tables import (
     commerce_courier_pickup_evidence,
     commerce_courier_pickup_idempotency,
     commerce_courier_pickups,
+    commerce_custody_challenges,
+    commerce_custody_events,
+    commerce_custody_idempotency,
+    commerce_custody_records,
     commerce_order_outbox,
     commerce_orders,
     courier_dispatch_assignments,
@@ -392,6 +396,29 @@ def _cleanup_command_state(engine) -> None:
         connection.execute(
             delete(commerce_order_outbox).where(
                 commerce_order_outbox.c.order_id == ORDER
+            )
+        )
+        custody_ids = select(commerce_custody_records.c.custody_id).where(
+            commerce_custody_records.c.order_id == ORDER
+        )
+        connection.execute(
+            delete(commerce_custody_challenges).where(
+                commerce_custody_challenges.c.custody_id.in_(custody_ids)
+            )
+        )
+        connection.execute(
+            delete(commerce_custody_idempotency).where(
+                commerce_custody_idempotency.c.custody_id.in_(custody_ids)
+            )
+        )
+        connection.execute(
+            delete(commerce_custody_events).where(
+                commerce_custody_events.c.custody_id.in_(custody_ids)
+            )
+        )
+        connection.execute(
+            delete(commerce_custody_records).where(
+                commerce_custody_records.c.order_id == ORDER
             )
         )
         connection.execute(
