@@ -340,7 +340,12 @@ def test_postgres_custody_read_distinguishes_absent_from_released_assignment(
         connection.execute(
             update(courier_dispatch_assignments)
             .where(courier_dispatch_assignments.c.assignment_id == ASSIGNMENT)
-            .values(state="released", version=2)
+            .values(
+                state="released_before_pickup",
+                closed_at=NOW,
+                close_reason="courier_unavailable_before_pickup",
+                version=2,
+            )
         )
     released = _client(PostgresRepositoryComposition(postgres_engine), _subject()).get(
         f"/api/mobile/courier-pickups/{PICKUP}/custody"
