@@ -1,14 +1,19 @@
 import base64
 import hashlib
 import hmac
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
 from BACKEND.authorization.contracts import AuthorizationSubject
+from BACKEND.courier_dispatch.models import (
+    CourierAssignmentState,
+    CourierDispatchState,
+)
 from BACKEND.custody.engine import CustodyConflict, target_state
 from BACKEND.custody.models import (
     CustodyAction,
+    CustodyStatusSnapshot,
     CustodyView,
     IssuedPickupCode,
     VerificationMethod,
@@ -57,12 +62,64 @@ class CustodyApplication:
 
     def merchant_detail(
         self, subject: AuthorizationSubject, *, merchant_id: UUID, order_id: UUID
-    ) -> CustodyView:
+    ) -> CustodyStatusSnapshot:
         with self._composition.unit_of_work() as unit:
             self._merchant(unit, subject, merchant_id)
-            value = unit.custody.get_by_order(order_id)
+            value = unit.custody.status_by_order(order_id)
             if value is None or value.custody.merchant_id != merchant_id:
                 raise CustodyConflict("custody_not_found")
+            if not unit.authorization.has_permission(
+                subject.identity_id,
+                "custody.read_own_merchant",
+                at=datetime.now(UTC),
+            ):
+                raise CustodyConflict("access_denied")
+            return value
+
+    def courier_detail(
+        self, subject: AuthorizationSubject, *, pickup_id: UUID
+    ) -> CustodyStatusSnapshot:
+        with self._composition.unit_of_work() as unit:
+            pickup = unit.courier_pickup.get(pickup_id, lock=False)
+            if (
+                pickup is None
+                or pickup.assigned_courier_identity_id != subject.identity_id
+            ):
+                raise CustodyConflict("custody_not_found")
+            dispatch = unit.courier_dispatch.get(pickup.dispatch_id, lock=False)
+            assignment = unit.courier_dispatch.get_assignment(
+                pickup.assignment_id, lock=False
+            )
+            if (
+                dispatch is None
+                or dispatch.state is not CourierDispatchState.ASSIGNED
+                or dispatch.order_id != pickup.order_id
+                or dispatch.merchant_id != pickup.merchant_id
+                or dispatch.active_assignment_id != pickup.assignment_id
+                or dispatch.assigned_courier_identity_id
+                != pickup.assigned_courier_identity_id
+                or assignment is None
+                or assignment.dispatch_id != pickup.dispatch_id
+                or assignment.courier_identity_id != pickup.assigned_courier_identity_id
+                or assignment.state is not CourierAssignmentState.ASSIGNED
+                or assignment.version != pickup.assignment_version
+            ):
+                raise CustodyConflict("custody_not_found")
+            value = unit.custody.status_by_pickup(pickup_id)
+            if (
+                value is None
+                or value.custody.order_id != pickup.order_id
+                or value.custody.merchant_id != pickup.merchant_id
+                or value.custody.courier_identity_id
+                != pickup.assigned_courier_identity_id
+            ):
+                raise CustodyConflict("custody_not_found")
+            if not unit.authorization.has_permission(
+                subject.identity_id,
+                "custody.accept_assigned",
+                at=datetime.now(UTC),
+            ):
+                raise CustodyConflict("access_denied")
             return value
 
     def seal(

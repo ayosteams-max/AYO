@@ -57,6 +57,8 @@ pytestmark = pytest.mark.integration
 MERCHANT_READ_PERMISSION = UUID("20000000-0000-4000-8000-000000000021")
 MERCHANT_ACK_PERMISSION = UUID("20000000-0000-4000-8000-000000000022")
 MERCHANT_ROLE_ASSIGNMENT = UUID("20000000-0000-4000-8000-000000000023")
+CUSTODY_MERCHANT_READ_PERMISSION = UUID("00000000-0000-4000-8000-00000000f601")
+CUSTODY_COURIER_PERMISSION = UUID("00000000-0000-4000-8000-00000000f603")
 COURIER_FIELDS = {
     "pickup_id",
     "state",
@@ -70,6 +72,17 @@ COURIER_FIELDS = {
     "updated_at",
 }
 MERCHANT_FIELDS = COURIER_FIELDS - {"assigned_at", "travelling_at"}
+CUSTODY_COMMON_FIELDS = {
+    "custody_id",
+    "order_id",
+    "state",
+    "version",
+    "required_action",
+    "waiting_for",
+    "recovery",
+    "challenge_available",
+    "challenge_expires_at",
+}
 PROHIBITED = {
     "merchant_id",
     "assigned_courier_identity_id",
@@ -153,6 +166,8 @@ def api_contract_state(postgres_engine):
         for permission_id, code in (
             (MERCHANT_READ_PERMISSION, "courier_pickup.read_own_merchant"),
             (MERCHANT_ACK_PERMISSION, "courier_pickup.acknowledge_own_merchant"),
+            (CUSTODY_MERCHANT_READ_PERMISSION, "custody.read_own_merchant"),
+            (CUSTODY_COURIER_PERMISSION, "custody.accept_assigned"),
         ):
             connection.execute(
                 insert(permissions).values(
@@ -189,7 +204,12 @@ def api_contract_state(postgres_engine):
             connection.execute(
                 delete(role_permissions).where(
                     role_permissions.c.permission_id.in_(
-                        (MERCHANT_READ_PERMISSION, MERCHANT_ACK_PERMISSION)
+                        (
+                            MERCHANT_READ_PERMISSION,
+                            MERCHANT_ACK_PERMISSION,
+                            CUSTODY_MERCHANT_READ_PERMISSION,
+                            CUSTODY_COURIER_PERMISSION,
+                        )
                     )
                 )
             )
@@ -245,6 +265,30 @@ def test_postgres_composed_http_exposes_exact_caller_contracts(
         json={"expected_version": 3, "action": "acknowledge_arrival"},
     )
     assert replay.content == merchant_command.content
+    before_status_reads = _effect_counts(postgres_engine)
+    merchant_custody = merchant.get(
+        f"/api/mobile/merchants/{MERCHANT}/orders/{ORDER}/custody"
+    )
+    courier_custody = courier.get(f"/api/mobile/courier-pickups/{PICKUP}/custody")
+    assert merchant_custody.status_code == courier_custody.status_code == 200
+    assert set(merchant_custody.json()) == CUSTODY_COMMON_FIELDS
+    assert set(courier_custody.json()) == CUSTODY_COMMON_FIELDS | {
+        "supported_verification_methods"
+    }
+    assert merchant_custody.json() == {
+        "custody_id": courier_custody.json()["custody_id"],
+        "order_id": str(ORDER),
+        "state": "waiting_for_pickup",
+        "version": 1,
+        "required_action": "seal_order",
+        "waiting_for": "merchant",
+        "recovery": None,
+        "challenge_available": False,
+        "challenge_expires_at": None,
+    }
+    assert courier_custody.json()["required_action"] == "wait_for_merchant"
+    assert courier_custody.json()["supported_verification_methods"] == []
+    assert _effect_counts(postgres_engine) == before_status_reads
     with postgres_engine.connect() as connection:
         custody = (
             connection.execute(
@@ -640,11 +684,15 @@ def test_postgres_http_non_enumeration_and_permission_denial_are_distinct(
     unavailable = [
         wrong_client.get(f"/api/mobile/courier-pickups/{PICKUP}"),
         wrong_client.get(f"/api/mobile/courier-pickups/{uuid4()}"),
+        wrong_client.get(f"/api/mobile/courier-pickups/{PICKUP}/custody"),
+        wrong_client.get(f"/api/mobile/courier-pickups/{uuid4()}/custody"),
     ]
-    assert [response.status_code for response in unavailable] == [404, 404]
+    assert [response.status_code for response in unavailable] == [404, 404, 404, 404]
     assert [response.json() for response in unavailable] == [
         {"error": {"code": "courier_pickup_unavailable"}},
         {"error": {"code": "courier_pickup_unavailable"}},
+        {"error": {"code": "custody_unavailable"}},
+        {"error": {"code": "custody_unavailable"}},
     ]
 
     with postgres_engine.begin() as connection:

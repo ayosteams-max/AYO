@@ -11,6 +11,7 @@ from BACKEND.custody.models import (
     CustodyEvent,
     CustodyRecord,
     CustodyState,
+    CustodyStatusSnapshot,
     CustodyView,
     PickupChallenge,
     VerificationMethod,
@@ -139,6 +140,22 @@ class PostgresCustodyRepository:
             )
         ).scalar_one_or_none()
         return None if value is None else self._required(value)
+
+    def status_by_order(self, order_id: UUID) -> CustodyStatusSnapshot | None:
+        value = self._connection.execute(
+            select(commerce_custody_records.c.custody_id).where(
+                commerce_custody_records.c.order_id == order_id
+            )
+        ).scalar_one_or_none()
+        return None if value is None else self._status(value)
+
+    def status_by_pickup(self, pickup_id: UUID) -> CustodyStatusSnapshot | None:
+        value = self._connection.execute(
+            select(commerce_custody_records.c.custody_id).where(
+                commerce_custody_records.c.pickup_id == pickup_id
+            )
+        ).scalar_one_or_none()
+        return None if value is None else self._status(value)
 
     def reserve(
         self, *, actor_id: UUID, custody_id: UUID, key: str, payload: str, at: datetime
@@ -369,3 +386,30 @@ class PostgresCustodyRepository:
             challenge=challenge,
             events=tuple(CustodyEvent.model_validate(dict(row)) for row in rows),
         )
+
+    def _status(self, custody_id: UUID) -> CustodyStatusSnapshot:
+        value = self.get(custody_id)
+        if value is None:
+            raise CustodyConflict("custody_not_found")
+        challenge_row = (
+            self._connection.execute(
+                select(commerce_custody_challenges)
+                .where(commerce_custody_challenges.c.custody_id == custody_id)
+                .order_by(commerce_custody_challenges.c.created_at.desc())
+                .limit(1)
+            )
+            .mappings()
+            .one_or_none()
+        )
+        challenge = (
+            None
+            if challenge_row is None
+            else PickupChallenge.model_validate(
+                {
+                    key: value
+                    for key, value in challenge_row.items()
+                    if key not in {"code_hash", "created_at"}
+                }
+            )
+        )
+        return CustodyStatusSnapshot(custody=value, challenge=challenge)
