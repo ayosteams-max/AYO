@@ -1,0 +1,582 @@
+name: Courier Pickup canonical fixture diagnostic
+
+on:
+  push:
+    branches:
+      - agent/courier-pickup-fixture-diagnostic-clean
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: courier-pickup-fixture-diagnostic-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  diagnose-canonical-fixture:
+    if: >-
+      github.event_name == 'push' ||
+      (github.event_name == 'pull_request' &&
+       github.head_ref == 'agent/courier-pickup-fixture-diagnostic-clean')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgis/postgis:17-3.5
+        env:
+          POSTGRES_DB: postgres
+          POSTGRES_USER: ayo_test
+          POSTGRES_PASSWORD: ${{ secrets.AYO_CI_POSTGRES_PASSWORD }}
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ayo_test -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: "5432"
+      PGUSER: ayo_test
+      PGDATABASE: postgres
+      PGCONNECT_TIMEOUT: "5"
+      PGPASSWORD: ${{ secrets.AYO_CI_POSTGRES_PASSWORD }}
+      AUTHORITY_BASE: 3891ad9bed216611da740c289e0f955eccd49990
+      CANDIDATE_BASE: 3891ad9bed216611da740c289e0f955eccd49990
+      CANDIDATE_IMPLEMENTATION: 322fce128199544640bd0da3a7d2be4510d2dabb
+      CANDIDATE_HEAD: a18c68172ec7e998f6f01d4e610d3b52eab017cc
+      CANDIDATE_TREE: 1bcc094c48bc54a42d561762f2122f13f0fb41bf
+      CANDIDATE_BACKEND_TREE: 1173cd56110404c2728536d44c61feacc173fcb1
+      CANDIDATE_TESTS_TREE: be1caf7a0513a862a35d413a2d942854c8d34575
+      CANDIDATE_APPLICATION_BLOB: 4a0c47355d1862e976d0d9bf539a158ec6aab8cc
+      CANDIDATE_WORKFLOW_BLOB: 023e560f68798c0a3af11c1e9318dde0d11ac1a9
+      CANDIDATE_ROUTE_BLOB: 0675d6371de4e250e7654e96137bddf5c4fcf1aa
+      CANDIDATE_INTEGRATION_BLOB: 2203a18d79180776433c213d2c811f3bb476962c
+      CANDIDATE_UNIT_BLOB: c0aa13c354363d2ec6523b0e3afe194e1b1894a6
+      CANDIDATE_MANIFEST: cb464745522120f2f30e011a0896a47d70c76d761b9e2b90d1989c5e7193b14b
+
+    steps:
+      - name: Check out immutable diagnostic authority
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+      - name: Classify exact diagnostic authority
+        id: authority
+        shell: bash
+        env:
+          RESOLVED_HEAD: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          EVENT_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
+          EVENT_HEAD_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || '' }}
+        run: |
+          set -euo pipefail
+          expected_branch="agent/courier-pickup-fixture-diagnostic-clean"
+          expected_path=".github/workflows/courier-pickup-fixture-diagnostic.yml"
+          [[ "$(git rev-parse HEAD)" == "$RESOLVED_HEAD" ]]
+          [[ "$(git rev-parse HEAD^)" == "$AUTHORITY_BASE" ]]
+          [[ "$(git rev-list --count "$AUTHORITY_BASE..$RESOLVED_HEAD")" == "1" ]]
+          [[ "$(git merge-base "$AUTHORITY_BASE" "$RESOLVED_HEAD")" == "$AUTHORITY_BASE" ]]
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            [[ "$EVENT_BASE" == "$AUTHORITY_BASE" ]]
+            [[ "$EVENT_HEAD_REF" == "$expected_branch" ]]
+            [[ "$GITHUB_BASE_REF" == "main" ]]
+          elif [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            [[ "$GITHUB_REF" == "refs/heads/$expected_branch" ]]
+          else
+            echo "Unsupported diagnostic event" >&2
+            exit 1
+          fi
+          mapfile -t changes < <(git diff --name-status "$AUTHORITY_BASE" "$RESOLVED_HEAD")
+          [[ "${#changes[@]}" == "1" ]]
+          [[ "${changes[0]}" == $'A\t'"$expected_path" ]]
+          git diff --quiet "$AUTHORITY_BASE" "$RESOLVED_HEAD" -- BACKEND tests database pyproject.toml uv.lock .secrets.baseline
+          mkdir -p diagnostic-artifacts
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          Path("diagnostic-artifacts/authority.json").write_text(
+              json.dumps({
+                  "classification": "workflow-only-fixture-diagnostic",
+                  "base": os.environ["AUTHORITY_BASE"],
+                  "head": os.environ["RESOLVED_HEAD"],
+                  "path": ".github/workflows/courier-pickup-fixture-diagnostic.yml",
+              }, sort_keys=True, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          PY
+          echo "classification=workflow-only-fixture-diagnostic" >> "$GITHUB_OUTPUT"
+          echo "head=$RESOLVED_HEAD" >> "$GITHUB_OUTPUT"
+          echo "Diagnostic authority classification: PASS"
+
+      - name: Fetch and bind immutable PR 32 candidate
+        if: steps.authority.outputs.classification == 'workflow-only-fixture-diagnostic'
+        id: candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "$CANDIDATE_HEAD"
+          git cat-file -e "$CANDIDATE_HEAD^{commit}"
+          [[ "$(git rev-parse "$CANDIDATE_HEAD^")" == "$CANDIDATE_IMPLEMENTATION" ]]
+          [[ "$(git rev-parse "$CANDIDATE_IMPLEMENTATION^")" == "$CANDIDATE_BASE" ]]
+          [[ "$(git show -s --format=%T "$CANDIDATE_HEAD")" == "$CANDIDATE_TREE" ]]
+          [[ "$(git rev-parse "$CANDIDATE_HEAD:BACKEND")" == "$CANDIDATE_BACKEND_TREE" ]]
+          [[ "$(git rev-parse "$CANDIDATE_HEAD:tests")" == "$CANDIDATE_TESTS_TREE" ]]
+          [[ "$(git rev-parse "$CANDIDATE_HEAD:BACKEND/courier_pickup/application.py")" == "$CANDIDATE_APPLICATION_BLOB" ]]
+          [[ "$(git rev-parse "$CANDIDATE_HEAD:.github/workflows/ci.yml")" == "$CANDIDATE_WORKFLOW_BLOB" ]]
+          [[ "$(git rev-parse "$CANDIDATE_HEAD:BACKEND/routes/courier_pickup.py")" == "$CANDIDATE_ROUTE_BLOB" ]]
+          [[ "$(git rev-parse "$CANDIDATE_HEAD:tests/integration/test_courier_pickup_api_contract.py")" == "$CANDIDATE_INTEGRATION_BLOB" ]]
+          [[ "$(git rev-parse "$CANDIDATE_HEAD:tests/test_courier_pickup_api_contract.py")" == "$CANDIDATE_UNIT_BLOB" ]]
+          mapfile -t status < <(git diff --name-status "$CANDIDATE_BASE" "$CANDIDATE_HEAD")
+          expected=(
+            $'M\tBACKEND/routes/courier_pickup.py'
+            $'A\ttests/integration/test_courier_pickup_api_contract.py'
+            $'A\ttests/test_courier_pickup_api_contract.py'
+          )
+          [[ "${status[*]}" == "${expected[*]}" ]]
+          manifest="$({ printf '%s\n' \
+            'BACKEND/routes/courier_pickup.py' \
+            'tests/integration/test_courier_pickup_api_contract.py' \
+            'tests/test_courier_pickup_api_contract.py'; } | sha256sum | cut -d' ' -f1)"
+          [[ "$manifest" == "$CANDIDATE_MANIFEST" ]]
+          [[ "$(git show "$CANDIDATE_HEAD:tests/integration/test_courier_pickup_idempotency.py" | grep -c 'state="assigned"')" == "2" ]]
+          [[ "$(git show "$CANDIDATE_HEAD:BACKEND/courier_dispatch/models.py" | grep -c 'ASSIGNED = "courier_assigned"')" == "1" ]]
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          Path("diagnostic-artifacts/candidate.json").write_text(
+              json.dumps({
+                  "base": os.environ["CANDIDATE_BASE"],
+                  "implementation": os.environ["CANDIDATE_IMPLEMENTATION"],
+                  "head": os.environ["CANDIDATE_HEAD"],
+                  "tree": os.environ["CANDIDATE_TREE"],
+                  "backend_tree": os.environ["CANDIDATE_BACKEND_TREE"],
+                  "tests_tree": os.environ["CANDIDATE_TESTS_TREE"],
+                  "manifest": os.environ["CANDIDATE_MANIFEST"],
+              }, sort_keys=True, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          PY
+          echo "classification=immutable-pr32-candidate" >> "$GITHUB_OUTPUT"
+          echo "Immutable PR 32 candidate binding: PASS"
+
+      - name: Set up Python
+        if: steps.candidate.outputs.classification == 'immutable-pr32-candidate'
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version-file: .python-version
+
+      - name: Install pinned uv
+        if: steps.candidate.outputs.classification == 'immutable-pr32-candidate'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install "uv==0.11.28"
+          [[ "$(uv --version)" == "uv 0.11.28" ]]
+          echo "Pinned uv installation: PASS"
+
+      - name: Install PostgreSQL 17 client
+        if: steps.candidate.outputs.classification == 'immutable-pr32-candidate'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo install -d /usr/share/postgresql-common/pgdg
+          curl --fail --show-error --silent \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            | sudo tee /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc > /dev/null
+          . /etc/os-release
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client-17
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+
+      - name: Verify infrastructure and bootstrap restricted runtime role
+        if: steps.candidate.outputs.classification == 'immutable-pr32-candidate'
+        id: infrastructure
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -n "${PGPASSWORD:-}" ]]
+          psql --no-password --dbname=postgres -v ON_ERROR_STOP=1 -c "SELECT 1" > /dev/null
+          role_count="$(psql --no-password --dbname=postgres -At -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM pg_roles WHERE rolname='ayo_runtime'")"
+          if [[ "$role_count" == "0" ]]; then
+            psql --no-password --dbname=postgres -v ON_ERROR_STOP=1 -c \
+              "CREATE ROLE ayo_runtime NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS" > /dev/null
+          elif [[ "$role_count" != "1" ]]; then
+            echo "Unexpected ayo_runtime role count" >&2
+            exit 1
+          fi
+          role_row="$(psql --no-password --dbname=postgres -At -F '|' -v ON_ERROR_STOP=1 -c \
+            "SELECT rolcanlogin,rolsuper,rolcreatedb,rolcreaterole,rolreplication,rolbypassrls,rolpassword IS NULL FROM pg_authid WHERE rolname='ayo_runtime'")"
+          [[ "$role_row" == "f|f|f|f|f|f|t" ]]
+          pg_version="$(psql --no-password --dbname=postgres -At -v ON_ERROR_STOP=1 -c "SHOW server_version")"
+          postgis_version="$(psql --no-password --dbname=postgres -At -v ON_ERROR_STOP=1 -c "SELECT postgis_lib_version()")"
+          geometry="$(psql --no-password --dbname=postgres -At -v ON_ERROR_STOP=1 -c "SELECT to_regtype('geometry') IS NOT NULL")"
+          [[ "$pg_version" == 17.* ]]
+          [[ "$postgis_version" == "3.5.2" ]]
+          [[ "$geometry" == "t" ]]
+          python - "$pg_version" "$postgis_version" "$role_row" <<'PY'
+          import json, sys
+          from pathlib import Path
+          Path("diagnostic-artifacts/infrastructure.json").write_text(
+              json.dumps({
+                  "postgresql": sys.argv[1],
+                  "postgis": sys.argv[2],
+                  "geometry_available": True,
+                  "ayo_runtime": {
+                      "can_login": False, "superuser": False,
+                      "create_db": False, "create_role": False,
+                      "replication": False, "bypass_rls": False,
+                      "password_is_null": True,
+                  },
+              }, sort_keys=True, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          PY
+          echo "PostgreSQL/PostGIS and restricted ayo_runtime role: PASS"
+
+      - name: Create detached immutable candidate worktree
+        if: steps.infrastructure.conclusion == 'success'
+        id: worktree
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="$RUNNER_TEMP/courier-pickup-fixture-candidate"
+          [[ ! -e "$candidate" ]]
+          git worktree add --detach "$candidate" "$CANDIDATE_HEAD"
+          [[ "$(git -C "$candidate" rev-parse HEAD)" == "$CANDIDATE_HEAD" ]]
+          [[ "$(git -C "$candidate" show -s --format=%T HEAD)" == "$CANDIDATE_TREE" ]]
+          echo "root=$candidate" >> "$GITHUB_OUTPUT"
+          echo "Detached immutable candidate worktree: PASS"
+
+      - name: Install exact candidate dependencies and verify imports
+        if: steps.infrastructure.conclusion == 'success'
+        shell: bash
+        env:
+          CANDIDATE_ROOT: ${{ steps.worktree.outputs.root }}
+        run: |
+          set -euo pipefail
+          cd "$CANDIDATE_ROOT"
+          [[ "$(git rev-parse HEAD)" == "$CANDIDATE_HEAD" ]]
+          uv sync --locked --all-groups
+          export PYTHONPATH="$CANDIDATE_ROOT"
+          uv run --locked python - <<'PY'
+          from pathlib import Path
+          import alembic
+          import BACKEND
+          root = Path.cwd().resolve()
+          approved = (root / "BACKEND").resolve()
+          resolved = {Path(value).resolve() for value in BACKEND.__path__}
+          if not resolved or resolved != {approved}:
+              raise SystemExit("BACKEND import escaped immutable candidate root")
+          if not Path(alembic.__file__).resolve().is_relative_to(root / ".venv"):
+              raise SystemExit("Alembic did not resolve from candidate environment")
+          print("Candidate dependency and import preflight: PASS")
+          PY
+          [[ -z "$(git status --porcelain)" ]]
+
+      - name: Run isolated canonical-schema diagnostics
+        if: steps.infrastructure.conclusion == 'success'
+        id: diagnostics
+        shell: bash
+        env:
+          CANDIDATE_ROOT: ${{ steps.worktree.outputs.root }}
+        run: |
+          set -euo pipefail
+          [[ -n "${PGPASSWORD:-}" ]]
+          encoded_password="$(python -c 'import os, urllib.parse; print(urllib.parse.quote(os.environ["PGPASSWORD"], safe=""))')"
+          echo "::add-mask::$encoded_password"
+          export PYTHONPATH="$CANDIDATE_ROOT"
+          databases=(ayo_fixture_reproduction ayo_fixture_affected_nodes ayo_fixture_pg_inventory)
+          primary_status=0
+
+          cleanup() {
+            saved_status=$?
+            set +e
+            cd "$GITHUB_WORKSPACE"
+            for database in "${databases[@]}"; do
+              psql --no-password --dbname=postgres -v ON_ERROR_STOP=1 -c \
+                "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$database' AND pid <> pg_backend_pid()" > /dev/null
+              dropdb --no-password --if-exists --host="$PGHOST" --port="$PGPORT" --username="$PGUSER" "$database"
+            done
+            if [[ -d "$CANDIDATE_ROOT" ]]; then
+              git worktree remove --force "$CANDIDATE_ROOT"
+            fi
+            set -e
+            if [[ "$saved_status" -ne 0 ]]; then
+              exit "$saved_status"
+            fi
+            exit "$primary_status"
+          }
+          trap cleanup EXIT
+
+          create_canonical_database() {
+            local database="$1"
+            dropdb --no-password --if-exists --host="$PGHOST" --port="$PGPORT" --username="$PGUSER" "$database"
+            createdb --no-password --host="$PGHOST" --port="$PGPORT" --username="$PGUSER" "$database"
+            psql --no-password --dbname="$database" -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS postgis" > /dev/null
+            export AYO_TEST_DATABASE_URL="postgresql+psycopg://$PGUSER:$encoded_password@$PGHOST:$PGPORT/$database"
+            export AYO_DATABASE_URL="$AYO_TEST_DATABASE_URL"
+            export AYO_DATABASE_SSL_MODE=disable
+            cd "$CANDIDATE_ROOT"
+            uv run --locked python database/migrate.py
+            uv run --locked python - <<'PY'
+          from BACKEND.persistence.config import DatabaseSettings
+          from BACKEND.persistence.engine import create_postgres_engine
+          from BACKEND.persistence.migrations import SchemaVersionReadinessChecker
+          engine = create_postgres_engine(DatabaseSettings(application_name="ayo-fixture-diagnostic"))
+          readiness = SchemaVersionReadinessChecker(engine).check()
+          engine.dispose()
+          if not readiness.ready or readiness.current_revision != "20260805_0057":
+              raise SystemExit("diagnostic database is not at canonical head")
+          print("Canonical migration head: 20260805_0057")
+          PY
+          }
+
+          finish_database() {
+            local database="$1"
+            cd "$GITHUB_WORKSPACE"
+            psql --no-password --dbname=postgres -v ON_ERROR_STOP=1 -c \
+              "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$database' AND pid <> pg_backend_pid()" > /dev/null
+            dropdb --no-password --if-exists --host="$PGHOST" --port="$PGPORT" --username="$PGUSER" "$database"
+            [[ "$(psql --no-password --dbname=postgres -At -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM pg_database WHERE datname='$database'")" == "0" ]]
+          }
+
+          create_canonical_database ayo_fixture_reproduction
+          cd "$CANDIDATE_ROOT"
+          set +e
+          uv run --locked pytest --no-cov -q --junitxml=phase1.xml \
+            tests/integration/test_courier_pickup_api_contract.py::test_postgres_composed_http_exposes_exact_caller_contracts \
+            > phase1.log 2>&1
+          phase1_status=$?
+          set -e
+          [[ "$phase1_status" -ne 0 ]]
+          uv run --locked python - <<'PY'
+          import json
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+          cases = ET.parse("phase1.xml").getroot().findall(".//testcase")
+          if len(cases) != 1:
+              raise SystemExit(f"representative selection drift: {len(cases)}")
+          case = cases[0]
+          error = case.find("error")
+          failure = case.find("failure")
+          item = error if error is not None else failure
+          evidence = ((item.text or "") + " " + (item.get("message", "") if item is not None else ""))
+          log = Path("phase1.log").read_text(encoding="utf-8", errors="replace")
+          combined = evidence + "\n" + log
+          required = (
+              "CheckViolation", "commerce_courier_dispatch_requests",
+              "ck_commerce_courier_dispatch_requests_courier_dispatch__4fe3",
+              "_seed_command_state", "assigned",
+          )
+          missing = [value for value in required if value not in combined]
+          if item is None or missing:
+              raise SystemExit(f"representative fixture classification drift: {missing!r}")
+          Path(__import__("os").environ["GITHUB_WORKSPACE"], "diagnostic-artifacts", "phase1.json").write_text(
+              json.dumps({
+                  "selected": 1, "passed": 0, "failed": 0, "errors": 1,
+                  "skips": 0, "phase": "fixture setup",
+                  "exception": "psycopg.errors.CheckViolation / sqlalchemy.exc.IntegrityError",
+                  "table": "ayo.commerce_courier_dispatch_requests",
+                  "constraint": "ck_commerce_courier_dispatch_requests_courier_dispatch__4fe3",
+                  "rejected_state": "assigned", "origin": "_seed_command_state",
+                  "route_exercised": False,
+              }, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+          PY
+          rm -f phase1.log phase1.xml
+          finish_database ayo_fixture_reproduction
+
+          create_canonical_database ayo_fixture_affected_nodes
+          cd "$CANDIDATE_ROOT"
+          affected=(
+            tests/integration/test_courier_pickup_api_contract.py::test_postgres_composed_http_exposes_exact_caller_contracts
+            tests/integration/test_courier_pickup_api_contract.py::test_postgres_http_replay_is_byte_equivalent_without_duplicate_effects
+            tests/integration/test_courier_pickup_api_contract.py::test_postgres_http_non_enumeration_and_permission_denial_are_distinct
+            tests/integration/test_courier_pickup_authorization_ordering.py::test_postgres_wrong_owner_is_rejected_before_permission_lookup
+            tests/integration/test_courier_pickup_authorization_ordering.py::test_postgres_replay_rechecks_ownership_and_exact_current_permission
+            tests/integration/test_courier_pickup_authorization_ordering.py::test_postgres_assignment_change_has_no_route_application_gap
+            'tests/integration/test_courier_pickup_idempotency.py::test_real_postgresql_contention_executes_once[False]'
+            'tests/integration/test_courier_pickup_idempotency.py::test_real_postgresql_contention_executes_once[True]'
+            'tests/integration/test_courier_pickup_idempotency.py::test_forced_failure_rolls_back_every_effect[after_reservation]'
+            'tests/integration/test_courier_pickup_idempotency.py::test_forced_failure_rolls_back_every_effect[after_aggregate]'
+            'tests/integration/test_courier_pickup_idempotency.py::test_forced_failure_rolls_back_every_effect[after_event]'
+            'tests/integration/test_courier_pickup_idempotency.py::test_forced_failure_rolls_back_every_effect[after_evidence]'
+            'tests/integration/test_courier_pickup_idempotency.py::test_forced_failure_rolls_back_every_effect[before_outbox]'
+            'tests/integration/test_courier_pickup_idempotency.py::test_forced_failure_rolls_back_every_effect[before_snapshot]'
+            'tests/integration/test_courier_pickup_idempotency.py::test_forced_failure_rolls_back_every_effect[after_audit]'
+            'tests/integration/test_courier_pickup_idempotency.py::test_forced_failure_rolls_back_every_effect[before_commit]'
+            tests/integration/test_courier_pickup_idempotency.py::test_transition_without_reservation_fails_closed_and_rolls_back
+            tests/integration/test_courier_pickup_idempotency.py::test_database_lock_timeout_before_commit_retries_once
+            tests/integration/test_courier_pickup_idempotency.py::test_post_commit_uncertainty_and_restart_replay_are_snapshot_only
+            tests/integration/test_courier_pickup_idempotency.py::test_application_replay_returns_persisted_snapshot_after_revalidation
+          )
+          set +e
+          uv run --locked pytest --no-cov -q --junitxml=phase2.xml "${affected[@]}" > phase2.log 2>&1
+          phase2_status=$?
+          set -e
+          [[ "$phase2_status" -ne 0 ]]
+          uv run --locked python - <<'PY'
+          import json
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+          cases = ET.parse("phase2.xml").getroot().findall(".//testcase")
+          if len(cases) != 20:
+              raise SystemExit(f"affected selection drift: {len(cases)}")
+          counts = {"passed": 0, "failed": 0, "errors": 0, "skips": 0}
+          fixture = 0
+          unrelated = []
+          nodes = []
+          for case in cases:
+              node = f"{case.get('classname').replace('.', '/')}.py::{case.get('name')}"
+              nodes.append(node)
+              failure, error, skip = case.find("failure"), case.find("error"), case.find("skipped")
+              item = error if error is not None else failure
+              if skip is not None:
+                  counts["skips"] += 1
+              elif error is not None:
+                  counts["errors"] += 1
+              elif failure is not None:
+                  counts["failed"] += 1
+              else:
+                  counts["passed"] += 1
+              if item is not None:
+                  evidence = (item.text or "") + " " + item.get("message", "")
+                  required = ("CheckViolation", "commerce_courier_dispatch_requests", "ck_commerce_courier_dispatch_requests_courier_dispatch__4fe3", "_seed_command_state", "assigned")
+                  if all(value in evidence for value in required):
+                      fixture += 1
+                  else:
+                      unrelated.append(node)
+          if counts != {"passed": 0, "failed": 0, "errors": 20, "skips": 0} or fixture != 20 or unrelated:
+              raise SystemExit(f"affected classification drift: {counts!r}, fixture={fixture}, unrelated={unrelated!r}")
+          Path(__import__("os").environ["GITHUB_WORKSPACE"], "diagnostic-artifacts", "phase2.json").write_text(
+              json.dumps({"selected": 20, **counts, "fixture_errors": fixture, "unrelated": unrelated, "nodes": sorted(nodes)}, sort_keys=True, indent=2) + "\n",
+              encoding="utf-8")
+          PY
+          rm -f phase2.log phase2.xml
+          finish_database ayo_fixture_affected_nodes
+
+          create_canonical_database ayo_fixture_pg_inventory
+          cd "$CANDIDATE_ROOT"
+          uv run --locked pytest --no-cov -q --collect-only -m "integration and not migration" > phase3-collect.txt
+          set +e
+          uv run --locked pytest --no-cov -q --junitxml=phase3.xml -m "integration and not migration" > phase3.log 2>&1
+          phase3_status=$?
+          set -e
+          [[ "$phase3_status" -ne 0 ]]
+          uv run --locked python - <<'PY'
+          import hashlib, json
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+          nodes = sorted(line.strip() for line in Path("phase3-collect.txt").read_text().splitlines() if "::" in line)
+          fingerprint = hashlib.sha256("\n".join(nodes).encode()).hexdigest()
+          if len(nodes) != 196 or len(nodes) != len(set(nodes)) or fingerprint != "e2891e7d4b27d3ab67a167b658942b4403a7e24135db730cd22a69dc84e5520f":
+              raise SystemExit(f"PostgreSQL inventory drift: count={len(nodes)} fingerprint={fingerprint}")
+          cases = ET.parse("phase3.xml").getroot().findall(".//testcase")
+          counts = {"passed": 0, "failed": 0, "errors": 0, "skips": 0}
+          fixture = 0
+          unrelated = []
+          for case in cases:
+              node = f"{case.get('classname').replace('.', '/')}.py::{case.get('name')}"
+              failure, error, skip = case.find("failure"), case.find("error"), case.find("skipped")
+              item = error if error is not None else failure
+              if skip is not None: counts["skips"] += 1
+              elif error is not None: counts["errors"] += 1
+              elif failure is not None: counts["failed"] += 1
+              else: counts["passed"] += 1
+              if item is not None:
+                  evidence = (item.text or "") + " " + item.get("message", "")
+                  required = ("CheckViolation", "commerce_courier_dispatch_requests", "ck_commerce_courier_dispatch_requests_courier_dispatch__4fe3", "_seed_command_state", "assigned")
+                  if all(value in evidence for value in required): fixture += 1
+                  else: unrelated.append(node)
+          if len(cases) != 196 or counts != {"passed": 176, "failed": 0, "errors": 20, "skips": 0} or fixture != 20 or unrelated:
+              raise SystemExit(f"PostgreSQL outcome classification drift: cases={len(cases)} counts={counts!r} fixture={fixture} unrelated={unrelated!r}")
+          Path(__import__("os").environ["GITHUB_WORKSPACE"], "diagnostic-artifacts", "phase3.json").write_text(
+              json.dumps({"selected": 196, **counts, "fixture_errors": fixture, "unrelated": unrelated, "inventory_fingerprint": fingerprint, "nodes": nodes}, sort_keys=True, indent=2) + "\n",
+              encoding="utf-8")
+          PY
+          rm -f phase3.log phase3.xml phase3-collect.txt
+          finish_database ayo_fixture_pg_inventory
+
+          cd "$GITHUB_WORKSPACE"
+          role_row="$(psql --no-password --dbname=postgres -At -F '|' -v ON_ERROR_STOP=1 -c \
+            "SELECT rolcanlogin,rolsuper,rolcreatedb,rolcreaterole,rolreplication,rolbypassrls,rolpassword IS NULL FROM pg_authid WHERE rolname='ayo_runtime'")"
+          [[ "$role_row" == "f|f|f|f|f|f|t" ]]
+          remaining="$(psql --no-password --dbname=postgres -At -v ON_ERROR_STOP=1 -c \
+            "SELECT count(*) FROM pg_database WHERE datname IN ('ayo_fixture_reproduction','ayo_fixture_affected_nodes','ayo_fixture_pg_inventory')")"
+          [[ "$remaining" == "0" ]]
+          primary_status=0
+          echo "Canonical-schema fixture diagnostic classification: PASS"
+
+      - name: Clean and verify diagnostic resources
+        if: always()
+        shell: bash
+        env:
+          CANDIDATE_ROOT: ${{ steps.worktree.outputs.root }}
+        run: |
+          set -euo pipefail
+          [[ -n "${PGPASSWORD:-}" ]]
+          databases=(ayo_fixture_reproduction ayo_fixture_affected_nodes ayo_fixture_pg_inventory)
+          for database in "${databases[@]}"; do
+            psql --no-password --dbname=postgres -v ON_ERROR_STOP=1 -c \
+              "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$database' AND pid <> pg_backend_pid()" > /dev/null
+            dropdb --no-password --if-exists --host="$PGHOST" --port="$PGPORT" --username="$PGUSER" "$database"
+          done
+          if [[ -n "$CANDIDATE_ROOT" && -d "$CANDIDATE_ROOT" ]]; then
+            git worktree remove --force "$CANDIDATE_ROOT"
+          fi
+          git worktree prune
+          remaining="$(psql --no-password --dbname=postgres -At -v ON_ERROR_STOP=1 -c \
+            "SELECT count(*) FROM pg_database WHERE datname IN ('ayo_fixture_reproduction','ayo_fixture_affected_nodes','ayo_fixture_pg_inventory')")"
+          [[ "$remaining" == "0" ]]
+          role_row="$(psql --no-password --dbname=postgres -At -F '|' -v ON_ERROR_STOP=1 -c \
+            "SELECT rolcanlogin,rolsuper,rolcreatedb,rolcreaterole,rolreplication,rolbypassrls,rolpassword IS NULL FROM pg_authid WHERE rolname='ayo_runtime'")"
+          [[ "$role_row" == "f|f|f|f|f|f|t" ]]
+          if [[ -n "$CANDIDATE_ROOT" ]]; then
+            [[ ! -e "$CANDIDATE_ROOT" ]]
+            ! git worktree list --porcelain | grep -F "$CANDIDATE_ROOT"
+          fi
+          mkdir -p diagnostic-artifacts
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          Path("diagnostic-artifacts/cleanup.json").write_text(
+              json.dumps({
+                  "diagnostic_databases_remaining": 0,
+                  "candidate_worktrees_remaining": 0,
+                  "ayo_runtime_restrictive_after_diagnostics": True,
+                  "final_role_disposal": "GitHub Actions PostgreSQL service-container destruction",
+              }, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+          PY
+          echo "Diagnostic database and worktree cleanup: PASS"
+
+      - name: Upload bounded diagnostic evidence
+        if: always() && hashFiles('diagnostic-artifacts/*.json') != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: courier-pickup-fixture-diagnostic-${{ github.event_name }}
+          path: diagnostic-artifacts/*.json
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Verify authority checkout cleanliness
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --exit-code
+          git diff --cached --exit-code
+          [[ -z "$(git status --porcelain --untracked-files=no)" ]]
+
+      - name: Stop fail-closed after diagnostic evidence
+        if: steps.diagnostics.conclusion == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Diagnostic evidence derived; permanent admission remains denied."
+          exit 1
