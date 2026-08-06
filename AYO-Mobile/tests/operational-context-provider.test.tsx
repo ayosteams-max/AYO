@@ -41,6 +41,9 @@ const session: AuthenticatedSession = {
 };
 const personal = { personal: { available: true }, merchants: [], courier: null };
 const merchant = { personal: null, merchants: [{ merchant_id: '33333333-3333-4333-8333-333333333333', display_name: 'AYO Market', availability: 'available' }], courier: null };
+const courier = { personal: null, merchants: [], courier: { pickup_id: '44444444-4444-4444-8444-444444444444', availability: 'current_pickup' } };
+const pickupStatus = { pickup_id: '44444444-4444-4444-8444-444444444444', state: 'waiting_for_pickup', version: 4, assigned_at: '2026-08-07T01:00:00Z', travelling_at: '2026-08-07T01:05:00Z', arrived_at: '2026-08-07T01:15:00Z', merchant_acknowledged_at: '2026-08-07T01:16:00Z', waiting_duration_seconds: 60, terminal_reason: null, updated_at: '2026-08-07T01:16:00Z' };
+const custodyStatus = { custody_id: '55555555-5555-4555-8555-555555555555', order_id: '66666666-6666-4666-8666-666666666666', state: 'order_sealed', version: 2, required_action: 'verify_pickup', waiting_for: 'courier', recovery: null, challenge_available: true, challenge_expires_at: '2026-08-07T01:30:00Z', supported_verification_methods: ['qr_code', 'barcode'] };
 
 class MemoryStore implements CredentialStore {
   value: string | null = null;
@@ -225,4 +228,59 @@ test('expired authenticated read fails closed through the existing session sign-
   await act(async () => { read.reject(new PublicApiError('session_expired', 401)); });
   await waitFor(() => expect(screen.getByTestId('identity-status').props.children).toBe('signed_out'));
   expect(screen.getByTestId('area-kinds').props.children).toBe('');
+});
+
+test('real courier entry renders fresh status, discloses stale refresh, recovers, and clears when context disappears', async () => {
+  const context = deferred<unknown>(); const pickup = deferred<unknown>(); const custodyRead = deferred<unknown>();
+  const failedPickup = deferred<unknown>(); const recoveredPickup = deferred<unknown>(); const recoveredCustody = deferred<unknown>(); const removed = deferred<unknown>();
+  const mounted = await mount({ initial: session, reads: [context, pickup, custodyRead, failedPickup, recoveredPickup, recoveredCustody, removed], renderShell: true });
+  await act(async () => { context.resolve(courier); });
+  await waitFor(() => expect(mounted.readCount()).toBe(2));
+  await act(async () => { pickup.resolve(pickupStatus); });
+  await waitFor(() => expect(mounted.readCount()).toBe(3));
+  await act(async () => { custodyRead.resolve(custodyStatus); });
+  await waitFor(() => expect(screen.getByText('Ready for handoff')).toBeTruthy());
+  expect(screen.getByText('Handoff status')).toBeTruthy();
+  expect(screen.queryByText('Information may be out of date')).toBeNull();
+
+  await act(async () => { fireEvent.press(screen.getByLabelText('Refresh')); });
+  await waitFor(() => expect(mounted.readCount()).toBe(4));
+  await act(async () => { failedPickup.reject(new Error('offline')); });
+  const warning = await screen.findByText('Information may be out of date');
+  expect(warning.props.accessibilityLiveRegion).toBe('assertive');
+  expect(screen.getByText('Ready for handoff')).toBeTruthy();
+
+  await act(async () => { fireEvent.press(screen.getByLabelText('Refresh')); });
+  await waitFor(() => expect(mounted.readCount()).toBe(5));
+  await act(async () => { recoveredPickup.resolve(pickupStatus); });
+  await waitFor(() => expect(mounted.readCount()).toBe(6));
+  await act(async () => { recoveredCustody.resolve(custodyStatus); });
+  await waitFor(() => expect(screen.queryByText('Information may be out of date')).toBeNull());
+
+  await act(async () => { fireEvent.press(screen.getByTestId('refresh')); });
+  await waitFor(() => expect(mounted.readCount()).toBe(7));
+  await act(async () => { removed.resolve(personal); });
+  await waitFor(() => expect(screen.getByLabelText('Choose destination')).toBeTruthy());
+  expect(screen.queryByText('Handoff status')).toBeNull();
+  const rendered = JSON.stringify(screen.toJSON());
+  expect(rendered).not.toContain('44444444-4444-4444-8444-444444444444');
+  expect(rendered).not.toContain('55555555-5555-4555-8555-555555555555');
+  expect(rendered).not.toContain('66666666-6666-4666-8666-666666666666');
+});
+
+test('sign-out clears the real courier status while its pickup read is pending and stale completion cannot republish it', async () => {
+  const context = deferred<unknown>(); const pickup = deferred<unknown>(); const remoteSignOut = deferred<void>();
+  const mounted = await mount({ initial: session, reads: [context, pickup], signOut: remoteSignOut.promise, renderShell: true });
+  await act(async () => { context.resolve(courier); });
+  await waitFor(() => expect(mounted.readCount()).toBe(2));
+  await waitFor(() => expect(screen.getByText('Checking current handoff status…')).toBeTruthy());
+  await act(async () => { fireEvent.press(screen.getByTestId('sign-out')); await Promise.resolve(); });
+  await waitFor(() => expect(screen.getByTestId('identity-status').props.children).toBe('signed_out'));
+  expect(screen.queryByText('Handoff status')).toBeNull();
+  expect(screen.getByTestId('redirect-target').props.children).toBe('/auth');
+  await act(async () => { pickup.resolve(pickupStatus); await Promise.resolve(); });
+  expect(mounted.readCount()).toBe(2);
+  expect(screen.queryByText('Ready for handoff')).toBeNull();
+  remoteSignOut.resolve();
+  await act(async () => { await Promise.all(operations); });
 });
