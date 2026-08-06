@@ -27,7 +27,9 @@ from BACKEND.persistence.tables import (
     commerce_courier_pickup_idempotency,
     commerce_courier_pickups,
     commerce_order_outbox,
+    commerce_orders,
     courier_dispatch_assignments,
+    merchant_profiles,
 )
 
 POLICY_CODE = "AYO_COURIER_PICKUP_POLICY_V1"
@@ -167,6 +169,74 @@ class PostgresCourierPickupRepository:
             .limit(1)
         ).scalar_one_or_none()
         return None if pickup_id is None else self._required(pickup_id)
+
+    def current_for_courier(
+        self, courier_identity_id: UUID
+    ) -> tuple[CourierPickupRecord, ...]:
+        active_states = tuple(
+            state.value
+            for state in CourierPickupState
+            if state is not CourierPickupState.ENDED_BEFORE_CUSTODY
+        )
+        rows = (
+            self._connection.execute(
+                select(commerce_courier_pickups)
+                .select_from(
+                    commerce_courier_pickups.join(
+                        courier_dispatch_assignments,
+                        courier_dispatch_assignments.c.assignment_id
+                        == commerce_courier_pickups.c.assignment_id,
+                    )
+                    .join(
+                        commerce_courier_dispatch_requests,
+                        commerce_courier_dispatch_requests.c.dispatch_id
+                        == commerce_courier_pickups.c.dispatch_id,
+                    )
+                    .join(
+                        commerce_orders,
+                        commerce_orders.c.order_id
+                        == commerce_courier_pickups.c.order_id,
+                    )
+                    .join(
+                        merchant_profiles,
+                        merchant_profiles.c.merchant_id
+                        == commerce_courier_pickups.c.merchant_id,
+                    )
+                )
+                .where(
+                    commerce_courier_pickups.c.assigned_courier_identity_id
+                    == courier_identity_id,
+                    commerce_courier_pickups.c.state.in_(active_states),
+                    courier_dispatch_assignments.c.courier_identity_id
+                    == courier_identity_id,
+                    courier_dispatch_assignments.c.dispatch_id
+                    == commerce_courier_pickups.c.dispatch_id,
+                    courier_dispatch_assignments.c.state == "assigned",
+                    courier_dispatch_assignments.c.version
+                    == commerce_courier_pickups.c.assignment_version,
+                    commerce_courier_dispatch_requests.c.state == "courier_assigned",
+                    commerce_courier_dispatch_requests.c.active_assignment_id
+                    == commerce_courier_pickups.c.assignment_id,
+                    commerce_courier_dispatch_requests.c.assigned_courier_identity_id
+                    == courier_identity_id,
+                    commerce_courier_dispatch_requests.c.order_id
+                    == commerce_courier_pickups.c.order_id,
+                    commerce_courier_dispatch_requests.c.merchant_id
+                    == commerce_courier_pickups.c.merchant_id,
+                    commerce_orders.c.merchant_id
+                    == commerce_courier_pickups.c.merchant_id,
+                    merchant_profiles.c.state == "approved",
+                )
+                .order_by(
+                    commerce_courier_pickups.c.updated_at.desc(),
+                    commerce_courier_pickups.c.pickup_id,
+                )
+                .limit(2)
+            )
+            .mappings()
+            .all()
+        )
+        return tuple(CourierPickupRecord.model_validate(dict(row)) for row in rows)
 
     def reserve(
         self,

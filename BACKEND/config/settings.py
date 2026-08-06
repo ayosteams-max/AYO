@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     IDENTITY_ADMIN_BOOTSTRAP_ENABLED: bool = False
     IDENTITY_ADMIN_BOOTSTRAP_SECRET_SHA256: SecretStr | None = None
     AUTHENTICATION_MAX_REQUEST_BYTES: int = Field(default=16_384, ge=1_024, le=65_536)
+    MOBILE_ACTOR_CONTEXT_ENABLED: bool = False
     DISPATCH_ENABLED: bool = False
     CANONICAL_DISPATCH_ENABLED: bool = False
     DISPATCH_MAX_REQUEST_BYTES: int = Field(default=16_384, ge=1_024, le=1_048_576)
@@ -91,6 +92,19 @@ class Settings(BaseSettings):
     FIELD_OPERATIONS_PLATFORM_MAX_REQUEST_BYTES: int = Field(
         default=32_768, ge=4_096, le=262_144
     )
+
+    @model_validator(mode="after")
+    def mobile_actor_context_gate(self) -> "Settings":
+        if self.MOBILE_ACTOR_CONTEXT_ENABLED and not self.AUTHENTICATION_ENABLED:
+            raise ValueError("Mobile actor context requires Authentication")
+        if (
+            self.MOBILE_ACTOR_CONTEXT_ENABLED
+            and self.ENVIRONMENT is AppEnvironment.PRODUCTION
+        ):
+            raise ValueError(
+                "Mobile actor context production activation requires separate approval"
+            )
+        return self
 
     @model_validator(mode="after")
     def production_dispatch_gate(self) -> "Settings":
