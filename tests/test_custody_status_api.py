@@ -270,7 +270,9 @@ def test_verification_methods_are_disclosed_only_for_current_verify_action() -> 
 
 
 class _Unit:
-    def __init__(self, *, assignment_valid: bool = True, custody=None) -> None:
+    def __init__(
+        self, *, assignment_valid: bool = True, custody=None, permitted: bool = True
+    ) -> None:
         assignment_state = (
             CourierAssignmentState.ASSIGNED
             if assignment_valid
@@ -308,6 +310,9 @@ class _Unit:
         self.custody = SimpleNamespace(
             status_by_pickup=lambda pickup_id: custody,
             status_by_order=lambda order_id: custody,
+        )
+        self.authorization = SimpleNamespace(
+            has_permission=lambda *args, **kwargs: permitted
         )
         self.merchants = SimpleNamespace(
             get_profile=lambda *args, **kwargs: SimpleNamespace(
@@ -393,6 +398,24 @@ def test_merchant_read_preserves_owner_boundary() -> None:
     with pytest.raises(CustodyConflict, match="access_denied"):
         application.merchant_detail(
             _subject(uuid4(), IdentityType.MERCHANT),
+            merchant_id=MERCHANT,
+            order_id=ORDER,
+        )
+
+
+def test_actor_status_reads_fail_closed_without_permission() -> None:
+    snapshot = _snapshot(CustodyState.WAITING)
+    application = CustodyApplication(
+        _Composition(_Unit(custody=snapshot, permitted=False)),
+        verification_pepper=b"status-contract-pepper" * 2,
+    )
+    with pytest.raises(CustodyConflict, match="access_denied"):
+        application.courier_detail(
+            _subject(COURIER, IdentityType.DRIVER), pickup_id=PICKUP
+        )
+    with pytest.raises(CustodyConflict, match="access_denied"):
+        application.merchant_detail(
+            _subject(MERCHANT, IdentityType.MERCHANT),
             merchant_id=MERCHANT,
             order_id=ORDER,
         )

@@ -57,6 +57,8 @@ pytestmark = pytest.mark.integration
 MERCHANT_READ_PERMISSION = UUID("20000000-0000-4000-8000-000000000021")
 MERCHANT_ACK_PERMISSION = UUID("20000000-0000-4000-8000-000000000022")
 MERCHANT_ROLE_ASSIGNMENT = UUID("20000000-0000-4000-8000-000000000023")
+CUSTODY_MERCHANT_READ_PERMISSION = UUID("00000000-0000-4000-8000-00000000f601")
+CUSTODY_COURIER_PERMISSION = UUID("00000000-0000-4000-8000-00000000f603")
 COURIER_FIELDS = {
     "pickup_id",
     "state",
@@ -187,6 +189,20 @@ def api_contract_state(postgres_engine):
                 assigned_at=NOW,
             )
         )
+        connection.execute(
+            insert(role_permissions),
+            [
+                {
+                    "role_id": ROLE,
+                    "permission_id": permission_id,
+                    "granted_at": NOW,
+                }
+                for permission_id in (
+                    CUSTODY_MERCHANT_READ_PERMISSION,
+                    CUSTODY_COURIER_PERMISSION,
+                )
+            ],
+        )
     try:
         yield
     finally:
@@ -200,7 +216,12 @@ def api_contract_state(postgres_engine):
             connection.execute(
                 delete(role_permissions).where(
                     role_permissions.c.permission_id.in_(
-                        (MERCHANT_READ_PERMISSION, MERCHANT_ACK_PERMISSION)
+                        (
+                            MERCHANT_READ_PERMISSION,
+                            MERCHANT_ACK_PERMISSION,
+                            CUSTODY_MERCHANT_READ_PERMISSION,
+                            CUSTODY_COURIER_PERMISSION,
+                        )
                     )
                 )
             )

@@ -225,11 +225,6 @@ def create_custody_router(application: CustodyApplication) -> APIRouter:
         "/mobile/merchants/{merchant_id}/orders/{order_id}/custody",
         response_model=MerchantCustodyStatus,
     )
-    @permission_required(
-        "custody.read_own_merchant",
-        resource_type="merchant",
-        resource_id_parameter="merchant_id",
-    )
     def detail(
         merchant_id: UUID, order_id: UUID, request: Request
     ) -> MerchantCustodyStatus:
@@ -245,11 +240,6 @@ def create_custody_router(application: CustodyApplication) -> APIRouter:
     @router.get(
         "/mobile/courier-pickups/{pickup_id}/custody",
         response_model=CourierCustodyStatus,
-    )
-    @permission_required(
-        "custody.accept_assigned",
-        resource_type="custody",
-        resource_id_parameter="pickup_id",
     )
     def courier_detail(pickup_id: UUID, request: Request) -> CourierCustodyStatus:
         return _status_call(

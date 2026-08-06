@@ -1,7 +1,7 @@
 import base64
 import hashlib
 import hmac
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
@@ -68,6 +68,12 @@ class CustodyApplication:
             value = unit.custody.status_by_order(order_id)
             if value is None or value.custody.merchant_id != merchant_id:
                 raise CustodyConflict("custody_not_found")
+            if not unit.authorization.has_permission(
+                subject.identity_id,
+                "custody.read_own_merchant",
+                at=datetime.now(UTC),
+            ):
+                raise CustodyConflict("access_denied")
             return value
 
     def courier_detail(
@@ -108,6 +114,12 @@ class CustodyApplication:
                 != pickup.assigned_courier_identity_id
             ):
                 raise CustodyConflict("custody_not_found")
+            if not unit.authorization.has_permission(
+                subject.identity_id,
+                "custody.accept_assigned",
+                at=datetime.now(UTC),
+            ):
+                raise CustodyConflict("access_denied")
             return value
 
     def seal(
