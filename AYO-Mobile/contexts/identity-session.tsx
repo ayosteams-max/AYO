@@ -8,12 +8,15 @@ import { AuthenticationApi } from '@/services/authentication-api';
 import { ExpoSecureCredentialStore } from '@/services/expo-secure-credential-store';
 import { SecureSessionVault } from '@/services/secure-session';
 import { SessionManager } from '@/services/session-manager';
+import { AuthenticatedReadTransport } from '@/services/authenticated-read-transport';
 
 type SessionStatus = 'restoring' | 'signed_out' | 'verification_required' | 'authenticated';
 type IdentityContextValue = Readonly<{ status: SessionStatus; identity?: SessionIdentity; error?: string; signIn(c: Credentials): Promise<void>; register(c: Credentials): Promise<void>; prepareVerification(kind: Credentials['contactKind'], contact: string): Promise<string>; completeVerification(challengeId: string, code: string): Promise<void>; retry(): Promise<void>; signOut(): Promise<void> }>;
 const Context = createContext<IdentityContextValue | undefined>(undefined);
+type AuthenticatedRead = (path: string, signal?: AbortSignal) => Promise<unknown>;
+const AuthenticatedReadContext = createContext<AuthenticatedRead | undefined>(undefined);
 const DEVICE_KEY = 'ayo.mobile.installation-id.v1';
-export type IdentitySessionServices = Readonly<{ api: Promise<AuthenticationApi>; manager: Promise<SessionManager> }>;
+export type IdentitySessionServices = Readonly<{ api: Promise<AuthenticationApi>; manager: Promise<SessionManager>; read?: AuthenticatedRead }>;
 type IdentitySessionProviderProps = PropsWithChildren<{ services?: IdentitySessionServices }>;
 
 function baseUrl() { const value = process.env.EXPO_PUBLIC_AYO_API_URL; if (!value) throw new Error('authentication_service_not_configured'); return value; }
@@ -67,7 +70,12 @@ export function IdentitySessionProvider({ children, services: suppliedServices }
     try { await (await services.manager).signOut(); }
     catch (cause) { if (current === generation.current) setError(cause instanceof Error ? cause.message : 'temporary_failure'); }
   } }), [apply, authenticate, error, identity, restore, services, status, verificationApi]);
-  return <Context.Provider value={value}>{children}</Context.Provider>;
+  const authenticatedRead = useCallback<AuthenticatedRead>(async (path, signal) => {
+    if (suppliedServices?.read) return suppliedServices.read(path, signal);
+    return new AuthenticatedReadTransport(baseUrl(), await services.manager).get(path, signal);
+  }, [services.manager, suppliedServices]);
+  return <Context.Provider value={value}><AuthenticatedReadContext.Provider value={authenticatedRead}>{children}</AuthenticatedReadContext.Provider></Context.Provider>;
 }
 
 export function useIdentitySession() { const value = useContext(Context); if (!value) throw new Error('identity_session_provider_required'); return value; }
+export function useAuthenticatedRead() { const value = useContext(AuthenticatedReadContext); if (!value) throw new Error('identity_session_provider_required'); return value; }

@@ -1,5 +1,5 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { router, useLocalSearchParams } from 'expo-router';
+import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -17,6 +17,8 @@ import {
 import type { Destination, DestinationCategory } from '@/domain/destination';
 import { useDestinationSearch } from '@/hooks/use-destination-search';
 import { destinationSearchGateway } from '@/services/destination-search';
+import { useIdentitySession } from '@/contexts/identity-session';
+import { useOperationalContext } from '@/contexts/operational-context';
 
 const categories: readonly { label: string; value?: DestinationCategory; icon: keyof typeof MaterialCommunityIcons.glyphMap }[] = [
   { label: 'All', icon: 'map-marker-outline' },
@@ -26,6 +28,14 @@ const categories: readonly { label: string; value?: DestinationCategory; icon: k
 ];
 
 export default function DestinationSearchScreen() {
+  const session = useIdentitySession();
+  const operational = useOperationalContext();
+  if (session.status !== 'authenticated') return <Redirect href="/auth" />;
+  if (operational.status !== 'ready' || operational.selected?.kind !== 'personal') return <Redirect href="/(tabs)" />;
+  return <AuthorizedDestinationSearch />;
+}
+
+function AuthorizedDestinationSearch() {
   const params = useLocalSearchParams<{ category?: DestinationCategory }>();
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<DestinationCategory | undefined>(params.category);
