@@ -6,6 +6,10 @@ import pytest
 
 from BACKEND.audit.models import ActorType
 from BACKEND.authorization.contracts import AuthorizationSubject
+from BACKEND.courier_dispatch.models import (
+    CourierAssignmentState,
+    CourierDispatchState,
+)
 from BACKEND.courier_pickup.application import CourierPickupApplication
 from BACKEND.courier_pickup.engine import CourierPickupConflict
 from BACKEND.courier_pickup.models import (
@@ -126,13 +130,49 @@ class FakeUnit:
             )
         )
         self.custody = SimpleNamespace(
-            get_by_order=lambda order_id: (
+            value=(
                 SimpleNamespace(custody=SimpleNamespace(state=CustodyState.ACCEPTED))
                 if custody_accepted
                 else None
-            )
+            ),
+        )
+        self.custody.get_by_order = lambda order_id: self.custody.value
+        self.custody.activate = self._activate_custody
+        self.courier_dispatch = SimpleNamespace(
+            get=lambda dispatch_id, lock=False: SimpleNamespace(
+                dispatch_id=repository.value.dispatch_id,
+                order_id=repository.value.order_id,
+                merchant_id=repository.value.merchant_id,
+                state=CourierDispatchState.ASSIGNED,
+                active_assignment_id=repository.value.assignment_id,
+                assigned_courier_identity_id=repository.value.assigned_courier_identity_id,
+            ),
+            get_assignment=lambda assignment_id, lock=False: SimpleNamespace(
+                assignment_id=repository.value.assignment_id,
+                dispatch_id=repository.value.dispatch_id,
+                courier_identity_id=repository.value.assigned_courier_identity_id,
+                state=CourierAssignmentState.ASSIGNED,
+                version=repository.value.assignment_version,
+            ),
         )
         self.audit_events: list[object] = []
+
+    def _activate_custody(self, *, pickup_id, actor_identity_id, at):
+        del actor_identity_id
+        del at
+        if self.courier_pickup.value.pickup_id != pickup_id:
+            raise CourierPickupConflict("custody_activation_conflict")
+        if self.custody.value is None:
+            self.custody.value = SimpleNamespace(
+                custody=SimpleNamespace(
+                    pickup_id=pickup_id,
+                    order_id=self.courier_pickup.value.order_id,
+                    merchant_id=self.courier_pickup.value.merchant_id,
+                    courier_identity_id=self.courier_pickup.value.assigned_courier_identity_id,
+                    state=CustodyState.WAITING,
+                )
+            )
+        return self.custody.value
 
     def __enter__(self):
         return self
@@ -263,3 +303,53 @@ def test_stale_location_and_wrong_merchant_scope_are_rejected() -> None:
             idempotency_key="merchant-ack-0001",
             at=NOW,
         )
+
+
+def test_merchant_acknowledgement_atomically_reaches_existing_custody() -> None:
+    app, value, courier_id, merchant_owner = application(
+        permissions={
+            "courier_pickup.manage_assigned",
+            "courier_pickup.acknowledge_own_merchant",
+        }
+    )
+    courier = subject(courier_id, IdentityType.DRIVER)
+    travelling = app.courier_command(
+        courier,
+        pickup_id=value.pickup_id,
+        expected_version=1,
+        action=CourierPickupAction.START_TRAVEL,
+        idempotency_key="bridge-travel-0001",
+        at=NOW + timedelta(minutes=1),
+    )
+    arrived = app.courier_command(
+        courier,
+        pickup_id=value.pickup_id,
+        expected_version=travelling.pickup.version,
+        action=CourierPickupAction.MARK_ARRIVED,
+        idempotency_key="bridge-arrival-0001",
+        at=NOW + timedelta(minutes=2),
+    )
+    first = app.merchant_acknowledge(
+        subject(merchant_owner, IdentityType.MERCHANT),
+        merchant_id=value.merchant_id,
+        pickup_id=value.pickup_id,
+        expected_version=arrived.pickup.version,
+        idempotency_key="bridge-merchant-ack-0001",
+        at=NOW + timedelta(minutes=3),
+    )
+    replay = app.merchant_acknowledge(
+        subject(merchant_owner, IdentityType.MERCHANT),
+        merchant_id=value.merchant_id,
+        pickup_id=value.pickup_id,
+        expected_version=arrived.pickup.version,
+        idempotency_key="bridge-merchant-ack-0001",
+        at=NOW + timedelta(minutes=4),
+    )
+    custody = app._composition.unit.custody.value.custody
+    assert first == replay
+    assert first.pickup.state is CourierPickupState.WAITING
+    assert custody.pickup_id == value.pickup_id
+    assert custody.order_id == value.order_id
+    assert custody.merchant_id == value.merchant_id
+    assert custody.courier_identity_id == courier_id
+    assert custody.state is CustodyState.WAITING

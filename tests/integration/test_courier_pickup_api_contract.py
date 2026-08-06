@@ -3,18 +3,30 @@ from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import delete, insert, update
+from sqlalchemy import delete, func, insert, select, update
 
 from BACKEND.audit.models import ActorType
 from BACKEND.authorization.contracts import AuthorizationSubject
 from BACKEND.authorization.enforcement import AuthorizationEnforcer
 from BACKEND.config.settings import Settings
 from BACKEND.courier_pickup.application import CourierPickupApplication
+from BACKEND.courier_pickup.models import CourierPickupAction
+from BACKEND.custody.application import CustodyApplication
 from BACKEND.identity.models import IdentityType
-from BACKEND.main import CourierPickupPlatformActivation, create_app
+from BACKEND.main import (
+    CourierPickupPlatformActivation,
+    CustodyPlatformActivation,
+    create_app,
+)
 from BACKEND.merchant.models import MerchantKind, OnboardingSource
 from BACKEND.persistence.composition import PostgresRepositoryComposition
+from BACKEND.persistence.custody_repository import PostgresCustodyRepository
 from BACKEND.persistence.tables import (
+    commerce_courier_pickup_events,
+    commerce_courier_pickups,
+    commerce_custody_events,
+    commerce_custody_records,
+    commerce_order_outbox,
     identity_role_assignments,
     merchant_profiles,
     permissions,
@@ -96,15 +108,27 @@ def _merchant_subject() -> AuthorizationSubject:
 
 
 def _client(composition, actor: AuthorizationSubject) -> TestClient:
+    resolver = _Resolver(actor)
+    enforcer = cast(AuthorizationEnforcer, _NeverEnforcer())
     activation = CourierPickupPlatformActivation(
         application=CourierPickupApplication(composition),
-        subject_resolver=_Resolver(actor),
-        authorization_enforcer=cast(AuthorizationEnforcer, _NeverEnforcer()),
+        subject_resolver=resolver,
+        authorization_enforcer=enforcer,
     )
     return TestClient(
         create_app(
-            Settings(COURIER_PICKUP_PLATFORM_ENABLED=True),
+            Settings(
+                COURIER_PICKUP_PLATFORM_ENABLED=True,
+                CUSTODY_PLATFORM_ENABLED=True,
+            ),
             courier_pickup_platform=activation,
+            custody_platform=CustodyPlatformActivation(
+                application=CustodyApplication(
+                    composition, verification_pepper=b"test-custody-pepper" * 2
+                ),
+                subject_resolver=resolver,
+                authorization_enforcer=enforcer,
+            ),
         )
     )
 
@@ -183,6 +207,7 @@ def _assert_public(response, fields) -> None:
 
 @pytest.mark.usefixtures("api_contract_state")
 def test_postgres_composed_http_exposes_exact_caller_contracts(
+    postgres_engine,
     postgres_composition,
 ) -> None:
     courier = _client(postgres_composition, _subject())
@@ -210,6 +235,119 @@ def test_postgres_composed_http_exposes_exact_caller_contracts(
         _assert_public(response, COURIER_FIELDS)
     for response in (merchant_status, merchant_command):
         _assert_public(response, MERCHANT_FIELDS)
+    replay = merchant.post(
+        f"/api/mobile/merchants/{MERCHANT}/courier-pickups/{PICKUP}/acknowledge",
+        headers={"Idempotency-Key": "postgres-merchant-contract-0001"},
+        json={"expected_version": 3, "action": "acknowledge_arrival"},
+    )
+    assert replay.content == merchant_command.content
+    with postgres_engine.connect() as connection:
+        custody = (
+            connection.execute(
+                select(commerce_custody_records).where(
+                    commerce_custody_records.c.pickup_id == PICKUP
+                )
+            )
+            .mappings()
+            .one()
+        )
+        assert custody["order_id"] == ORDER
+        assert custody["merchant_id"] == MERCHANT
+        assert custody["courier_identity_id"] == ACTOR
+        assert custody["state"] == "waiting_for_pickup"
+        assert (
+            connection.execute(
+                select(func.count())
+                .select_from(commerce_custody_events)
+                .where(commerce_custody_events.c.custody_id == custody["custody_id"])
+            ).scalar_one()
+            == 1
+        )
+
+
+@pytest.mark.usefixtures("api_contract_state")
+def test_custody_activation_failure_rolls_back_merchant_acknowledgement(
+    postgres_engine,
+    postgres_composition,
+) -> None:
+    courier = CourierPickupApplication(postgres_composition)
+    travelling = courier.courier_command(
+        _subject(),
+        pickup_id=PICKUP,
+        expected_version=1,
+        action=CourierPickupAction.START_TRAVEL,
+        idempotency_key="rollback-travel-0001",
+        at=NOW,
+    )
+    arrived = courier.courier_command(
+        _subject(),
+        pickup_id=PICKUP,
+        expected_version=travelling.pickup.version,
+        action=CourierPickupAction.MARK_ARRIVED,
+        idempotency_key="rollback-arrival-0001",
+        at=NOW,
+    )
+
+    class FailingCustodyRepository(PostgresCustodyRepository):
+        def activate(self, *, pickup_id, actor_identity_id, at):
+            super().activate(
+                pickup_id=pickup_id,
+                actor_identity_id=actor_identity_id,
+                at=at,
+            )
+            raise RuntimeError("forced custody activation failure")
+
+    failing = PostgresRepositoryComposition(postgres_engine)
+    failing._factories["custody"] = FailingCustodyRepository
+    with pytest.raises(RuntimeError, match="forced custody activation failure"):
+        CourierPickupApplication(failing).merchant_acknowledge(
+            _merchant_subject(),
+            merchant_id=MERCHANT,
+            pickup_id=PICKUP,
+            expected_version=arrived.pickup.version,
+            idempotency_key="rollback-merchant-ack-0001",
+            at=NOW,
+        )
+    with postgres_engine.connect() as connection:
+        assert (
+            connection.execute(
+                select(commerce_courier_pickups.c.state).where(
+                    commerce_courier_pickups.c.pickup_id == PICKUP
+                )
+            ).scalar_one()
+            == "arrived_at_merchant"
+        )
+        assert (
+            connection.execute(
+                select(func.count())
+                .select_from(commerce_custody_records)
+                .where(commerce_custody_records.c.pickup_id == PICKUP)
+            ).scalar_one()
+            == 0
+        )
+        assert (
+            connection.execute(
+                select(func.count())
+                .select_from(commerce_courier_pickup_events)
+                .where(
+                    commerce_courier_pickup_events.c.pickup_id == PICKUP,
+                    commerce_courier_pickup_events.c.event_type
+                    == "commerce.courier_pickup.merchant_acknowledged",
+                )
+            ).scalar_one()
+            == 0
+        )
+        assert (
+            connection.execute(
+                select(func.count())
+                .select_from(commerce_order_outbox)
+                .where(
+                    commerce_order_outbox.c.order_id == ORDER,
+                    commerce_order_outbox.c.event_type == "commerce.custody.activated",
+                )
+            ).scalar_one()
+            == 1
+        )
 
 
 @pytest.mark.usefixtures("api_contract_state")

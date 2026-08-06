@@ -14,8 +14,13 @@ from BACKEND.config.settings import Settings
 from BACKEND.courier_pickup.application import CourierPickupApplication
 from BACKEND.courier_pickup.engine import CourierPickupConflict
 from BACKEND.courier_pickup.models import CourierPickupView
+from BACKEND.custody.application import CustodyApplication
 from BACKEND.identity.models import IdentityType
-from BACKEND.main import CourierPickupPlatformActivation, create_app
+from BACKEND.main import (
+    CourierPickupPlatformActivation,
+    CustodyPlatformActivation,
+    create_app,
+)
 from BACKEND.routes.courier_pickup import (
     CourierPickupCourierCommandResult,
     CourierPickupCourierStatus,
@@ -135,8 +140,16 @@ def _client(
         authorization_enforcer=cast(AuthorizationEnforcer, _NeverEnforcer()),
     )
     app = create_app(
-        Settings(COURIER_PICKUP_PLATFORM_ENABLED=True),
+        Settings(
+            COURIER_PICKUP_PLATFORM_ENABLED=True,
+            CUSTODY_PLATFORM_ENABLED=True,
+        ),
         courier_pickup_platform=activation,
+        custody_platform=CustodyPlatformActivation(
+            application=cast(CustodyApplication, route_application),
+            subject_resolver=_Resolver(actor),
+            authorization_enforcer=cast(AuthorizationEnforcer, _NeverEnforcer()),
+        ),
     )
     return TestClient(app)
 
@@ -156,6 +169,11 @@ def test_public_models_are_frozen_closed_exact_allowlists(model, fields) -> None
     assert model.model_config["extra"] == "forbid"
     with pytest.raises(ValidationError):
         model.model_validate({"unexpected_internal_field": "private"})
+
+
+def test_pickup_activation_fails_closed_without_custody_feature_gate() -> None:
+    with pytest.raises(RuntimeError, match="requires Custody Platform"):
+        create_app(Settings(COURIER_PICKUP_PLATFORM_ENABLED=True))
 
 
 def test_distinct_pure_mappers_emit_only_exact_caller_fields() -> None:

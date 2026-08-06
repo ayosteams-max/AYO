@@ -30,9 +30,25 @@ class CustodyApplication:
         self._pepper = verification_pepper
         self._challenge_minutes = challenge_minutes
 
-    def activate_from_waiting(self, *, pickup_id: UUID, at: datetime) -> CustodyView:
+    def activate_from_waiting(
+        self, *, pickup_id: UUID, actor_identity_id: UUID, at: datetime
+    ) -> CustodyView:
         with self._composition.unit_of_work() as unit:
-            return unit.custody.activate(pickup_id=pickup_id, at=at)
+            return self.activate_from_waiting_in(
+                unit,
+                pickup_id=pickup_id,
+                actor_identity_id=actor_identity_id,
+                at=at,
+            )
+
+    @staticmethod
+    def activate_from_waiting_in(
+        unit: Any, *, pickup_id: UUID, actor_identity_id: UUID, at: datetime
+    ) -> CustodyView:
+        """Activate custody inside an existing transaction boundary."""
+        return unit.custody.activate(
+            pickup_id=pickup_id, actor_identity_id=actor_identity_id, at=at
+        )
 
     def merchant_detail(
         self, subject: AuthorizationSubject, *, merchant_id: UUID, order_id: UUID

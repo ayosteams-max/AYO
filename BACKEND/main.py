@@ -245,6 +245,13 @@ def create_app(
     engineering_runtime: EngineeringRuntime | None = None,
 ) -> FastAPI:
     configured = configuration or settings
+    if (
+        configured.COURIER_PICKUP_PLATFORM_ENABLED
+        and not configured.CUSTODY_PLATFORM_ENABLED
+    ):
+        raise RuntimeError(
+            "Courier Pickup Platform waiting-state activation requires Custody Platform"
+        )
     configure_structured_logging(configured.LOG_LEVEL)
     runtime = engineering_runtime
     if runtime is None:

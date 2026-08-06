@@ -4,6 +4,10 @@ from uuid import UUID
 
 from BACKEND.audit.models import AuditEvent, AuditOutcome
 from BACKEND.authorization.contracts import AuthorizationSubject
+from BACKEND.courier_dispatch.models import (
+    CourierAssignmentState,
+    CourierDispatchState,
+)
 from BACKEND.courier_pickup.engine import (
     CourierPickupConflict,
     CourierPickupPolicy,
@@ -15,7 +19,8 @@ from BACKEND.courier_pickup.models import (
     CourierPickupExceptionReason,
     CourierPickupView,
 )
-from BACKEND.custody.models import CustodyState
+from BACKEND.custody.application import CustodyApplication
+from BACKEND.custody.engine import CustodyConflict
 from BACKEND.merchant.models import MerchantState
 
 
@@ -240,12 +245,21 @@ class CourierPickupApplication:
                 at=instant,
             )
             if replay is not None:
+                if action is CourierPickupAction.ACKNOWLEDGE_ARRIVAL:
+                    self._activate_custody(
+                        unit,
+                        pickup_id=pickup_id,
+                        actor_identity_id=subject.identity_id,
+                        at=instant,
+                    )
                 return replay
             custody = unit.custody.get_by_order(current.order_id)
-            if custody is not None and custody.custody.state is CustodyState.ACCEPTED:
+            if custody is not None:
                 raise CourierPickupConflict("pickup_authority_ended_at_custody")
             if current.version != expected_version:
                 raise CourierPickupConflict("courier_pickup_version_conflict")
+            if action is CourierPickupAction.ACKNOWLEDGE_ARRIVAL:
+                self._require_current_assignment(unit, current)
             if location_evidence_observed_at is not None:
                 self._policy.validate_location_evidence(
                     observed_at=location_evidence_observed_at,
@@ -277,7 +291,52 @@ class CourierPickupApplication:
                     idempotency_key,
                 )
             )
+            if action is CourierPickupAction.ACKNOWLEDGE_ARRIVAL:
+                self._activate_custody(
+                    unit,
+                    pickup_id=pickup_id,
+                    actor_identity_id=subject.identity_id,
+                    at=instant,
+                )
             return result
+
+    @staticmethod
+    def _activate_custody(
+        unit: Any, *, pickup_id: UUID, actor_identity_id: UUID, at: datetime
+    ) -> None:
+        try:
+            CustodyApplication.activate_from_waiting_in(
+                unit,
+                pickup_id=pickup_id,
+                actor_identity_id=actor_identity_id,
+                at=at,
+            )
+        except CustodyConflict as error:
+            raise CourierPickupConflict(
+                "courier_pickup_custody_activation_conflict"
+            ) from error
+
+    @staticmethod
+    def _require_current_assignment(unit: Any, current: Any) -> None:
+        dispatch = unit.courier_dispatch.get(current.dispatch_id, lock=True)
+        assignment = unit.courier_dispatch.get_assignment(
+            current.assignment_id, lock=True
+        )
+        if (
+            dispatch is None
+            or dispatch.state is not CourierDispatchState.ASSIGNED
+            or dispatch.order_id != current.order_id
+            or dispatch.merchant_id != current.merchant_id
+            or dispatch.active_assignment_id != current.assignment_id
+            or dispatch.assigned_courier_identity_id
+            != current.assigned_courier_identity_id
+            or assignment is None
+            or assignment.dispatch_id != current.dispatch_id
+            or assignment.courier_identity_id != current.assigned_courier_identity_id
+            or assignment.state is not CourierAssignmentState.ASSIGNED
+            or assignment.version != current.assignment_version
+        ):
+            raise CourierPickupConflict("courier_pickup_assignment_invalid")
 
     @staticmethod
     def _at(value: datetime) -> datetime:

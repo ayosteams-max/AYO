@@ -212,6 +212,10 @@ def _call[T](operation: Callable[[], T]) -> T:
                 409,
                 "courier_pickup_temporarily_unavailable",
             ),
+            "courier_pickup_custody_activation_conflict": (
+                409,
+                "courier_pickup_temporarily_unavailable",
+            ),
         }.get(internal_code)
         if public is None:
             logger.error("unclassified courier pickup conflict")
