@@ -33,7 +33,7 @@ The facilitator must test whether the participant understands that:
 
 Use a PRE-PRODUCTION build with synthetic records only. Never show real people, businesses, orders, places, routes, payments, or identifiers. Use the exact approved user-facing copy in the build; do not expose internal terms to participants.
 
-Bold quoted text in the visible-state column is application copy. Other table text describes the synthetic system condition or neutral facilitator response; it is not application copy. A facilitator may point only to displayed controls or pause/stop the synthetic scenario. This protocol does not create or simulate an offline, in-person, support, dispatch, or operational-escalation procedure. Existing in-app guidance about an approved in-person process may be tested for comprehension, but this protocol does not define, validate, or approve that process. Any facilitator escalation contact is for research-session safety only, not product support or operational dispatch.
+Bold quoted text in the visible-state column is application copy. Other table text describes the synthetic system condition or neutral facilitator response; it is not application copy. A facilitator may point only to displayed controls or pause/stop the synthetic scenario. This protocol does not create or simulate an offline, in-person, support, dispatch, emergency, or operational-incident procedure. Existing in-app guidance about an approved in-person process may be tested for comprehension, but this protocol does not define, validate, or approve that process. The designated research-session safety contact exists only to support safe conduct of the supervised research session. It is not AYO product support, courier support, dispatch, emergency services, operational incident response, or a path for real deliveries or assignments.
 
 For every row ask: **"Tell me in your own words what is happening. What has definitely happened? What has not happened yet? What would you do next? Would you trust this information right now? Why?"** Ask **"Does this mean you have received the order?"** where possession could be misunderstood.
 
@@ -55,7 +55,7 @@ For every row ask: **"Tell me in your own words what is happening. What has defi
 | Refresh fails | Prior state remains stale or first load stays unavailable | Refresh did not confirm current evidence | Return to areas, or facilitator may pause and retry later within the synthetic session without implying a schedule or service commitment | Treats the previous status as freshly confirmed | Would act on failed recovery |
 | Assignment removed between reads | First synthetic read succeeds; second returns no-longer-current; courier status disappears | Authority disappeared; old evidence and locator must not be retained | Use another returned area or empty shell | Continues from remembered status | Attempts to recover or reuse the removed pickup |
 | Another area available | Courier context disappears; shell selects another authorized area | Navigation changed because courier access ended; it did not complete the pickup | Use the independently authorized area | Treats navigation as lifecycle completion | Claims the other area preserves courier authority |
-| No area available | Courier context disappears; **No available area** is shown | No operating area is currently authorized | Account or Sign out; facilitator pauses/stops and uses the research-session safety contact if needed | Invents access or repeatedly searches for hidden work | Attempts bypass or believes a real assignment still exists |
+| No area available | Courier context disappears; **No available area** is shown | No operating area is currently authorized | Account or Sign out; facilitator pauses/stops and uses the designated research-session safety contact if needed | Invents access or repeatedly searches for hidden work | Attempts bypass or believes a real assignment still exists |
 
 Stop the individual scenario whenever its row's stop condition occurs. Apply the session-wide stop rules below as well.
 
@@ -163,7 +163,7 @@ Stop the scenario or session immediately if:
 - an identifier, real location, real operational data, or production configuration appears;
 - behavior differs from the approved deterministic scenario;
 - recording occurs unexpectedly; or
-- the facilitator cannot provide the approved human escalation contact.
+- the designated research-session safety contact is unavailable.
 
 Do not retain information disclosed after a stop; remove it from the worksheet before continuing any aggregate review.
 
@@ -180,7 +180,7 @@ None of these approvals is recorded by this document. Evaluation may begin only 
 7. Amharic wording receives qualified native review.
 8. Privacy and consent boundaries are accepted by the accountable reviewer.
 9. Recruitment and compensation are separately approved.
-10. A trained human facilitator and escalation contact are available.
+10. A trained human facilitator and designated research-session safety contact are available.
 11. A practical destruction process exists for participant-level notes and temporary labels.
 12. An accountable owner is assigned for the suppression-safe aggregate report.
 
