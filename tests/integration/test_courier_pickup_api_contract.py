@@ -166,6 +166,8 @@ def api_contract_state(postgres_engine):
         for permission_id, code in (
             (MERCHANT_READ_PERMISSION, "courier_pickup.read_own_merchant"),
             (MERCHANT_ACK_PERMISSION, "courier_pickup.acknowledge_own_merchant"),
+            (CUSTODY_MERCHANT_READ_PERMISSION, "custody.read_own_merchant"),
+            (CUSTODY_COURIER_PERMISSION, "custody.accept_assigned"),
         ):
             connection.execute(
                 insert(permissions).values(
@@ -188,20 +190,6 @@ def api_contract_state(postgres_engine):
                 assigned_by_identity_id=ACTOR,
                 assigned_at=NOW,
             )
-        )
-        connection.execute(
-            insert(role_permissions),
-            [
-                {
-                    "role_id": ROLE,
-                    "permission_id": permission_id,
-                    "granted_at": NOW,
-                }
-                for permission_id in (
-                    CUSTODY_MERCHANT_READ_PERMISSION,
-                    CUSTODY_COURIER_PERMISSION,
-                )
-            ],
         )
     try:
         yield
