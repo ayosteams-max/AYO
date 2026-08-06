@@ -10,6 +10,7 @@ from BACKEND.courier_dispatch.models import (
     CourierAssignmentState,
     CourierDispatchState,
 )
+from BACKEND.courier_pickup.models import CourierPickupState
 from BACKEND.custody.engine import CustodyConflict, target_state
 from BACKEND.custody.models import (
     CustodyAction,
@@ -78,7 +79,7 @@ class CustodyApplication:
 
     def courier_detail(
         self, subject: AuthorizationSubject, *, pickup_id: UUID
-    ) -> CustodyStatusSnapshot:
+    ) -> CustodyStatusSnapshot | None:
         with self._composition.unit_of_work() as unit:
             pickup = unit.courier_pickup.get(pickup_id, lock=False)
             if (
@@ -105,14 +106,7 @@ class CustodyApplication:
                 or assignment.version != pickup.assignment_version
             ):
                 raise CustodyConflict("custody_not_found")
-            value = unit.custody.status_by_pickup(pickup_id)
-            if (
-                value is None
-                or value.custody.order_id != pickup.order_id
-                or value.custody.merchant_id != pickup.merchant_id
-                or value.custody.courier_identity_id
-                != pickup.assigned_courier_identity_id
-            ):
+            if pickup.state is CourierPickupState.ENDED_BEFORE_CUSTODY:
                 raise CustodyConflict("custody_not_found")
             if not unit.authorization.has_permission(
                 subject.identity_id,
@@ -120,6 +114,23 @@ class CustodyApplication:
                 at=datetime.now(UTC),
             ):
                 raise CustodyConflict("access_denied")
+            value = unit.custody.status_by_pickup(pickup_id)
+            before_custody = pickup.state in {
+                CourierPickupState.ASSIGNED,
+                CourierPickupState.TRAVELLING,
+                CourierPickupState.ARRIVED,
+            }
+            if value is None and before_custody:
+                return None
+            if value is None or before_custody:
+                raise CustodyConflict("custody_state_conflict")
+            if (
+                value.custody.order_id != pickup.order_id
+                or value.custody.merchant_id != pickup.merchant_id
+                or value.custody.courier_identity_id
+                != pickup.assigned_courier_identity_id
+            ):
+                raise CustodyConflict("custody_not_found")
             return value
 
     def seal(

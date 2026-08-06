@@ -14,6 +14,7 @@ from BACKEND.courier_dispatch.models import (
     CourierAssignmentState,
     CourierDispatchState,
 )
+from BACKEND.courier_pickup.models import CourierPickupState
 from BACKEND.custody.application import CustodyApplication
 from BACKEND.custody.engine import CustodyConflict
 from BACKEND.custody.models import (
@@ -25,6 +26,7 @@ from BACKEND.custody.models import (
 from BACKEND.identity.models import IdentityType
 from BACKEND.merchant.models import MerchantState
 from BACKEND.routes.custody import (
+    CourierCustodyNotStarted,
     CourierCustodyRequiredAction,
     CourierCustodyStatus,
     CustodyRecoveryCategory,
@@ -56,6 +58,9 @@ COMMON_FIELDS = {
     "recovery",
     "challenge_available",
     "challenge_expires_at",
+}
+COURIER_FIELDS = COMMON_FIELDS - {"custody_id", "order_id"} | {
+    "supported_verification_methods"
 }
 PROHIBITED_FIELDS = {
     "pickup_id",
@@ -108,15 +113,20 @@ def _challenge(*, expires_at: datetime, used: bool = False) -> PickupChallenge:
 
 def test_actor_status_models_are_frozen_exact_allowlists() -> None:
     assert set(MerchantCustodyStatus.model_fields) == COMMON_FIELDS
-    assert set(CourierCustodyStatus.model_fields) == COMMON_FIELDS | {
-        "supported_verification_methods"
-    }
+    assert set(CourierCustodyStatus.model_fields) == COURIER_FIELDS
     for model in (MerchantCustodyStatus, CourierCustodyStatus):
         assert model.model_config["frozen"] is True
         assert model.model_config["extra"] == "forbid"
         assert not (set(model.model_fields) & PROHIBITED_FIELDS)
         with pytest.raises(ValidationError):
             model.model_validate({"internal_event_history": []})
+    assert set(CourierCustodyNotStarted.model_fields) == {"availability"}
+    assert CourierCustodyNotStarted.model_config["frozen"] is True
+    assert CourierCustodyNotStarted.model_config["extra"] == "forbid"
+    with pytest.raises(ValidationError):
+        CourierCustodyNotStarted.model_validate(
+            {"availability": "not_started", "assignment_id": ASSIGNMENT}
+        )
 
 
 def test_routes_bind_exact_actor_specific_response_models() -> None:
@@ -128,7 +138,9 @@ def test_routes_bind_exact_actor_specific_response_models() -> None:
     merchant_path = "/mobile/merchants/{merchant_id}/orders/{order_id}/custody"
     courier_path = "/mobile/courier-pickups/{pickup_id}/custody"
     assert routes[merchant_path].response_model is MerchantCustodyStatus
-    assert routes[courier_path].response_model is CourierCustodyStatus
+    assert routes[courier_path].response_model == (
+        CourierCustodyStatus | CourierCustodyNotStarted
+    )
     assert "courier_id" not in courier_path
 
 
@@ -214,6 +226,7 @@ def test_state_maps_to_exact_actor_actions(
     assert courier.waiting_for is waiting_for
     assert merchant.model_dump().keys() == COMMON_FIELDS
     assert not (merchant.model_dump().keys() & PROHIBITED_FIELDS)
+    assert courier.model_dump().keys() == COURIER_FIELDS
     assert not (courier.model_dump().keys() & PROHIBITED_FIELDS)
 
 
@@ -271,7 +284,15 @@ def test_verification_methods_are_disclosed_only_for_current_verify_action() -> 
 
 class _Unit:
     def __init__(
-        self, *, assignment_valid: bool = True, custody=None, permitted: bool = True
+        self,
+        *,
+        assignment_valid: bool = True,
+        custody=None,
+        permitted: bool = True,
+        pickup_state: CourierPickupState = CourierPickupState.WAITING,
+        assignment_version: int = 1,
+        active_assignment_id: UUID = ASSIGNMENT,
+        pickup_present: bool = True,
     ) -> None:
         assignment_state = (
             CourierAssignmentState.ASSIGNED
@@ -286,13 +307,14 @@ class _Unit:
             assignment_id=ASSIGNMENT,
             assignment_version=1,
             assigned_courier_identity_id=COURIER,
+            state=pickup_state,
         )
         self.dispatch = SimpleNamespace(
             dispatch_id=DISPATCH,
             order_id=ORDER,
             merchant_id=MERCHANT,
             state=CourierDispatchState.ASSIGNED,
-            active_assignment_id=ASSIGNMENT,
+            active_assignment_id=active_assignment_id,
             assigned_courier_identity_id=COURIER,
         )
         self.assignment = SimpleNamespace(
@@ -300,9 +322,11 @@ class _Unit:
             dispatch_id=DISPATCH,
             courier_identity_id=COURIER,
             state=assignment_state,
-            version=1,
+            version=assignment_version,
         )
-        self.courier_pickup = SimpleNamespace(get=lambda *args, **kwargs: self.pickup)
+        self.courier_pickup = SimpleNamespace(
+            get=lambda *args, **kwargs: self.pickup if pickup_present else None
+        )
         self.courier_dispatch = SimpleNamespace(
             get=lambda *args, **kwargs: self.dispatch,
             get_assignment=lambda *args, **kwargs: self.assignment,
@@ -360,6 +384,19 @@ def test_assigned_courier_discovers_exact_custody_by_pickup() -> None:
     )
 
 
+def test_current_assigned_courier_receives_explicit_no_custody_result() -> None:
+    application = CustodyApplication(
+        _Composition(_Unit(custody=None, pickup_state=CourierPickupState.ARRIVED)),
+        verification_pepper=b"status-contract-pepper" * 2,
+    )
+    assert (
+        application.courier_detail(
+            _subject(COURIER, IdentityType.DRIVER), pickup_id=PICKUP
+        )
+        is None
+    )
+
+
 @pytest.mark.parametrize(
     "unit,identity",
     [
@@ -368,7 +405,28 @@ def test_assigned_courier_discovers_exact_custody_by_pickup() -> None:
             _Unit(assignment_valid=False, custody=_snapshot(CustodyState.WAITING)),
             COURIER,
         ),
-        (_Unit(custody=None), COURIER),
+        (
+            _Unit(
+                assignment_version=2,
+                custody=_snapshot(CustodyState.WAITING),
+            ),
+            COURIER,
+        ),
+        (
+            _Unit(
+                active_assignment_id=uuid4(),
+                custody=_snapshot(CustodyState.WAITING),
+            ),
+            COURIER,
+        ),
+        (_Unit(pickup_present=False), COURIER),
+        (
+            _Unit(
+                custody=None,
+                pickup_state=CourierPickupState.ENDED_BEFORE_CUSTODY,
+            ),
+            COURIER,
+        ),
     ],
 )
 def test_wrong_stale_or_missing_courier_custody_fails_closed(unit, identity) -> None:
@@ -378,6 +436,17 @@ def test_wrong_stale_or_missing_courier_custody_fails_closed(unit, identity) -> 
     with pytest.raises(CustodyConflict, match="custody_not_found"):
         application.courier_detail(
             _subject(identity, IdentityType.DRIVER), pickup_id=PICKUP
+        )
+
+
+def test_missing_custody_at_handoff_boundary_is_internal_conflict() -> None:
+    application = CustodyApplication(
+        _Composition(_Unit(custody=None)),
+        verification_pepper=b"status-contract-pepper" * 2,
+    )
+    with pytest.raises(CustodyConflict, match="custody_state_conflict"):
+        application.courier_detail(
+            _subject(COURIER, IdentityType.DRIVER), pickup_id=PICKUP
         )
 
 

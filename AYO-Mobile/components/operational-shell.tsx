@@ -7,6 +7,7 @@ import { useLanguage } from '@/contexts/language';
 import { useOperationalContext } from '@/contexts/operational-context';
 import type { OperationalArea } from '@/domain/mobile-context';
 import { operationalShellCopy } from '@/localization/operational-shell';
+import { CourierHandoffStatus } from '@/components/courier-handoff-status';
 
 export function OperationalShell({ personal }: { personal: ReactNode }) {
   const session = useIdentitySession();
@@ -28,6 +29,7 @@ export function OperationalShell({ personal }: { personal: ReactNode }) {
     </View> : null}
     {personal}<AreaFooter />
   </View>;
+  if (context.selected.kind === 'courier') return <CourierHandoffStatus key={context.selected.pickupId} pickupId={context.selected.pickupId} />;
   return <Placeholder key={context.selected.key} area={context.selected} />;
 }
 
@@ -77,17 +79,17 @@ function AreaCard({ area }: { area: OperationalArea }) {
   );
 }
 
-function Placeholder({ area }: { area: Extract<OperationalArea, { kind: 'merchant' | 'courier' }> }) {
+function Placeholder({ area }: { area: Extract<OperationalArea, { kind: 'merchant' }> }) {
   const { locale } = useLanguage();
   const copy = operationalShellCopy[locale];
   const context = useOperationalContext();
-  const title = area.kind === 'merchant' ? area.displayName : copy.deliveries;
+  const title = area.displayName;
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.placeholder}>
         <Text style={styles.badge}>{copy.preProduction}</Text>
         <Text style={styles.title}>{title}</Text>
-        <Text style={styles.help}>{area.kind === 'merchant' ? copy.businessSoon : copy.pickupSoon}</Text>
+        <Text style={styles.help}>{copy.businessSoon}</Text>
         {context.status === 'stale' ? <Text accessibilityLiveRegion="assertive" style={styles.warning}>{copy.stale}</Text> : null}
         <AreaFooter />
       </View>

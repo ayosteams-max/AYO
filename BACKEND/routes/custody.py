@@ -1,7 +1,7 @@
 from collections.abc import Callable
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Header, HTTPException, Request
@@ -68,8 +68,6 @@ class MerchantCustodyStatus(BaseModel):
 
 class CourierCustodyStatus(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
-    custody_id: UUID
-    order_id: UUID
     state: CustodyState
     version: int = Field(ge=1)
     required_action: CourierCustodyRequiredAction
@@ -78,6 +76,11 @@ class CourierCustodyStatus(BaseModel):
     challenge_available: bool
     challenge_expires_at: datetime | None
     supported_verification_methods: tuple[VerificationMethod, ...]
+
+
+class CourierCustodyNotStarted(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    availability: Literal["not_started"] = "not_started"
 
 
 def _challenge_status(
@@ -171,8 +174,6 @@ def _courier_status(
         snapshot.custody.state, challenge_available=available
     )
     return CourierCustodyStatus(
-        custody_id=snapshot.custody.custody_id,
-        order_id=snapshot.custody.order_id,
         state=snapshot.custody.state,
         version=snapshot.custody.version,
         required_action=courier_action,
@@ -239,15 +240,17 @@ def create_custody_router(application: CustodyApplication) -> APIRouter:
 
     @router.get(
         "/mobile/courier-pickups/{pickup_id}/custody",
-        response_model=CourierCustodyStatus,
+        response_model=CourierCustodyStatus | CourierCustodyNotStarted,
     )
-    def courier_detail(pickup_id: UUID, request: Request) -> CourierCustodyStatus:
-        return _status_call(
-            lambda: _courier_status(
-                application.courier_detail(_subject(request), pickup_id=pickup_id),
-                now=datetime.now(UTC),
-            )
+    def courier_detail(
+        pickup_id: UUID, request: Request
+    ) -> CourierCustodyStatus | CourierCustodyNotStarted:
+        snapshot = _status_call(
+            lambda: application.courier_detail(_subject(request), pickup_id=pickup_id)
         )
+        if snapshot is None:
+            return CourierCustodyNotStarted()
+        return _courier_status(snapshot, now=datetime.now(UTC))
 
     @router.post("/mobile/merchants/{merchant_id}/custody/{custody_id}/seal")
     @permission_required(

@@ -18,7 +18,7 @@ test('shell uses centralized copy, textual availability and accessible controls'
   assert.match(source, /accessibilityLiveRegion/);
   assert.match(source, /accessibilityState=\{\{ disabled \}\}/);
   assert.match(source, /minHeight: 48/);
-  assert.doesNotMatch(source, /pickupId\}|merchantId\}|identityId|permission/);
+  assert.doesNotMatch(source, /merchantId\}|identityId|permission/);
 });
 
 test('destination search remains present and is guarded by returned personal context', async () => {
@@ -30,7 +30,7 @@ test('destination search remains present and is guarded by returned personal con
 });
 
 test('shell contains no command, scanner, location, notification or raw-token integration', async () => {
-  const paths = ['../components/operational-shell.tsx', '../contexts/operational-context.tsx', '../services/mobile-context.ts'];
+  const paths = ['../components/operational-shell.tsx', '../components/courier-handoff-status.tsx', '../contexts/operational-context.tsx', '../services/mobile-context.ts', '../services/courier-handoff-status.ts'];
   const source = (await Promise.all(paths.map((path) => readFile(resolve(directory, path), 'utf8')))).join('\n');
   assert.doesNotMatch(source, /accessToken|refreshToken|expo-camera|expo-location|notification|barcode|qrcode|offline queue/i);
   assert.doesNotMatch(source, /\.(post|patch|put|delete)\(/);
