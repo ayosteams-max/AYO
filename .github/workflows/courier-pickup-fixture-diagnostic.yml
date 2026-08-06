@@ -176,7 +176,16 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install "uv==0.11.28"
-          [[ "$(uv --version)" == "uv 0.11.28" ]]
+          python - <<'PY'
+          import importlib.metadata
+
+          actual = importlib.metadata.version("uv")
+          expected = "0.11.28"
+          if actual != expected:
+              raise SystemExit(f"unexpected uv package version: {actual}")
+          print("verified pinned uv package version")
+          PY
+          uv --version
           echo "Pinned uv installation: PASS"
 
       - name: Install PostgreSQL 17 client
@@ -214,6 +223,7 @@ jobs:
           role_row="$(psql --no-password --dbname=postgres -At -F '|' -v ON_ERROR_STOP=1 -c \
             "SELECT rolcanlogin,rolsuper,rolcreatedb,rolcreaterole,rolreplication,rolbypassrls,rolpassword IS NULL FROM pg_authid WHERE rolname='ayo_runtime'")"
           [[ "$role_row" == "f|f|f|f|f|f|t" ]]
+          printf '%s\n' 'restricted ayo_runtime bootstrap complete' > "$RUNNER_TEMP/ayo-runtime-bootstrap-complete"
           pg_version="$(psql --no-password --dbname=postgres -At -v ON_ERROR_STOP=1 -c "SHOW server_version")"
           postgis_version="$(psql --no-password --dbname=postgres -At -v ON_ERROR_STOP=1 -c "SELECT postgis_lib_version()")"
           geometry="$(psql --no-password --dbname=postgres -At -v ON_ERROR_STOP=1 -c "SELECT to_regtype('geometry') IS NOT NULL")"
@@ -519,40 +529,78 @@ jobs:
         env:
           CANDIDATE_ROOT: ${{ steps.worktree.outputs.root }}
         run: |
-          set -euo pipefail
-          [[ -n "${PGPASSWORD:-}" ]]
+          set +e
+          cleanup_status=0
+          bootstrap_marker="$RUNNER_TEMP/ayo-runtime-bootstrap-complete"
+          if [[ -z "${PGPASSWORD:-}" ]]; then
+            echo "Diagnostic PostgreSQL credential was unavailable during cleanup" >&2
+            cleanup_status=1
+          fi
           databases=(ayo_fixture_reproduction ayo_fixture_affected_nodes ayo_fixture_pg_inventory)
           for database in "${databases[@]}"; do
             psql --no-password --dbname=postgres -v ON_ERROR_STOP=1 -c \
-              "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$database' AND pid <> pg_backend_pid()" > /dev/null
-            dropdb --no-password --if-exists --host="$PGHOST" --port="$PGPORT" --username="$PGUSER" "$database"
+              "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$database' AND pid <> pg_backend_pid()" \
+              > /dev/null || cleanup_status=1
+            dropdb --no-password --if-exists --host="$PGHOST" --port="$PGPORT" \
+              --username="$PGUSER" "$database" || cleanup_status=1
           done
           if [[ -n "$CANDIDATE_ROOT" && -d "$CANDIDATE_ROOT" ]]; then
-            git worktree remove --force "$CANDIDATE_ROOT"
+            git worktree remove --force "$CANDIDATE_ROOT" || cleanup_status=1
           fi
-          git worktree prune
+          git worktree prune || cleanup_status=1
           remaining="$(psql --no-password --dbname=postgres -At -v ON_ERROR_STOP=1 -c \
-            "SELECT count(*) FROM pg_database WHERE datname IN ('ayo_fixture_reproduction','ayo_fixture_affected_nodes','ayo_fixture_pg_inventory')")"
-          [[ "$remaining" == "0" ]]
-          role_row="$(psql --no-password --dbname=postgres -At -F '|' -v ON_ERROR_STOP=1 -c \
-            "SELECT rolcanlogin,rolsuper,rolcreatedb,rolcreaterole,rolreplication,rolbypassrls,rolpassword IS NULL FROM pg_authid WHERE rolname='ayo_runtime'")"
-          [[ "$role_row" == "f|f|f|f|f|f|t" ]]
+            "SELECT count(*) FROM pg_database WHERE datname IN ('ayo_fixture_reproduction','ayo_fixture_affected_nodes','ayo_fixture_pg_inventory')")" \
+            || cleanup_status=1
+          if [[ "$remaining" != "0" ]]; then
+            echo "Diagnostic databases remained after cleanup" >&2
+            cleanup_status=1
+          fi
+          role_count="$(psql --no-password --dbname=postgres -At -v ON_ERROR_STOP=1 -c \
+            "SELECT count(*) FROM pg_roles WHERE rolname='ayo_runtime'")" || cleanup_status=1
+          role_state="not-bootstrapped"
+          if [[ -f "$bootstrap_marker" ]]; then
+            role_state="restrictive"
+            if [[ "$role_count" != "1" ]]; then
+              echo "Bootstrapped ayo_runtime role count drifted during cleanup" >&2
+              cleanup_status=1
+            else
+              role_row="$(psql --no-password --dbname=postgres -At -F '|' -v ON_ERROR_STOP=1 -c \
+                "SELECT rolcanlogin,rolsuper,rolcreatedb,rolcreaterole,rolreplication,rolbypassrls,rolpassword IS NULL FROM pg_authid WHERE rolname='ayo_runtime'")" \
+                || cleanup_status=1
+              if [[ "$role_row" != "f|f|f|f|f|f|t" ]]; then
+                echo "Bootstrapped ayo_runtime role attributes drifted during cleanup" >&2
+                cleanup_status=1
+              fi
+            fi
+          elif [[ "$role_count" != "0" ]]; then
+            echo "ayo_runtime existed without a successful bootstrap marker" >&2
+            cleanup_status=1
+          else
+            echo "Restricted ayo_runtime bootstrap was not reached"
+          fi
+          rm -f "$bootstrap_marker" || cleanup_status=1
           if [[ -n "$CANDIDATE_ROOT" ]]; then
-            [[ ! -e "$CANDIDATE_ROOT" ]]
-            ! git worktree list --porcelain | grep -F "$CANDIDATE_ROOT"
+            if [[ -e "$CANDIDATE_ROOT" ]] || git worktree list --porcelain | grep -Fq "$CANDIDATE_ROOT"; then
+              echo "Detached candidate worktree remained after cleanup" >&2
+              cleanup_status=1
+            fi
           fi
           mkdir -p diagnostic-artifacts
-          python - <<'PY'
-          import json
+          python - "$role_state" <<'PY'
+          import json, sys
           from pathlib import Path
           Path("diagnostic-artifacts/cleanup.json").write_text(
               json.dumps({
                   "diagnostic_databases_remaining": 0,
                   "candidate_worktrees_remaining": 0,
-                  "ayo_runtime_restrictive_after_diagnostics": True,
+                  "ayo_runtime_state": sys.argv[1],
                   "final_role_disposal": "GitHub Actions PostgreSQL service-container destruction",
               }, sort_keys=True, indent=2) + "\n", encoding="utf-8")
           PY
+          if [[ "$cleanup_status" -ne 0 ]]; then
+            echo "Diagnostic cleanup verification: FAIL" >&2
+            exit "$cleanup_status"
+          fi
           echo "Diagnostic database and worktree cleanup: PASS"
 
       - name: Upload bounded diagnostic evidence
