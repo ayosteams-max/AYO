@@ -263,6 +263,17 @@ def test_postgres_composed_http_exposes_exact_caller_contracts(
             ).scalar_one()
             == 1
         )
+        assert (
+            connection.execute(
+                select(func.count())
+                .select_from(commerce_order_outbox)
+                .where(
+                    commerce_order_outbox.c.order_id == ORDER,
+                    commerce_order_outbox.c.event_type == "commerce.custody.activated",
+                )
+            ).scalar_one()
+            == 1
+        )
 
 
 @pytest.mark.usefixtures("api_contract_state")
@@ -346,7 +357,7 @@ def test_custody_activation_failure_rolls_back_merchant_acknowledgement(
                     commerce_order_outbox.c.event_type == "commerce.custody.activated",
                 )
             ).scalar_one()
-            == 1
+            == 0
         )
 
 
