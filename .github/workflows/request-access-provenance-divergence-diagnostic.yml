@@ -1,0 +1,465 @@
+name: Request access provenance divergence diagnostic
+
+on:
+  push:
+    branches: [agent/request-access-provenance-divergence-diagnostic]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose-divergence:
+    if: >-
+      github.event_name == 'push' ||
+      (github.event_name == 'pull_request' &&
+       github.head_ref == 'agent/request-access-provenance-divergence-diagnostic')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgis/postgis:17-3.5
+        env:
+          POSTGRES_DB: postgres
+          POSTGRES_USER: ayo_test
+          POSTGRES_PASSWORD: ${{ secrets.AYO_CI_POSTGRES_PASSWORD }}
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U ayo_test -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: "5432"
+      PGUSER: ayo_test
+      PGDATABASE: postgres
+      PGCONNECT_TIMEOUT: "5"
+      PGPASSWORD: ${{ secrets.AYO_CI_POSTGRES_PASSWORD }}
+      AUTHORITY_BASE: 3891ad9bed216611da740c289e0f955eccd49990
+      AUTHORITY_BRANCH: agent/request-access-provenance-divergence-diagnostic
+      AUTHORITY_PATH: .github/workflows/request-access-provenance-divergence-diagnostic.yml
+      CANDIDATE_HEAD: cd642778eacb9306339a1fa0c68db6169340d353
+      CANDIDATE_TREE: 4e3f3da673fa27fd74a267a051a72cba735e83fd
+      MAIN_TREE: fc8d6af32a6e3787b88b9f1a99254f0d029ce569
+      TARGET_NODE: tests/integration/test_request_access_provenance.py::test_capability_optimistic_concurrency_and_failed_record_rollback
+      PREDECESSOR_NODE: tests/integration/test_request_access_provenance.py::test_provenance_and_continuity_are_database_immutable
+      EXPECTED_CANDIDATE_COUNT: "196"
+      EXPECTED_CANDIDATE_FINGERPRINT: e2891e7d4b27d3ab67a167b658942b4403a7e24135db730cd22a69dc84e5520f
+
+    steps:
+      - name: Check out immutable forensic authority
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+      - name: Classify exact one-commit forensic authority
+        id: authority
+        shell: bash
+        env:
+          RESOLVED_HEAD: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          EVENT_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
+          EVENT_HEAD_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || '' }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REPOSITORY" == "ayosteams-max/AYO" ]]
+          [[ "$(git rev-parse HEAD)" == "$RESOLVED_HEAD" ]]
+          [[ "$(git rev-parse "$RESOLVED_HEAD^")" == "$AUTHORITY_BASE" ]]
+          mapfile -t commits < <(git rev-list --reverse "$AUTHORITY_BASE..$RESOLVED_HEAD")
+          [[ "${#commits[@]}" == "1" && "${commits[0]}" == "$RESOLVED_HEAD" ]]
+          [[ "$(git merge-base "$AUTHORITY_BASE" "$RESOLVED_HEAD")" == "$AUTHORITY_BASE" ]]
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            [[ "$EVENT_BASE" == "$AUTHORITY_BASE" ]]
+            [[ "$EVENT_HEAD_REF" == "$AUTHORITY_BRANCH" ]]
+            [[ "$GITHUB_BASE_REF" == "main" ]]
+          elif [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            [[ "$GITHUB_REF" == "refs/heads/$AUTHORITY_BRANCH" ]]
+          else
+            exit 1
+          fi
+          mapfile -t changes < <(git diff --name-status "$AUTHORITY_BASE" "$RESOLVED_HEAD")
+          [[ "${#changes[@]}" == "1" && "${changes[0]}" == $'A\t'"$AUTHORITY_PATH" ]]
+          git diff --quiet "$AUTHORITY_BASE" "$RESOLVED_HEAD" -- BACKEND tests database AYO-Mobile pyproject.toml uv.lock .secrets.baseline
+          mkdir -p forensic-artifacts
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          Path("forensic-artifacts/authority.json").write_text(json.dumps({
+              "base": os.environ["AUTHORITY_BASE"], "head": os.environ["RESOLVED_HEAD"],
+              "classification": "one-commit-request-access-forensic-authority",
+          }, sort_keys=True, separators=(",", ":")) + "\n")
+          PY
+          echo "classification=trusted-forensic-authority" >> "$GITHUB_OUTPUT"
+
+      - name: Bind immutable candidate and main before execution
+        if: steps.authority.outputs.classification == 'trusted-forensic-authority'
+        id: subjects
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "$CANDIDATE_HEAD" "$AUTHORITY_BASE"
+          [[ "$(git show -s --format=%T "$CANDIDATE_HEAD")" == "$CANDIDATE_TREE" ]]
+          [[ "$(git show -s --format=%T "$AUTHORITY_BASE")" == "$MAIN_TREE" ]]
+          [[ "$(git rev-parse "$CANDIDATE_HEAD^")" == "a18c68172ec7e998f6f01d4e610d3b52eab017cc" ]]
+          git diff --quiet "$AUTHORITY_BASE" "$CANDIDATE_HEAD" -- \
+            tests/integration/test_request_access_provenance.py tests/integration/conftest.py tests/conftest.py
+          mapfile -t paths < <(git diff --name-status "$AUTHORITY_BASE" "$CANDIDATE_HEAD")
+          expected=(
+            $'M\tBACKEND/routes/courier_pickup.py'
+            $'A\ttests/integration/test_courier_pickup_api_contract.py'
+            $'M\ttests/integration/test_courier_pickup_idempotency.py'
+            $'A\ttests/test_courier_pickup_api_contract.py'
+          )
+          [[ "${paths[*]}" == "${expected[*]}" ]]
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          Path("forensic-artifacts/subjects.json").write_text(json.dumps({
+              "candidate": {"head": os.environ["CANDIDATE_HEAD"], "tree": os.environ["CANDIDATE_TREE"]},
+              "main": {"head": os.environ["AUTHORITY_BASE"], "tree": os.environ["MAIN_TREE"]},
+              "target_and_fixtures_byte_identical": True,
+              "candidate_changed_paths": [
+                  "BACKEND/routes/courier_pickup.py",
+                  "tests/integration/test_courier_pickup_api_contract.py",
+                  "tests/integration/test_courier_pickup_idempotency.py",
+                  "tests/test_courier_pickup_api_contract.py",
+              ],
+          }, sort_keys=True, separators=(",", ":")) + "\n")
+          PY
+          echo "bound=true" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Python
+        if: steps.subjects.outputs.bound == 'true'
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version-file: .python-version
+
+      - name: Install pinned uv and PostgreSQL 17 client
+        if: steps.subjects.outputs.bound == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install "uv==0.11.28"
+          python - <<'PY'
+          import importlib.metadata
+          assert importlib.metadata.version("uv") == "0.11.28"
+          print("verified pinned uv package version")
+          PY
+          uv --version
+          sudo install -d /usr/share/postgresql-common/pgdg
+          curl --fail --show-error --silent https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            | sudo tee /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc > /dev/null
+          . /etc/os-release
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client-17
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+
+      - name: Verify infrastructure and bootstrap restrictive runtime role
+        if: steps.subjects.outputs.bound == 'true'
+        id: infrastructure
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -n "${PGPASSWORD:-}" ]]
+          psql --no-password --dbname=postgres -v ON_ERROR_STOP=1 -c "SELECT 1" > /dev/null
+          count="$(psql --no-password --dbname=postgres -At -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM pg_roles WHERE rolname='ayo_runtime'")"
+          if [[ "$count" == "0" ]]; then
+            psql --no-password --dbname=postgres -v ON_ERROR_STOP=1 -c \
+              "CREATE ROLE ayo_runtime NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS" > /dev/null
+          fi
+          role="$(psql --no-password --dbname=postgres -At -F '|' -v ON_ERROR_STOP=1 -c \
+            "SELECT rolcanlogin,rolsuper,rolcreatedb,rolcreaterole,rolreplication,rolbypassrls,rolpassword IS NULL FROM pg_authid WHERE rolname='ayo_runtime'")"
+          [[ "$role" == "f|f|f|f|f|f|t" ]]
+          printf restrictive > "$RUNNER_TEMP/request-access-role-marker"
+          pg="$(psql --no-password --dbname=postgres -At -v ON_ERROR_STOP=1 -c "SHOW server_version")"
+          postgis="$(psql --no-password --dbname=postgres -At -v ON_ERROR_STOP=1 -c "SELECT postgis_lib_version()")"
+          [[ "$pg" == 17.* && "$postgis" == "3.5.2" ]]
+          python - "$pg" "$postgis" <<'PY'
+          import json, sys
+          from pathlib import Path
+          Path("forensic-artifacts/infrastructure.json").write_text(json.dumps({
+              "postgresql": sys.argv[1], "postgis": sys.argv[2], "geometry": True,
+              "ayo_runtime": "restrictive-NOLOGIN-no-password",
+          }, sort_keys=True, separators=(",", ":")) + "\n")
+          PY
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+
+      - name: Create and prepare immutable subject worktrees
+        if: steps.infrastructure.outputs.ready == 'true'
+        id: worktrees
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="$RUNNER_TEMP/request-access-candidate"
+          main="$RUNNER_TEMP/request-access-main"
+          git worktree add --detach "$candidate" "$CANDIDATE_HEAD"
+          git worktree add --detach "$main" "$AUTHORITY_BASE"
+          [[ "$(git -C "$candidate" show -s --format=%T HEAD)" == "$CANDIDATE_TREE" ]]
+          [[ "$(git -C "$main" show -s --format=%T HEAD)" == "$MAIN_TREE" ]]
+          for root in "$candidate" "$main"; do
+            cd "$root"
+            uv sync --locked --all-groups
+            PYTHONPATH="$root" uv run --locked python -c "import BACKEND, alembic; print('immutable imports verified')"
+            [[ -z "$(git status --porcelain)" ]]
+          done
+          echo "candidate=$candidate" >> "$GITHUB_OUTPUT"
+          echo "main=$main" >> "$GITHUB_OUTPUT"
+
+      - name: Run equal-context forensic matrix
+        if: steps.infrastructure.outputs.ready == 'true'
+        id: matrix
+        shell: bash
+        env:
+          CANDIDATE_ROOT: ${{ steps.worktrees.outputs.candidate }}
+          MAIN_ROOT: ${{ steps.worktrees.outputs.main }}
+        run: |
+          set -euo pipefail
+          encoded="$(python -c 'import os,urllib.parse; print(urllib.parse.quote(os.environ["PGPASSWORD"],safe=""))')"
+          echo "::add-mask::$encoded"
+          mkdir -p forensic-artifacts
+          databases=()
+
+          cleanup() {
+            status=$?
+            set +e
+            cd "$GITHUB_WORKSPACE"
+            for db in "${databases[@]}"; do
+              psql --no-password --dbname=postgres -v ON_ERROR_STOP=1 -c \
+                "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='$db' AND pid<>pg_backend_pid()" > /dev/null
+              dropdb --no-password --if-exists "$db"
+            done
+            [[ ! -d "$CANDIDATE_ROOT" ]] || git worktree remove --force "$CANDIDATE_ROOT"
+            [[ ! -d "$MAIN_ROOT" ]] || git worktree remove --force "$MAIN_ROOT"
+            exit "$status"
+          }
+          trap cleanup EXIT
+
+          cat > "$RUNNER_TEMP/parse-result.py" <<'PY'
+          import hashlib, json, re, sys
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+          import psycopg.errors
+          junit, target, output = sys.argv[1:]
+          cases = ET.parse(junit).getroot().findall(".//testcase")
+          case = next((case for case in cases if case.get("name") == target.rsplit("::",1)[-1]), None)
+          if case is None:
+              result = {"outcome":"not-collected"}
+          else:
+              failure,error,skip=case.find("failure"),case.find("error"),case.find("skipped")
+              item=error if error is not None else failure
+              result={"outcome":"skipped" if skip is not None else "error" if error is not None else "failed" if failure is not None else "passed"}
+              if item is not None:
+                  text=(item.get("message") or "")+"\n"+(item.text or "")
+                  specific=re.findall(r"psycopg\.errors\.([A-Za-z0-9_]+)",text)
+                  exc=specific[-1] if specific else "ProgrammingError" if "ProgrammingError" in text else "UnclassifiedException"
+                  sqlstate=getattr(getattr(psycopg.errors,exc,None),"sqlstate",None)
+                  function=re.search(r"PL/pgSQL function ([A-Za-z_][A-Za-z0-9_.]*)",text)
+                  operation=re.search(r"\[SQL: *([A-Z]+)",text)
+                  frames=[]
+                  for path,line in re.findall(r"((?:BACKEND|tests|database)/[^:\n]+\.py):(\d+)",text):
+                      frame=f"{path}:{line}"
+                      if frame not in frames: frames.append(frame)
+                  payload={
+                      "exception":exc,"fixture":"clean_postgres_tables","function":function.group(1) if function else None,
+                      "message":"request access evidence is append-only" if "request access evidence is append-only" in text else "sanitized-unclassified-database-error",
+                      "operation":operation.group(1) if operation else None,"phase":"setup" if error is not None else "call",
+                      "sqlstate":sqlstate,"table":"ayo.request_access_interaction_provenance" if "request_access_interaction_provenance" in text else None,
+                      "top_repository_frames":frames[:3],
+                  }
+                  result.update(payload)
+                  result["signature"]=hashlib.sha256(json.dumps(payload,sort_keys=True,separators=(",",":")).encode()).hexdigest()
+          Path(output).write_text(json.dumps(result,sort_keys=True,separators=(",",":"))+"\n")
+          PY
+
+          new_db() {
+            local db="$1" root="$2"
+            databases+=("$db")
+            dropdb --no-password --if-exists "$db"
+            createdb --no-password "$db"
+            psql --no-password --dbname="$db" -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS postgis" > /dev/null
+            export AYO_TEST_DATABASE_URL="postgresql+psycopg://$PGUSER:$encoded@$PGHOST:$PGPORT/$db"
+            export AYO_DATABASE_URL="$AYO_TEST_DATABASE_URL" AYO_DATABASE_SSL_MODE=disable
+            cd "$root"
+            PYTHONPATH="$root" uv run --locked python database/migrate.py
+            PYTHONPATH="$root" uv run --locked python - <<'PY'
+          from BACKEND.persistence.config import DatabaseSettings
+          from BACKEND.persistence.engine import create_postgres_engine
+          from BACKEND.persistence.migrations import SchemaVersionReadinessChecker
+          engine=create_postgres_engine(DatabaseSettings(application_name="request-access-forensic"))
+          value=SchemaVersionReadinessChecker(engine).check(); engine.dispose()
+          assert value.ready and value.current_revision=="20260805_0057"
+          PY
+          }
+
+          run_nodes() {
+            local label="$1" root="$2" db="$3"; shift 3
+            new_db "$db" "$root"
+            cd "$root"
+            set +e
+            PYTHONPATH="$root" uv run --locked pytest --no-cov -q --junitxml="$RUNNER_TEMP/$label.xml" "$@"
+            set -e
+            PYTHONPATH="$root" uv run --locked python "$RUNNER_TEMP/parse-result.py" "$RUNNER_TEMP/$label.xml" "$TARGET_NODE" "$GITHUB_WORKSPACE/forensic-artifacts/$label.json"
+          }
+
+          for subject in candidate main; do
+            root_var="${subject^^}_ROOT"; root="${!root_var}"
+            for attempt in 1 2 3; do
+              run_nodes "isolated-$subject-$attempt" "$root" "ra_iso_${subject}_${attempt}" "$TARGET_NODE"
+            done
+            run_nodes "file-$subject" "$root" "ra_file_${subject}" tests/integration/test_request_access_provenance.py
+            new_db "ra_full_${subject}" "$root"
+            cd "$root"
+            PYTHONPATH="$root" uv run --locked pytest --no-cov -q --collect-only -m "integration and not migration" > "$RUNNER_TEMP/full-$subject-nodes.txt"
+            mapfile -t nodes < <(grep '::' "$RUNNER_TEMP/full-$subject-nodes.txt")
+            set +e
+            PYTHONPATH="$root" uv run --locked pytest --no-cov -q --junitxml="$RUNNER_TEMP/full-$subject.xml" "${nodes[@]}"
+            set -e
+            PYTHONPATH="$root" uv run --locked python "$RUNNER_TEMP/parse-result.py" "$RUNNER_TEMP/full-$subject.xml" "$TARGET_NODE" "$GITHUB_WORKSPACE/forensic-artifacts/full-$subject-target.json"
+            SUBJECT="$subject" PYTHONPATH="$root" uv run --locked python - <<'PY'
+          import hashlib,json,os
+          from pathlib import Path
+          subject=os.environ["SUBJECT"]
+          nodes=[line for line in (Path(os.environ["RUNNER_TEMP"])/f"full-{subject}-nodes.txt").read_text().splitlines() if "::" in line]
+          target=os.environ["TARGET_NODE"]
+          fingerprint=hashlib.sha256("\n".join(sorted(nodes)).encode()).hexdigest()
+          payload={"count":len(nodes),"fingerprint":fingerprint,"position":nodes.index(target)+1,"nodes":nodes}
+          if subject=="candidate" and (payload["count"]!=int(os.environ["EXPECTED_CANDIDATE_COUNT"]) or payload["fingerprint"]!=os.environ["EXPECTED_CANDIDATE_FINGERPRINT"]): raise SystemExit("candidate inventory drift")
+          Path(os.environ["GITHUB_WORKSPACE"],"forensic-artifacts",f"inventory-{subject}.json").write_text(json.dumps(payload,sort_keys=True,separators=(",",":"))+"\n")
+          PY
+          done
+
+          # Ordered predecessor probes use fresh databases and identical lists on both subjects.
+          preceding_five=(
+            tests/integration/test_refund_foundation.py::test_increment10_refund_reject_is_terminal
+            tests/integration/test_request_access_provenance.py::test_accepted_provenance_audit_event_outbox_and_restart_persistence
+            tests/integration/test_request_access_provenance.py::test_interaction_retry_is_idempotent_and_conflicting_payload_is_rejected
+            tests/integration/test_request_access_provenance.py::test_explicit_cross_channel_continuity_is_hashed_and_target_bound
+            "$PREDECESSOR_NODE"
+          )
+          module_prefix=(
+            tests/integration/test_request_access_provenance.py::test_accepted_provenance_audit_event_outbox_and_restart_persistence
+            tests/integration/test_request_access_provenance.py::test_interaction_retry_is_idempotent_and_conflicting_payload_is_rejected
+            tests/integration/test_request_access_provenance.py::test_explicit_cross_channel_continuity_is_hashed_and_target_bound
+            "$PREDECESSOR_NODE"
+          )
+          for subject in candidate main; do
+            root_var="${subject^^}_ROOT"; root="${!root_var}"
+            run_nodes "pair-$subject" "$root" "ra_pair_${subject}" "$PREDECESSOR_NODE" "$TARGET_NODE"
+            run_nodes "five-$subject" "$root" "ra_five_${subject}" "${preceding_five[@]}" "$TARGET_NODE"
+            run_nodes "module-$subject" "$root" "ra_module_${subject}" "${module_prefix[@]}" "$TARGET_NODE"
+          done
+
+          # Process-isolation matrix on main, where the identical predecessor proves baseline behavior.
+          run_nodes "process-a-main" "$MAIN_ROOT" ra_process_a "$PREDECESSOR_NODE" "$TARGET_NODE"
+          new_db ra_process_b "$MAIN_ROOT"
+          cd "$MAIN_ROOT"
+          set +e
+          PYTHONPATH="$MAIN_ROOT" uv run --locked pytest --no-cov -q "$PREDECESSOR_NODE"
+          PYTHONPATH="$MAIN_ROOT" uv run --locked pytest --no-cov -q --junitxml="$RUNNER_TEMP/process-b-main.xml" "$TARGET_NODE"
+          set -e
+          PYTHONPATH="$MAIN_ROOT" uv run --locked python "$RUNNER_TEMP/parse-result.py" "$RUNNER_TEMP/process-b-main.xml" "$TARGET_NODE" "$GITHUB_WORKSPACE/forensic-artifacts/process-b-main.json"
+          run_nodes "process-c-main" "$MAIN_ROOT" ra_process_c "$TARGET_NODE"
+          run_nodes "process-d-main" "$MAIN_ROOT" ra_process_d "$TARGET_NODE"
+
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          root=Path("forensic-artifacts")
+          load=lambda name:json.loads((root/name).read_text())
+          candidate_iso=[load(f"isolated-candidate-{i}.json") for i in (1,2,3)]
+          main_iso=[load(f"isolated-main-{i}.json") for i in (1,2,3)]
+          cfull,mfull=load("full-candidate-target.json"),load("full-main-target.json")
+          cpair,mpair=load("pair-candidate.json"),load("pair-main.json")
+          if all(x["outcome"]=="passed" for x in candidate_iso+main_iso) and cfull["outcome"]=="error" and mfull["outcome"]=="error" and cfull.get("signature")==mfull.get("signature"):
+              classification="ORDER_DEPENDENT_BASELINE_DEBT"
+          elif cfull["outcome"]=="error" and mfull["outcome"]=="passed":
+              classification="TRUE_CANDIDATE_REGRESSION"
+          elif all(x["outcome"]=="passed" for x in candidate_iso) and cfull["outcome"]=="error" and mfull["outcome"]!="error":
+              classification="CANDIDATE_ORDER_INTERACTION"
+          else:
+              classification="NONDETERMINISTIC_OR_INFRASTRUCTURE"
+          evidence={
+              "classification":classification,"candidate_isolated":candidate_iso,"main_isolated":main_iso,
+              "candidate_file":load("file-candidate.json"),"main_file":load("file-main.json"),
+              "candidate_full":cfull,"main_full":mfull,"candidate_pair":cpair,"main_pair":mpair,
+              "candidate_five":load("five-candidate.json"),"main_five":load("five-main.json"),
+              "candidate_module":load("module-candidate.json"),"main_module":load("module-main.json"),
+              "process_isolation":{
+                  "same_process_same_database":load("process-a-main.json"),
+                  "new_process_same_database":load("process-b-main.json"),
+                  "new_process_new_database":load("process-c-main.json"),
+                  "clean_process_clean_database":load("process-d-main.json"),
+              },
+              "causality":{
+                  "target_and_fixtures_byte_identical":True,
+                  "minimal_predecessor":[os.environ["PREDECESSOR_NODE"]] if cpair["outcome"]=="error" and mpair["outcome"]=="error" else None,
+                  "candidate_changed_paths_have_no_direct_request_access_or_fixture_change":True,
+              },
+              "correction_recommendation":"separate baseline fixture cleanup correction; no PR 32 change" if classification=="ORDER_DEPENDENT_BASELINE_DEBT" else "CTO review required; no correction implemented",
+              "permanent_admission_granted":False,
+          }
+          root.joinpath("canonical-evidence.json").write_text(json.dumps(evidence,sort_keys=True,separators=(",",":"))+"\n")
+          PY
+          echo "complete=true" >> "$GITHUB_OUTPUT"
+
+      - name: Clean and verify databases, worktrees, and role
+        if: always()
+        shell: bash
+        env:
+          CANDIDATE_ROOT: ${{ steps.worktrees.outputs.candidate }}
+          MAIN_ROOT: ${{ steps.worktrees.outputs.main }}
+        run: |
+          set +e
+          status=0
+          mapfile -t dbs < <(psql --no-password --dbname=postgres -At -v ON_ERROR_STOP=1 -c "SELECT datname FROM pg_database WHERE starts_with(datname,'ra_')")
+          for db in "${dbs[@]}"; do
+            psql --no-password --dbname=postgres -v ON_ERROR_STOP=1 -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='$db' AND pid<>pg_backend_pid()" > /dev/null || status=1
+            dropdb --no-password --if-exists "$db" || status=1
+          done
+          for root in "$CANDIDATE_ROOT" "$MAIN_ROOT"; do
+            if [[ -n "$root" && -d "$root" ]]; then git worktree remove --force "$root" || status=1; fi
+          done
+          git worktree prune || status=1
+          remaining="$(psql --no-password --dbname=postgres -At -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM pg_database WHERE starts_with(datname,'ra_')")" || status=1
+          role="$(psql --no-password --dbname=postgres -At -F '|' -v ON_ERROR_STOP=1 -c "SELECT rolcanlogin,rolsuper,rolcreatedb,rolcreaterole,rolreplication,rolbypassrls,rolpassword IS NULL FROM pg_authid WHERE rolname='ayo_runtime'")" || status=1
+          [[ "$remaining" == "0" && "$role" == "f|f|f|f|f|f|t" ]] || status=1
+          rm -f "$RUNNER_TEMP/request-access-role-marker"
+          mkdir -p forensic-artifacts
+          printf '%s\n' '{"databases_remaining":0,"candidate_worktrees_remaining":0,"main_worktrees_remaining":0,"role":"restrictive","final_role_disposal":"service-container destruction"}' > forensic-artifacts/cleanup.json
+          exit "$status"
+
+      - name: Create and upload canonical evidence
+        if: always() && hashFiles('forensic-artifacts/*.json') != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          root=Path("forensic-artifacts")
+          files=sorted(path for path in root.glob("*.json") if path.name!="manifest.json")
+          root.joinpath("manifest.json").write_text(json.dumps({path.name:hashlib.sha256(path.read_bytes()).hexdigest() for path in files},sort_keys=True,separators=(",",":"))+"\n")
+          PY
+
+      - name: Upload bounded forensic evidence
+        if: always() && hashFiles('forensic-artifacts/*.json') != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: request-access-provenance-forensic-${{ github.event_name }}
+          path: forensic-artifacts/*.json
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Stop fail-closed after forensic evidence
+        if: steps.matrix.outputs.complete == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -c "import json; print('Forensic classification:',json.load(open('forensic-artifacts/canonical-evidence.json'))['classification'])"
+          echo "No correction or permanent admission is authorized."
+          exit 1
