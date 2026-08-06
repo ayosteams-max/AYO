@@ -36,6 +36,10 @@ from BACKEND.identity.runtime import AuthenticationRuntime
 from BACKEND.merchant.application import MerchantApplication
 from BACKEND.merchant_orders.application import MerchantOrderApplication
 from BACKEND.merchant_preparation.application import MerchantPreparationApplication
+from BACKEND.mobile_context.application import (
+    MobileContextApplication,
+    MobileContextFeatures,
+)
 from BACKEND.observability import MetricsSink, NullMetricsSink
 from BACKEND.ordering.application import OrderingApplication
 from BACKEND.persistence.config import DatabaseSettings
@@ -60,6 +64,7 @@ from BACKEND.routes.field_performance import create_field_performance_router
 from BACKEND.routes.merchant import create_merchant_router
 from BACKEND.routes.merchant_orders import create_merchant_order_router
 from BACKEND.routes.merchant_preparation import create_merchant_preparation_router
+from BACKEND.routes.mobile_context import create_mobile_context_router
 from BACKEND.routes.mobile_quotes import create_mobile_quote_router
 from BACKEND.routes.ordering import (
     create_ordering_router,
@@ -87,6 +92,12 @@ class DispatchActivation:
 @dataclass(frozen=True, slots=True)
 class AuthenticationActivation:
     runtime: AuthenticationRuntime
+    subject_resolver: TrustedSubjectResolver
+
+
+@dataclass(frozen=True, slots=True)
+class MobileContextActivation:
+    application: MobileContextApplication
     subject_resolver: TrustedSubjectResolver
 
 
@@ -224,6 +235,7 @@ def create_app(
     configuration: Settings | None = None,
     *,
     authentication: AuthenticationActivation | None = None,
+    mobile_context: MobileContextActivation | None = None,
     dispatch: DispatchActivation | None = None,
     scheduled_dispatch: ScheduledDispatchActivation | None = None,
     active_ride: ActiveRideActivation | None = None,
@@ -291,6 +303,26 @@ def create_app(
         application.add_middleware(
             RequestSizeLimitMiddleware,
             maximum_bytes=configured.AUTHENTICATION_MAX_REQUEST_BYTES,
+        )
+    if configured.MOBILE_ACTOR_CONTEXT_ENABLED:
+        if mobile_context is None:
+            raise RuntimeError(
+                "Enabled mobile actor context requires explicit secure activation dependencies"
+            )
+        application.include_router(
+            create_mobile_context_router(
+                mobile_context.application,
+                mobile_context.subject_resolver,
+                features=MobileContextFeatures(
+                    personal_enabled=configured.RIDER_BOOKING_ENABLED,
+                    merchant_enabled=configured.MERCHANT_PLATFORM_ENABLED,
+                    courier_dispatch_enabled=(
+                        configured.COURIER_DISPATCH_PLATFORM_ENABLED
+                    ),
+                    courier_pickup_enabled=configured.COURIER_PICKUP_PLATFORM_ENABLED,
+                ),
+            ),
+            prefix=configured.API_PREFIX,
         )
     if configured.DISPATCH_ENABLED:
         if dispatch is None:

@@ -373,7 +373,7 @@ def test_canonical_compatibility_upgrades_from_previous_revision(
     } <= after
     readiness = SchemaVersionReadinessChecker(postgres_engine).check()
     assert readiness.ready
-    assert readiness.current_revision == "20260805_0057"
+    assert readiness.current_revision == "20260806_0058"
     assert readiness.current_revision == expected_schema_revision()
 
 
@@ -1558,7 +1558,7 @@ def test_courier_pickup_idempotency_v1_migrates_and_refuses_evidence_loss(
         assert SchemaVersionReadinessChecker(
             postgres_engine
         ).check().current_revision == ("20260805_0057")
-        assert expected_schema_revision() == "20260805_0057"
+        assert expected_schema_revision() == "20260806_0058"
         assert expected_schema_revision() != "20260724_0056"
     with pytest.raises(
         RuntimeError,
@@ -1583,9 +1583,10 @@ def test_courier_pickup_idempotency_v1_migrates_and_refuses_evidence_loss(
         )
     with pytest.raises(Exception, match="committed Courier Pickup V1 replay evidence"):
         _run_governed_downgrade(runner, postgres_engine, "20260724_0056")
+    runner.upgrade()
     readiness = SchemaVersionReadinessChecker(postgres_engine).check()
     assert readiness.ready
-    assert readiness.current_revision == "20260805_0057"
+    assert readiness.current_revision == "20260806_0058"
     with postgres_engine.connect() as connection:
         preserved = connection.execute(
             text(

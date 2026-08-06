@@ -5552,6 +5552,20 @@ Index(
     commerce_courier_pickups.c.state,
     commerce_courier_pickups.c.updated_at,
 )
+Index(
+    "ix_courier_pickup_current_courier",
+    commerce_courier_pickups.c.assigned_courier_identity_id,
+    commerce_courier_pickups.c.updated_at.desc(),
+    commerce_courier_pickups.c.pickup_id,
+    postgresql_where=commerce_courier_pickups.c.state.in_(
+        (
+            "courier_assigned",
+            "travelling_to_merchant",
+            "arrived_at_merchant",
+            "waiting_for_pickup",
+        )
+    ),
+)
 commerce_courier_pickup_events = Table(
     "commerce_courier_pickup_events",
     metadata,

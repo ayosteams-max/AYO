@@ -111,7 +111,10 @@ class PostgresMerchantRepository:
         rows = self._connection.execute(
             select(merchant_profiles)
             .where(merchant_profiles.c.owner_identity_id == owner_id)
-            .order_by(merchant_profiles.c.created_at)
+            .order_by(
+                func.lower(merchant_profiles.c.display_name),
+                merchant_profiles.c.merchant_id,
+            )
             .limit(limit)
         ).mappings()
         return tuple(_model(MerchantProfile, row) for row in rows)
