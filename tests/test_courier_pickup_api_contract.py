@@ -13,7 +13,7 @@ from BACKEND.authorization.enforcement import AuthorizationEnforcer
 from BACKEND.config.settings import Settings
 from BACKEND.courier_pickup.application import CourierPickupApplication
 from BACKEND.courier_pickup.engine import CourierPickupConflict
-from BACKEND.courier_pickup.models import CourierPickupView
+from BACKEND.courier_pickup.models import CourierPickupState, CourierPickupView
 from BACKEND.custody.application import CustodyApplication
 from BACKEND.identity.models import IdentityType
 from BACKEND.main import (
@@ -47,6 +47,7 @@ COURIER_FIELDS = {
     "terminal_reason",
     "updated_at",
 }
+COURIER_STATUS_FIELDS = COURIER_FIELDS | {"presentation_action"}
 MERCHANT_FIELDS = COURIER_FIELDS - {"assigned_at", "travelling_at"}
 PROHIBITED_FIELDS = {
     "merchant_id",
@@ -158,7 +159,7 @@ def _client(
     ("model", "fields"),
     [
         (CourierPickupCourierCommandResult, COURIER_FIELDS),
-        (CourierPickupCourierStatus, COURIER_FIELDS),
+        (CourierPickupCourierStatus, COURIER_STATUS_FIELDS),
         (CourierPickupMerchantCommandResult, MERCHANT_FIELDS),
         (CourierPickupMerchantStatus, MERCHANT_FIELDS),
     ],
@@ -187,7 +188,7 @@ def test_distinct_pure_mappers_emit_only_exact_caller_fields() -> None:
     )
     assert [set(result.model_dump()) for result in results] == [
         COURIER_FIELDS,
-        COURIER_FIELDS,
+        COURIER_STATUS_FIELDS,
         MERCHANT_FIELDS,
         MERCHANT_FIELDS,
     ]
@@ -195,6 +196,27 @@ def test_distinct_pure_mappers_emit_only_exact_caller_fields() -> None:
     assert view.model_dump_json() == before
     serialized = " ".join(result.model_dump_json() for result in results)
     assert all(field not in serialized for field in PROHIBITED_FIELDS)
+
+
+@pytest.mark.parametrize(
+    ("state", "expected"),
+    [
+        ("courier_assigned", "start_travel"),
+        ("travelling_to_merchant", "none"),
+        ("arrived_at_merchant", "none"),
+        ("waiting_for_pickup", "none"),
+        ("pickup_attempt_ended_before_custody", "none"),
+    ],
+)
+def test_courier_status_derives_only_bounded_presentation_action(
+    state, expected
+) -> None:
+    view, _, _ = _view()
+    pickup = view.pickup.model_copy(update={"state": CourierPickupState(state)})
+    assert (
+        _courier_status(view.model_copy(update={"pickup": pickup})).presentation_action
+        == expected
+    )
 
 
 def test_first_and_replayed_internal_views_map_to_identical_public_json() -> None:
@@ -228,7 +250,7 @@ def test_routes_and_openapi_bind_only_the_four_closed_response_models() -> None:
     schemas = cast(FastAPI, client.app).openapi()["components"]["schemas"]
     expected = {
         "CourierPickupCourierCommandResult": COURIER_FIELDS,
-        "CourierPickupCourierStatus": COURIER_FIELDS,
+        "CourierPickupCourierStatus": COURIER_STATUS_FIELDS,
         "CourierPickupMerchantCommandResult": MERCHANT_FIELDS,
         "CourierPickupMerchantStatus": MERCHANT_FIELDS,
     }
@@ -269,7 +291,7 @@ def test_composed_http_returns_exact_public_models_and_error_envelopes() -> None
     assert [set(response.json()) for response in responses] == [
         MERCHANT_FIELDS,
         MERCHANT_FIELDS,
-        COURIER_FIELDS,
+        COURIER_STATUS_FIELDS,
         COURIER_FIELDS,
     ]
     unauthenticated = _client(_RouteApplication(view), None).get(

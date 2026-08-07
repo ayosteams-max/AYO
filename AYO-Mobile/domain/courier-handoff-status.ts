@@ -1,10 +1,11 @@
 export type CourierPickupState = 'courier_assigned' | 'travelling_to_merchant' | 'arrived_at_merchant' | 'waiting_for_pickup' | 'pickup_attempt_ended_before_custody';
+export type CourierPickupPresentationAction = 'start_travel' | 'none';
 export type CustodyState = 'waiting_for_pickup' | 'order_sealed' | 'pickup_verified' | 'merchant_released' | 'courier_custody_accepted';
 export type HandoffStatusCategory = 'pickup_current' | 'travelling' | 'at_merchant' | 'waiting_for_merchant' | 'ready_for_handoff' | 'handoff_in_progress' | 'pickup_confirmed' | 'pickup_ended';
 
-export type CourierPickupSnapshot = Readonly<{ pickupId: string; state: CourierPickupState; version: number; updatedAt: string }>;
+export type CourierPickupSnapshot = Readonly<{ pickupId: string; state: CourierPickupState; version: number; updatedAt: string; presentationAction: CourierPickupPresentationAction }>;
 export type CourierCustodySnapshot = Readonly<{ state: CustodyState; version: number; requiredAction: 'verify_pickup' | 'accept_custody' | 'wait_for_merchant' | 'handoff_complete' | 'none'; waitingFor?: 'merchant' | 'courier'; recovery?: 'verification_expired' | 'temporarily_unavailable' }>;
-export type CourierHandoffSnapshot = Readonly<{ status: HandoffStatusCategory; pickupVersion: number; custodyVersion?: number; updatedAt: string }>;
+export type CourierHandoffSnapshot = Readonly<{ status: HandoffStatusCategory; pickupVersion: number; custodyVersion?: number; updatedAt: string; presentationAction: CourierPickupPresentationAction }>;
 
 export class CourierHandoffContractError extends Error { constructor() { super('malformed_courier_handoff_status'); } }
 export class CourierHandoffConflictError extends Error { constructor() { super('conflicting_courier_handoff_status'); } }
@@ -25,13 +26,15 @@ function nullableInstant(value: unknown) { return value === null ? undefined : i
 
 const pickupStates = new Set<CourierPickupState>(['courier_assigned', 'travelling_to_merchant', 'arrived_at_merchant', 'waiting_for_pickup', 'pickup_attempt_ended_before_custody']);
 export function parseCourierPickup(value: unknown): CourierPickupSnapshot {
-  const item = object(value, ['pickup_id', 'state', 'version', 'assigned_at', 'travelling_at', 'arrived_at', 'merchant_acknowledged_at', 'waiting_duration_seconds', 'terminal_reason', 'updated_at']);
+  const item = object(value, ['pickup_id', 'state', 'version', 'assigned_at', 'travelling_at', 'arrived_at', 'merchant_acknowledged_at', 'waiting_duration_seconds', 'terminal_reason', 'updated_at', 'presentation_action']);
   if (typeof item.state !== 'string' || !pickupStates.has(item.state as CourierPickupState)) throw new CourierHandoffContractError();
   const assignedAt = instant(item.assigned_at); const travellingAt = nullableInstant(item.travelling_at); const arrivedAt = nullableInstant(item.arrived_at); const acknowledgedAt = nullableInstant(item.merchant_acknowledged_at); const updatedAt = instant(item.updated_at);
   if (Date.parse(updatedAt) < Date.parse(assignedAt) || (travellingAt && Date.parse(travellingAt) < Date.parse(assignedAt)) || (arrivedAt && (!travellingAt || Date.parse(arrivedAt) < Date.parse(travellingAt))) || (acknowledgedAt && (!arrivedAt || Date.parse(acknowledgedAt) < Date.parse(arrivedAt)))) throw new CourierHandoffContractError();
   if (item.waiting_duration_seconds !== null && (!Number.isSafeInteger(item.waiting_duration_seconds) || (item.waiting_duration_seconds as number) < 0)) throw new CourierHandoffContractError();
   if (item.terminal_reason !== null && typeof item.terminal_reason !== 'string') throw new CourierHandoffContractError();
   const state = item.state as CourierPickupState;
+  if (item.presentation_action !== 'start_travel' && item.presentation_action !== 'none') throw new CourierHandoffContractError();
+  if ((state === 'courier_assigned') !== (item.presentation_action === 'start_travel')) throw new CourierHandoffContractError();
   if (
     (state === 'courier_assigned' && (travellingAt || arrivedAt || acknowledgedAt)) ||
     (state === 'travelling_to_merchant' && (!travellingAt || arrivedAt || acknowledgedAt)) ||
@@ -39,7 +42,7 @@ export function parseCourierPickup(value: unknown): CourierPickupSnapshot {
     (state === 'waiting_for_pickup' && (!travellingAt || !arrivedAt || !acknowledgedAt)) ||
     (state === 'pickup_attempt_ended_before_custody' && item.terminal_reason === null)
   ) throw new CourierHandoffContractError();
-  return Object.freeze({ pickupId: identifier(item.pickup_id), state, version: version(item.version), updatedAt });
+  return Object.freeze({ pickupId: identifier(item.pickup_id), state, version: version(item.version), updatedAt, presentationAction: item.presentation_action });
 }
 
 const custodyStates = new Set<CustodyState>(['waiting_for_pickup', 'order_sealed', 'pickup_verified', 'merchant_released', 'courier_custody_accepted']);
@@ -77,14 +80,14 @@ export function parseCourierCustodyRead(value: unknown): CourierCustodySnapshot 
 export function projectCourierHandoff(pickup: CourierPickupSnapshot, custody?: CourierCustodySnapshot): CourierHandoffSnapshot {
   if (pickup.state === 'pickup_attempt_ended_before_custody') {
     if (custody) throw new CourierHandoffConflictError();
-    return Object.freeze({ status: 'pickup_ended', pickupVersion: pickup.version, updatedAt: pickup.updatedAt });
+    return Object.freeze({ status: 'pickup_ended', pickupVersion: pickup.version, updatedAt: pickup.updatedAt, presentationAction: pickup.presentationAction });
   }
   if (pickup.state !== 'waiting_for_pickup') {
     if (custody) throw new CourierHandoffConflictError();
     const status = pickup.state === 'courier_assigned' ? 'pickup_current' : pickup.state === 'travelling_to_merchant' ? 'travelling' : 'at_merchant';
-    return Object.freeze({ status, pickupVersion: pickup.version, updatedAt: pickup.updatedAt });
+    return Object.freeze({ status, pickupVersion: pickup.version, updatedAt: pickup.updatedAt, presentationAction: pickup.presentationAction });
   }
   if (!custody) throw new CourierHandoffConflictError();
   const status: HandoffStatusCategory = custody.state === 'waiting_for_pickup' ? 'waiting_for_merchant' : custody.state === 'order_sealed' ? 'ready_for_handoff' : custody.state === 'courier_custody_accepted' ? 'pickup_confirmed' : 'handoff_in_progress';
-  return Object.freeze({ status, pickupVersion: pickup.version, custodyVersion: custody.version, updatedAt: pickup.updatedAt });
+  return Object.freeze({ status, pickupVersion: pickup.version, custodyVersion: custody.version, updatedAt: pickup.updatedAt, presentationAction: pickup.presentationAction });
 }

@@ -95,6 +95,7 @@ COURIER_FIELDS = {
     "terminal_reason",
     "updated_at",
 }
+COURIER_STATUS_FIELDS = COURIER_FIELDS | {"presentation_action"}
 MERCHANT_FIELDS = COURIER_FIELDS - {"assigned_at", "travelling_at"}
 CUSTODY_COMMON_FIELDS = {
     "custody_id",
@@ -393,6 +394,8 @@ def test_postgres_composed_http_exposes_exact_caller_contracts(
 ) -> None:
     courier = _client(postgres_composition, _subject())
     courier_status = courier.get(f"/api/mobile/courier-pickups/{PICKUP}")
+    assert courier_status.status_code == 200
+    assert courier_status.json()["presentation_action"] == "start_travel"
     before_no_custody = _effect_counts(postgres_engine)
     no_custody = courier.get(f"/api/mobile/courier-pickups/{PICKUP}/custody")
     assert no_custody.status_code == 200
@@ -417,7 +420,8 @@ def test_postgres_composed_http_exposes_exact_caller_contracts(
         headers={"Idempotency-Key": "postgres-merchant-contract-0001"},
         json={"expected_version": 3, "action": "acknowledge_arrival"},
     )
-    for response in (courier_status, courier_start, courier_arrive):
+    _assert_public(courier_status, COURIER_STATUS_FIELDS)
+    for response in (courier_start, courier_arrive):
         _assert_public(response, COURIER_FIELDS)
     for response in (merchant_status, merchant_command):
         _assert_public(response, MERCHANT_FIELDS)
@@ -497,6 +501,30 @@ def test_postgres_custody_read_distinguishes_absent_from_released_assignment(
     )
     assert released.status_code == 404
     assert released.json() == {"error": {"code": "custody_unavailable"}}
+    assert _effect_counts(postgres_engine) == before
+
+
+@pytest.mark.usefixtures("api_contract_state")
+@pytest.mark.parametrize("authority_loss", ["release", "replacement"])
+def test_postgres_pickup_presentation_action_disappears_with_canonical_authority(
+    postgres_engine,
+    postgres_composition,
+    authority_loss,
+) -> None:
+    current = _client(postgres_composition, _subject()).get(
+        f"/api/mobile/courier-pickups/{PICKUP}"
+    )
+    assert current.status_code == 200
+    assert current.json()["presentation_action"] == "start_travel"
+
+    _lose_dispatch_authority(postgres_composition, authority_loss)
+    before = _effect_counts(postgres_engine)
+    denied = _client(PostgresRepositoryComposition(postgres_engine), _subject()).get(
+        f"/api/mobile/courier-pickups/{PICKUP}"
+    )
+    assert denied.status_code == 404
+    assert denied.json() == {"error": {"code": "courier_pickup_unavailable"}}
+    assert "presentation_action" not in denied.text
     assert _effect_counts(postgres_engine) == before
 
 

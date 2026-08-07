@@ -42,7 +42,7 @@ const session: AuthenticatedSession = {
 const personal = { personal: { available: true }, merchants: [], courier: null };
 const merchant = { personal: null, merchants: [{ merchant_id: '33333333-3333-4333-8333-333333333333', display_name: 'AYO Market', availability: 'available' }], courier: null };
 const courier = { personal: null, merchants: [], courier: { pickup_id: '44444444-4444-4444-8444-444444444444', availability: 'current_pickup' } };
-const pickupStatus = { pickup_id: '44444444-4444-4444-8444-444444444444', state: 'waiting_for_pickup', version: 4, assigned_at: '2026-08-07T01:00:00Z', travelling_at: '2026-08-07T01:05:00Z', arrived_at: '2026-08-07T01:15:00Z', merchant_acknowledged_at: '2026-08-07T01:16:00Z', waiting_duration_seconds: 60, terminal_reason: null, updated_at: '2026-08-07T01:16:00Z' };
+const pickupStatus = { pickup_id: '44444444-4444-4444-8444-444444444444', state: 'waiting_for_pickup', version: 4, assigned_at: '2026-08-07T01:00:00Z', travelling_at: '2026-08-07T01:05:00Z', arrived_at: '2026-08-07T01:15:00Z', merchant_acknowledged_at: '2026-08-07T01:16:00Z', waiting_duration_seconds: 60, terminal_reason: null, updated_at: '2026-08-07T01:16:00Z', presentation_action: 'none' };
 const arrivedPickupStatus = { ...pickupStatus, state: 'arrived_at_merchant', merchant_acknowledged_at: null, waiting_duration_seconds: null, updated_at: '2026-08-07T01:15:00Z' };
 const custodyStatus = { state: 'order_sealed', version: 2, required_action: 'verify_pickup', waiting_for: 'courier', recovery: null, challenge_available: true, challenge_expires_at: '2026-08-07T01:30:00Z', supported_verification_methods: ['qr_code', 'barcode'] };
 
