@@ -8,8 +8,13 @@ import { useOperationalContext } from '@/contexts/operational-context';
 import type { OperationalArea } from '@/domain/mobile-context';
 import { operationalShellCopy } from '@/localization/operational-shell';
 import { CourierHandoffStatus } from '@/components/courier-handoff-status';
+import { CourierStartTravelCommandScopeProvider } from '@/contexts/courier-start-travel-command-scope';
 
 export function OperationalShell({ personal }: { personal: ReactNode }) {
+  return <CourierStartTravelCommandScopeProvider><OperationalShellContent personal={personal} /></CourierStartTravelCommandScopeProvider>;
+}
+
+function OperationalShellContent({ personal }: { personal: ReactNode }) {
   const session = useIdentitySession();
   const context = useOperationalContext();
   const { locale } = useLanguage();
