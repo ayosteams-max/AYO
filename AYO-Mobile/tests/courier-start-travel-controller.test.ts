@@ -10,6 +10,7 @@ import {
   type StartTravelAttempt,
 } from '../domain/courier-start-travel-command.ts';
 import type { CourierHandoffSnapshot } from '../domain/courier-handoff-status.ts';
+import { PublicApiError } from '../services/api-foundation.ts';
 import { CourierStartTravelController } from '../services/courier-start-travel-controller.ts';
 import type { CourierStartTravelCommandService } from '../services/courier-start-travel-command.ts';
 import { CourierStartTravelCommandScope } from '../services/courier-start-travel-command-scope.ts';
@@ -173,4 +174,55 @@ test('abort is passed to the existing service and controller adds no retry', asy
   const handle = value.controller.createAttempt(); assert.ok(handle);
   assert.deepEqual(await value.controller.submit(handle, abort.signal), { outcome: 'invalidated', reason: 'scope_changed' });
   assert.equal(received, abort.signal); assert.equal(value.submissions(), 1);
+});
+
+test('403 and 404 authority loss settle, withdraw evidence, and cannot freely resubmit', async () => {
+  for (const status of [403, 404]) {
+    const value = fixture({ submit: async () => { throw new PublicApiError(status === 403 ? 'access_denied' : 'not_found', status); } });
+    const handle = value.controller.createAttempt(); assert.ok(handle);
+    const expected = { outcome: 'invalidated', reason: 'authority_lost' } as const;
+    assert.deepEqual(await value.controller.submit(handle), expected);
+    assert.deepEqual(await value.controller.submit(handle), expected);
+    assert.equal(value.submissions(), 1);
+    assert.equal(handle.isCurrent(), false);
+    assert.equal(value.controller.createAttempt(), undefined);
+    assert.equal(value.creations(), 1);
+  }
+});
+
+test('post-refresh 401 settles as authority loss and cannot freely resubmit', async () => {
+  const value = fixture({ submit: async () => { throw new PublicApiError('session_expired', 401); } });
+  const handle = value.controller.createAttempt(); assert.ok(handle);
+  const expected = { outcome: 'invalidated', reason: 'authority_lost' } as const;
+  assert.deepEqual(await value.controller.submit(handle), expected);
+  assert.deepEqual(await value.controller.submit(handle), expected);
+  assert.equal(value.submissions(), 1);
+  assert.equal(value.creations(), 1);
+});
+
+test('unknown 409 is definitive refresh-required rejection, not outcome unknown', async () => {
+  const value = fixture({ submit: async () => { throw new PublicApiError('temporarily_unavailable', 409); } });
+  const handle = value.controller.createAttempt(); assert.ok(handle);
+  const expected = { outcome: 'rejected', reason: 'refresh_required' } as const;
+  assert.deepEqual(await value.controller.submit(handle), expected);
+  assert.deepEqual(await value.controller.submit(handle), expected);
+  assert.equal(value.submissions(), 1);
+  assert.equal(handle.isCurrent(), false);
+  assert.equal(value.creations(), 1);
+});
+
+test('other definitive 4xx and malformed responses are bounded while unexpected bugs remain visible', async () => {
+  const definitive = fixture({ submit: async () => { throw new PublicApiError('feature_unavailable', 422); } });
+  const definitiveHandle = definitive.controller.createAttempt(); assert.ok(definitiveHandle);
+  assert.deepEqual(await definitive.controller.submit(definitiveHandle), { outcome: 'rejected', reason: 'refresh_required' });
+  assert.equal(definitive.submissions(), 1);
+
+  const malformed = fixture({ submit: async () => { throw new PublicApiError('malformed_response', 200); } });
+  const malformedHandle = malformed.controller.createAttempt(); assert.ok(malformedHandle);
+  assert.deepEqual(await malformed.controller.submit(malformedHandle), { outcome: 'rejected', reason: 'malformed_response' });
+
+  const bug = fixture({ submit: async () => { throw new Error('programmer_fault'); } });
+  const bugHandle = bug.controller.createAttempt(); assert.ok(bugHandle);
+  await assert.rejects(bug.controller.submit(bugHandle), /programmer_fault/);
+  assert.equal(bug.submissions(), 1);
 });
