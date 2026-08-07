@@ -8,9 +8,13 @@ from BACKEND.courier_pickup.application import CourierPickupApplication
 from BACKEND.courier_pickup.engine import CourierPickupConflict
 from BACKEND.courier_pickup.models import CourierPickupAction
 from BACKEND.persistence.composition import PostgresRepositoryComposition
-from BACKEND.persistence.tables import commerce_courier_pickups
+from BACKEND.persistence.tables import (
+    commerce_courier_pickups,
+    courier_dispatch_assignments,
+)
 from tests.integration.test_courier_pickup_idempotency import (
     ACTOR,
+    ASSIGNMENT,
     KEY,
     MERCHANT_OWNER,
     NOW,
@@ -136,3 +140,34 @@ def test_postgres_assignment_change_has_no_route_application_gap(
         )
     assert _effect_counts(postgres_engine) == (0, 0, 0, 0, 0)
     assert replacement != ACTOR
+
+
+@pytest.mark.usefixtures("authorization_ordering_state")
+def test_postgres_assignment_version_corruption_is_denied_before_side_effects(
+    postgres_engine,
+) -> None:
+    """Corruption/invariant simulation, not canonical lifecycle evidence."""
+    with postgres_engine.begin() as connection:
+        connection.execute(
+            update(courier_dispatch_assignments)
+            .where(courier_dispatch_assignments.c.assignment_id == ASSIGNMENT)
+            .values(version=2)
+        )
+
+    before = _effect_counts(postgres_engine)
+    application = CourierPickupApplication(
+        PostgresRepositoryComposition(postgres_engine)
+    )
+    for _ in range(2):
+        with pytest.raises(
+            CourierPickupConflict, match="^courier_pickup_assignment_invalid$"
+        ):
+            application.courier_command(
+                _subject(),
+                pickup_id=PICKUP,
+                expected_version=1,
+                action=CourierPickupAction.START_TRAVEL,
+                idempotency_key="assignment-version-corruption-0001",
+                at=NOW,
+            )
+    assert _effect_counts(postgres_engine) == before

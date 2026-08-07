@@ -14,6 +14,7 @@ from BACKEND.courier_pickup.application import CourierPickupApplication
 from BACKEND.courier_pickup.engine import CourierPickupConflict
 from BACKEND.courier_pickup.models import (
     CourierPickupAction,
+    CourierPickupExceptionReason,
     CourierPickupRecord,
     CourierPickupState,
     CourierPickupView,
@@ -258,6 +259,80 @@ def test_authorized_courier_progress_and_false_arrival_correction() -> None:
     )
     assert corrected.pickup.state is CourierPickupState.TRAVELLING
     assert corrected.pickup.arrived_at is None
+
+
+@pytest.mark.parametrize(
+    "action,permission",
+    [
+        (CourierPickupAction.START_TRAVEL, "courier_pickup.manage_assigned"),
+        (CourierPickupAction.MARK_ARRIVED, "courier_pickup.manage_assigned"),
+        (CourierPickupAction.CORRECT_ARRIVAL, "courier_pickup.correct_assigned"),
+        (CourierPickupAction.END_ATTEMPT, "courier_pickup.close_assigned"),
+    ],
+)
+@pytest.mark.parametrize(
+    "dispatch_state,assignment_state,assignment_version",
+    [
+        (
+            CourierDispatchState.WAITING,
+            CourierAssignmentState.RELEASED,
+            2,
+        ),
+        (CourierDispatchState.ASSIGNED, CourierAssignmentState.ASSIGNED, 2),
+    ],
+)
+def test_courier_commands_recheck_current_assignment_before_reservation(
+    action,
+    permission,
+    dispatch_state,
+    assignment_state,
+    assignment_version,
+) -> None:
+    app, value, courier_id, _ = application(permissions={permission})
+    unit = app._composition.unit
+    unit.courier_dispatch.get = lambda *args, **kwargs: SimpleNamespace(
+        dispatch_id=value.dispatch_id,
+        order_id=value.order_id,
+        merchant_id=value.merchant_id,
+        state=dispatch_state,
+        active_assignment_id=(
+            value.assignment_id
+            if dispatch_state is CourierDispatchState.ASSIGNED
+            else None
+        ),
+        assigned_courier_identity_id=(
+            courier_id if dispatch_state is CourierDispatchState.ASSIGNED else None
+        ),
+    )
+    unit.courier_dispatch.get_assignment = lambda *args, **kwargs: SimpleNamespace(
+        assignment_id=value.assignment_id,
+        dispatch_id=value.dispatch_id,
+        courier_identity_id=courier_id,
+        state=assignment_state,
+        version=assignment_version,
+    )
+
+    for _ in range(2):
+        with pytest.raises(
+            CourierPickupConflict, match="^courier_pickup_assignment_invalid$"
+        ):
+            app.courier_command(
+                subject(courier_id, IdentityType.DRIVER),
+                pickup_id=value.pickup_id,
+                expected_version=value.version,
+                action=action,
+                idempotency_key="obsolete-assignment-0001",
+                at=NOW + timedelta(minutes=1),
+                reason=(
+                    CourierPickupExceptionReason.COURIER_UNABLE
+                    if action is CourierPickupAction.END_ATTEMPT
+                    else None
+                ),
+            )
+
+    assert unit.courier_pickup.value == value
+    assert unit.courier_pickup.replays == {}
+    assert unit.audit_events == []
 
 
 def test_permission_and_custody_boundaries_fail_closed() -> None:
