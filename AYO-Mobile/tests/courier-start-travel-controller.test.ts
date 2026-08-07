@@ -33,7 +33,7 @@ function fixture(overrides: Partial<Pick<CourierStartTravelCommandService, 'subm
   let creations = 0;
   const scope = new CourierStartTravelCommandScope(
     () => ({ identityId, sessionId, identityGeneration: 1 }),
-    () => ({ pickupId, contextGeneration: 1, identityGeneration: 1 }),
+    () => ({ pickupId, contextGeneration: 1, identityContinuity: Object.freeze({ isCurrent: () => true }) }),
     (value) => createStartTravelAttempt(value, () => keys[creations++] ?? keys[1]),
   );
   scope.publishFresh(pickupId, handoff);

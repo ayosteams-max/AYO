@@ -2,7 +2,7 @@ import { attemptMatchesScope, createStartTravelAttempt, type CourierCommandScope
 import type { CourierHandoffSnapshot } from '../domain/courier-handoff-status.ts';
 
 type CommandIdentitySnapshot = Readonly<{ identityId: string; sessionId: string; identityGeneration: number }>;
-type CourierCommandContextSnapshot = Readonly<{ pickupId: string; contextGeneration: number; identityGeneration: number }>;
+type CourierCommandContextSnapshot = Readonly<{ pickupId: string; contextGeneration: number; identityContinuity: Readonly<{ isCurrent(): boolean }> }>;
 
 type IdentityReader = () => CommandIdentitySnapshot | undefined;
 type CourierContextReader = () => CourierCommandContextSnapshot | undefined;
@@ -53,7 +53,7 @@ export class CourierStartTravelCommandScope {
     if (this.retired || !this.providerLifetimeActive) return;
     const courier = this.readCourierContext();
     const identity = this.readIdentity();
-    if (!identity || !courier || courier.identityGeneration !== identity.identityGeneration || courier.pickupId !== pickupId.toLowerCase()) {
+    if (!identity || !courier || !courier.identityContinuity.isCurrent() || courier.pickupId !== pickupId.toLowerCase()) {
       this.clearFresh(pickupId);
       return;
     }
@@ -94,7 +94,7 @@ export class CourierStartTravelCommandScope {
     const evidence = this.freshEvidence;
     if (
       !identity || !courier || !evidence ||
-      courier.identityGeneration !== identity.identityGeneration ||
+      !courier.identityContinuity.isCurrent() ||
       courier.pickupId !== evidence.pickupId ||
       evidence.identityGeneration !== identity.identityGeneration ||
       evidence.contextGeneration !== courier.contextGeneration ||

@@ -2,9 +2,9 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-
 import { Pressable, Text, View } from 'react-native';
 import { useLayoutEffect, useState } from 'react';
 
-import { CourierStartTravelCommandScopeProvider, TrustedCourierHandoffStatus, useStartTravelAttemptCapability } from '@/contexts/courier-start-travel-command-scope';
+import { CourierStartTravelCommandInfrastructureProvider, TrustedCourierHandoffStatus, useStartTravelAttemptCapability } from '@/contexts/courier-start-travel-command-scope';
 import * as identitySessionContext from '@/contexts/identity-session';
-import { IdentitySessionProvider, type IdentitySessionServices, useIdentityCommandRuntime, useIdentitySession } from '@/contexts/identity-session';
+import { IdentitySessionProvider, type IdentitySessionServices, TrustedCourierStartTravelCommandProvider, useIdentityContinuity, useIdentitySession } from '@/contexts/identity-session';
 import { LanguageProvider } from '@/contexts/language';
 import * as operationalContext from '@/contexts/operational-context';
 import { OperationalContextProvider, useCourierCommandContext, useOperationalContext } from '@/contexts/operational-context';
@@ -47,7 +47,7 @@ const readRetainedHandle = (): StartTravelAttemptHandle | undefined => retainedH
 
 function Consumer() {
   const publicIdentity = useIdentitySession();
-  const commandIdentity = useIdentityCommandRuntime();
+  const identityContinuity = useIdentityContinuity();
   const operational = useOperationalContext();
   const commandContext = useCourierCommandContext();
   const capability = useStartTravelAttemptCapability();
@@ -58,8 +58,8 @@ function Consumer() {
     <Text testID="operational-status">{operational.status}</Text>
     <Text testID="operational-refreshing">{String(operational.refreshing)}</Text>
     <Text testID="identity-internals">{String('sessionId' in publicIdentity || 'identityGeneration' in publicIdentity)}</Text>
+    <Text testID="identity-continuity-surface">{Object.keys(identityContinuity.readIdentityContinuity() ?? {}).join(',')}</Text>
     <Text testID="operational-internals">{String('contextGeneration' in operational)}</Text>
-    <Text testID="command-identity">{String(commandIdentity.readIdentity()?.identityGeneration ?? 'none')}</Text>
     <Text testID="command-context">{String(commandContext.readCourierContext()?.contextGeneration ?? 'none')}</Text>
     <Text testID="publisher-exposed">{String('publishFresh' in capability)}</Text>
     <Text testID="created">{created}</Text>
@@ -133,15 +133,15 @@ test('mounted trusted provider derives an attempt without exposing raw scope or 
     if (pickupReads > 1) throw new Error('offline');
     return pickupResponse;
   } };
-  await act(() => { render(<IdentitySessionProvider services={services}><OperationalContextProvider><CourierStartTravelCommandScopeProvider><LanguageProvider><Consumer /></LanguageProvider></CourierStartTravelCommandScopeProvider></OperationalContextProvider></IdentitySessionProvider>); });
+  await act(() => { render(<IdentitySessionProvider services={services}><OperationalContextProvider><TrustedCourierStartTravelCommandProvider><LanguageProvider><Consumer /></LanguageProvider></TrustedCourierStartTravelCommandProvider></OperationalContextProvider></IdentitySessionProvider>); });
   await waitFor(() => expect(screen.getByTestId('identity-status').props.children).toBe('authenticated'));
   await act(async () => { contextRead.resolve({ personal: { available: true }, merchants: [], courier: { pickup_id: pickupId, availability: 'current_pickup' } }); });
   await waitFor(() => { expect(screen.getByTestId('operational-status').props.children).toBe('ready'); expect(screen.getByTestId('operational-refreshing').props.children).toBe('false'); });
   expect(screen.getByTestId('created').props.children).toBe('none');
   expect(screen.getByTestId('identity-internals').props.children).toBe('false');
+  expect(screen.getByTestId('identity-continuity-surface').props.children).toBe('isCurrent');
   expect(screen.getByTestId('operational-internals').props.children).toBe('false');
   expect(screen.getByTestId('publisher-exposed').props.children).toBe('false');
-  expect(screen.getByTestId('command-identity').props.children).not.toBe('none');
   expect(screen.getByTestId('command-context').props.children).not.toBe('none');
   await waitFor(() => expect(screen.getByText('Pickup work is current')).toBeTruthy());
   await act(() => { fireEvent.press(screen.getByTestId('create-current')); });
@@ -172,7 +172,7 @@ test('provider retirement invalidates retained capability and handle while ident
       if (path.endsWith('/custody')) return { availability: 'not_started' };
       return pickupResponse;
     } };
-    const mounted = render(<IdentitySessionProvider services={services}><OperationalContextProvider><CourierStartTravelCommandScopeProvider><LanguageProvider><Consumer /></LanguageProvider></CourierStartTravelCommandScopeProvider></OperationalContextProvider></IdentitySessionProvider>);
+    const mounted = render(<IdentitySessionProvider services={services}><OperationalContextProvider><TrustedCourierStartTravelCommandProvider><LanguageProvider><Consumer /></LanguageProvider></TrustedCourierStartTravelCommandProvider></OperationalContextProvider></IdentitySessionProvider>);
     await waitFor(() => expect(screen.getByTestId('identity-status').props.children).toBe('authenticated'));
     await waitFor(() => expect(screen.getByText('Pickup work is current')).toBeTruthy());
     await act(() => { fireEvent.press(screen.getByTestId('create-current')); });
@@ -216,7 +216,7 @@ test('committed replacement and removal close old capabilities before the new tr
     if (pickupReads === 2) return latePickup.promise;
     return pickupResponse;
   } };
-  const tree = (key: string, child: React.ReactNode) => <IdentitySessionProvider key={key} services={services}><OperationalContextProvider><CourierStartTravelCommandScopeProvider><LanguageProvider>{child}</LanguageProvider></CourierStartTravelCommandScopeProvider></OperationalContextProvider></IdentitySessionProvider>;
+  const tree = (key: string, child: React.ReactNode) => <IdentitySessionProvider key={key} services={services}><OperationalContextProvider><TrustedCourierStartTravelCommandProvider><LanguageProvider>{child}</LanguageProvider></TrustedCourierStartTravelCommandProvider></OperationalContextProvider></IdentitySessionProvider>;
   const mounted = await render(tree('A', <Consumer />));
   await waitFor(() => expect(screen.getByText('Pickup work is current')).toBeTruthy());
   await act(() => { fireEvent.press(screen.getByTestId('create-current')); });
@@ -250,7 +250,7 @@ test('reader dependency replacement closes scope A before scope B layout observa
   retainedCapability = undefined;
   retainedHandle = undefined;
   const identityValue = { identityId, sessionId, identityGeneration: 1 };
-  const courierValue = { pickupId, contextGeneration: 1, identityGeneration: 1 };
+  const courierValue = { pickupId, contextGeneration: 1, identityContinuity: Object.freeze({ isCurrent: () => true }) };
   let readIdentity = () => identityValue;
   let readCourierContext = () => courierValue;
   const authenticatedRead = async (path: string) => path.endsWith('/custody') ? { availability: 'not_started' } : pickupResponse;
@@ -259,15 +259,12 @@ test('reader dependency replacement closes scope A before scope B layout observa
     refresh: async () => undefined, selectArea: () => undefined, showChooser: () => undefined, invalidateCourier: () => undefined,
   };
   const createCommandService = jest.fn(async () => { throw new Error('command_submission_not_exposed'); });
-  const identitySpy = jest.spyOn(identitySessionContext, 'useIdentityCommandRuntime').mockImplementation(() => ({
-    readIdentity,
-    createStartTravelCommandService: createCommandService,
-  }));
   const readSpy = jest.spyOn(identitySessionContext, 'useAuthenticatedRead').mockImplementation(() => authenticatedRead);
   const courierSpy = jest.spyOn(operationalContext, 'useCourierCommandContext').mockImplementation(() => ({ readCourierContext }));
   const operationalSpy = jest.spyOn(operationalContext, 'useOperationalContext').mockImplementation(() => operationalValue);
   try {
-    const tree = (child: React.ReactNode) => <CourierStartTravelCommandScopeProvider><LanguageProvider>{child}</LanguageProvider></CourierStartTravelCommandScopeProvider>;
+    const identity = { readIdentity, createStartTravelCommandService: createCommandService };
+    const tree = (child: React.ReactNode) => <CourierStartTravelCommandInfrastructureProvider identity={identity}><LanguageProvider>{child}</LanguageProvider></CourierStartTravelCommandInfrastructureProvider>;
     const mounted = await render(tree(<MinimalConsumer />));
     await waitFor(() => expect(screen.getByText('Pickup work is current')).toBeTruthy());
     await act(() => { fireEvent.press(screen.getByTestId('create-minimal')); });
@@ -277,12 +274,20 @@ test('reader dependency replacement closes scope A before scope B layout observa
 
     readIdentity = () => identityValue;
     readCourierContext = () => courierValue;
+    const replacementIdentity = { readIdentity, createStartTravelCommandService: createCommandService };
     let observation: ReplacementObservation | undefined;
-    await mounted.rerender(tree(<ReplacementObserver previousCapability={capabilityA!} previousHandle={handleA!} observe={(value) => { observation = value; }} />));
+    await mounted.rerender(<CourierStartTravelCommandInfrastructureProvider identity={replacementIdentity}><LanguageProvider><ReplacementObserver previousCapability={capabilityA!} previousHandle={handleA!} observe={(value) => { observation = value; }} /></LanguageProvider></CourierStartTravelCommandInfrastructureProvider>);
     expect(observation).toEqual({ distinctCapability: true, oldHandleCurrent: false, oldCanCreate: false, oldCreate: undefined });
     expect(createCommandService).not.toHaveBeenCalled();
     await mounted.unmount();
   } finally {
-    identitySpy.mockRestore(); readSpy.mockRestore(); courierSpy.mockRestore(); operationalSpy.mockRestore();
+    readSpy.mockRestore(); courierSpy.mockRestore(); operationalSpy.mockRestore();
   }
+});
+
+test('presentation-importable identity API exposes no command runtime or canonical command-service factory', () => {
+  expect('useIdentityCommandRuntime' in identitySessionContext).toBe(false);
+  expect('IdentityCommandRuntime' in identitySessionContext).toBe(false);
+  expect('CommandIdentitySnapshot' in identitySessionContext).toBe(false);
+  expect('createStartTravelCommandService' in identitySessionContext).toBe(false);
 });

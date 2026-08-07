@@ -2,15 +2,15 @@ import { Link, Redirect } from 'expo-router';
 import type { ReactNode } from 'react';
 import { ActivityIndicator, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { useIdentitySession } from '@/contexts/identity-session';
+import { TrustedCourierStartTravelCommandProvider, useIdentitySession } from '@/contexts/identity-session';
 import { useLanguage } from '@/contexts/language';
 import { useOperationalContext } from '@/contexts/operational-context';
 import type { OperationalArea } from '@/domain/mobile-context';
 import { operationalShellCopy } from '@/localization/operational-shell';
-import { CourierStartTravelCommandScopeProvider, TrustedCourierHandoffStatus } from '@/contexts/courier-start-travel-command-scope';
+import { TrustedCourierHandoffStatus } from '@/contexts/courier-start-travel-command-scope';
 
 export function OperationalShell({ personal }: { personal: ReactNode }) {
-  return <CourierStartTravelCommandScopeProvider><OperationalShellContent personal={personal} /></CourierStartTravelCommandScopeProvider>;
+  return <TrustedCourierStartTravelCommandProvider><OperationalShellContent personal={personal} /></TrustedCourierStartTravelCommandProvider>;
 }
 
 function OperationalShellContent({ personal }: { personal: ReactNode }) {

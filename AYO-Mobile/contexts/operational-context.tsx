@@ -1,7 +1,7 @@
 import { AppState } from 'react-native';
 import { createContext, type PropsWithChildren, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
-import { useAuthenticatedRead, useIdentityCommandRuntime, useIdentitySession } from '@/contexts/identity-session';
+import { type IdentityContinuityHandle, useAuthenticatedRead, useIdentityContinuity, useIdentitySession } from '@/contexts/identity-session';
 import { MobileContextContractError, operationalAreas, reconcileAreaSelection, type MobileContextSnapshot, type OperationalArea } from '@/domain/mobile-context';
 import { MobileContextService } from '@/services/mobile-context';
 import { PublicApiError } from '@/services/api-foundation';
@@ -20,14 +20,14 @@ type OperationalContextValue = Readonly<{
 }>;
 
 const Context = createContext<OperationalContextValue | undefined>(undefined);
-export type CourierCommandContextSnapshot = Readonly<{ pickupId: string; contextGeneration: number; identityGeneration: number }>;
+export type CourierCommandContextSnapshot = Readonly<{ pickupId: string; contextGeneration: number; identityContinuity: IdentityContinuityHandle }>;
 export type CourierCommandContextReader = Readonly<{ readCourierContext(): CourierCommandContextSnapshot | undefined }>;
 const CourierCommandContext = createContext<CourierCommandContextReader | undefined>(undefined);
 type OperationalContextProviderProps = PropsWithChildren<{ service?: MobileContextService }>;
 
 export function OperationalContextProvider({ children, service: suppliedService }: OperationalContextProviderProps) {
   const session = useIdentitySession();
-  const identityCommand = useIdentityCommandRuntime();
+  const identityContinuity = useIdentityContinuity();
   const authenticatedRead = useAuthenticatedRead();
   const service = useMemo(() => suppliedService ?? new MobileContextService(authenticatedRead), [authenticatedRead, suppliedService]);
   const [status, setStatus] = useState<OperationalContextStatus>('idle');
@@ -48,18 +48,18 @@ export function OperationalContextProvider({ children, service: suppliedService 
   useEffect(() => { snapshotRef.current = snapshot; }, [snapshot]);
   useEffect(() => { selectedKeyRef.current = selectedKey; }, [selectedKey]);
   useEffect(() => { signOutRef.current = session.signOut; }, [session.signOut]);
-  const applyCourierCommandContext = useCallback((pickupId?: string, identityGeneration?: number) => {
+  const applyCourierCommandContext = useCallback((pickupId?: string, continuity?: IdentityContinuityHandle) => {
     const previous = lastCommandContextRef.current;
-    if (pickupId && identityGeneration !== undefined && previous?.pickupId === pickupId && previous.identityGeneration === identityGeneration) {
+    if (pickupId && continuity && previous?.pickupId === pickupId && previous.identityContinuity === continuity) {
       commandContextRef.current = previous;
       return;
     }
     if (!pickupId && !previous) { commandContextRef.current = undefined; return; }
     commandContextGeneration.current += 1;
-    const next = pickupId && identityGeneration !== undefined ? Object.freeze({
+    const next = pickupId && continuity ? Object.freeze({
       pickupId,
       contextGeneration: commandContextGeneration.current,
-      identityGeneration,
+      identityContinuity: continuity,
     }) : undefined;
     lastCommandContextRef.current = next;
     commandContextRef.current = next;
@@ -67,18 +67,17 @@ export function OperationalContextProvider({ children, service: suppliedService 
   const load = useCallback(() => {
     if (session.status !== 'authenticated') return Promise.resolve();
     if (requestRef.current) return requestRef.current;
-    const commandIdentity = identityCommand.readIdentity();
+    const commandIdentityContinuity = identityContinuity.readIdentityContinuity();
     const current = generation.current;
     const controller = new AbortController();
     controllerRef.current = controller;
     setRefreshing(true);
     if (!snapshotRef.current) setStatus('loading');
     const request = service.load(controller.signal).then((next) => {
-      const latestIdentity = identityCommand.readIdentity();
-      if (current !== generation.current || controller.signal.aborted || !commandIdentity || !latestIdentity || latestIdentity.identityGeneration !== commandIdentity.identityGeneration) return;
+      if (current !== generation.current || controller.signal.aborted || !commandIdentityContinuity?.isCurrent() || identityContinuity.readIdentityContinuity() !== commandIdentityContinuity) return;
       requestRef.current = undefined;
       snapshotRef.current = next;
-      applyCourierCommandContext(next.courier?.pickupId, commandIdentity.identityGeneration);
+      applyCourierCommandContext(next.courier?.pickupId, commandIdentityContinuity);
       setSnapshot(next);
       const areas = operationalAreas(next);
       const selection = reconcileAreaSelection(areas, selectedKeyRef.current);
@@ -103,7 +102,7 @@ export function OperationalContextProvider({ children, service: suppliedService 
     });
     requestRef.current = request;
     return request;
-  }, [applyCourierCommandContext, identityCommand, service, session.status]);
+  }, [applyCourierCommandContext, identityContinuity, service, session.status]);
 
   const identityKey = session.identity?.identityId;
   useEffect(() => {
