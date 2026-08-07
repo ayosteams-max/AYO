@@ -11,7 +11,14 @@ from BACKEND.audit.models import ActorType
 from BACKEND.authorization.contracts import AuthorizationSubject
 from BACKEND.authorization.enforcement import AuthorizationEnforcer
 from BACKEND.config.settings import Settings
+from BACKEND.courier_dispatch.application import CourierDispatchApplication
+from BACKEND.courier_dispatch.models import (
+    CourierDispatchAction,
+    CourierEligibilityEvidence,
+    EligibilityEvidenceType,
+)
 from BACKEND.courier_pickup.application import CourierPickupApplication
+from BACKEND.courier_pickup.engine import CourierPickupConflict
 from BACKEND.courier_pickup.models import CourierPickupAction
 from BACKEND.custody.application import CustodyApplication
 from BACKEND.custody.engine import CustodyConflict
@@ -26,6 +33,7 @@ from BACKEND.merchant.models import MerchantKind, OnboardingSource
 from BACKEND.persistence.composition import PostgresRepositoryComposition
 from BACKEND.persistence.custody_repository import PostgresCustodyRepository
 from BACKEND.persistence.tables import (
+    audit_events,
     commerce_courier_dispatch_requests,
     commerce_courier_pickup_events,
     commerce_courier_pickup_idempotency,
@@ -36,6 +44,8 @@ from BACKEND.persistence.tables import (
     commerce_custody_records,
     commerce_order_outbox,
     courier_dispatch_assignments,
+    courier_dispatch_offers,
+    identities,
     identity_role_assignments,
     merchant_profiles,
     permissions,
@@ -50,6 +60,7 @@ from tests.integration.test_courier_pickup_idempotency import (
     MERCHANT,
     MERCHANT_OWNER,
     NOW,
+    OFFER,
     ORDER,
     PERMISSION,
     PICKUP,
@@ -67,6 +78,8 @@ MERCHANT_ACK_PERMISSION = UUID("20000000-0000-4000-8000-000000000022")
 MERCHANT_ROLE_ASSIGNMENT = UUID("20000000-0000-4000-8000-000000000023")
 CUSTODY_MERCHANT_READ_PERMISSION = UUID("00000000-0000-4000-8000-00000000f601")
 CUSTODY_COURIER_PERMISSION = UUID("00000000-0000-4000-8000-00000000f603")
+DISPATCH_MANAGE_PERMISSION = UUID("00000000-0000-4000-8000-00000000f604")
+REPLACEMENT_COURIER = UUID("00000000-0000-4000-8000-00000000f605")
 COURIER_FIELDS = {
     "pickup_id",
     "state",
@@ -132,6 +145,75 @@ def _merchant_subject() -> AuthorizationSubject:
     )
 
 
+def _replacement_subject() -> AuthorizationSubject:
+    return AuthorizationSubject(
+        identity_id=REPLACEMENT_COURIER,
+        identity_type=IdentityType.DRIVER,
+        actor_type=ActorType.DRIVER,
+    )
+
+
+def _eligibility() -> tuple[CourierEligibilityEvidence, ...]:
+    return tuple(
+        CourierEligibilityEvidence(
+            evidence_type=evidence_type,
+            source_reference=uuid4(),
+            source_version=1,
+            eligible=True,
+            observed_at=NOW,
+            valid_until=NOW.replace(year=NOW.year + 1),
+        )
+        for evidence_type in EligibilityEvidenceType
+    )
+
+
+def _release_dispatch(composition):
+    return CourierDispatchApplication(composition).authority_command(
+        _merchant_subject(),
+        dispatch_id=DISPATCH,
+        expected_version=1,
+        action=CourierDispatchAction.RELEASE,
+        idempotency_key="canonical-dispatch-release-0001",
+        correlation_id=uuid4(),
+        causation_id=uuid4(),
+        reason="courier_unavailable_before_pickup",
+        at=NOW,
+    )
+
+
+def _replace_dispatch(composition):
+    application = CourierDispatchApplication(composition)
+    released = _release_dispatch(composition)
+    offered = application.offer_courier(
+        _merchant_subject(),
+        dispatch_id=DISPATCH,
+        expected_version=released.dispatch.version,
+        eligible_courier_identity_id=REPLACEMENT_COURIER,
+        eligibility_evidence=_eligibility(),
+        idempotency_key="canonical-replacement-offer-0001",
+        correlation_id=uuid4(),
+        causation_id=uuid4(),
+        at=NOW,
+    )
+    return application.command(
+        _replacement_subject(),
+        dispatch_id=DISPATCH,
+        expected_version=offered.dispatch.version,
+        action=CourierDispatchAction.ACCEPT,
+        courier_identity_id=REPLACEMENT_COURIER,
+        idempotency_key="canonical-replacement-accept-0001",
+        at=NOW,
+    )
+
+
+def _lose_dispatch_authority(composition, authority_loss: str):
+    if authority_loss == "release":
+        return _release_dispatch(composition)
+    if authority_loss == "replacement":
+        return _replace_dispatch(composition)
+    raise AssertionError(f"unsupported authority loss: {authority_loss}")
+
+
 def _client(composition, actor: AuthorizationSubject) -> TestClient:
     resolver = _Resolver(actor)
     enforcer = cast(AuthorizationEnforcer, _NeverEnforcer())
@@ -176,6 +258,7 @@ def api_contract_state(postgres_engine):
             (MERCHANT_ACK_PERMISSION, "courier_pickup.acknowledge_own_merchant"),
             (CUSTODY_MERCHANT_READ_PERMISSION, "custody.read_own_merchant"),
             (CUSTODY_COURIER_PERMISSION, "custody.accept_assigned"),
+            (DISPATCH_MANAGE_PERMISSION, "courier_dispatch.manage"),
         ):
             connection.execute(
                 insert(permissions).values(
@@ -191,6 +274,17 @@ def api_contract_state(postgres_engine):
                 )
             )
         connection.execute(
+            insert(identities).values(
+                identity_id=REPLACEMENT_COURIER,
+                public_id=REPLACEMENT_COURIER,
+                identity_type="driver",
+                status="active",
+                created_at=NOW,
+                updated_at=NOW,
+                version=1,
+            )
+        )
+        connection.execute(
             insert(identity_role_assignments).values(
                 assignment_id=MERCHANT_ROLE_ASSIGNMENT,
                 identity_id=MERCHANT_OWNER,
@@ -202,6 +296,30 @@ def api_contract_state(postgres_engine):
     try:
         yield
     finally:
+        with postgres_engine.begin() as connection:
+            connection.execute(
+                update(commerce_courier_dispatch_requests)
+                .where(commerce_courier_dispatch_requests.c.dispatch_id == DISPATCH)
+                .values(active_assignment_id=ASSIGNMENT)
+            )
+            connection.execute(
+                delete(courier_dispatch_assignments).where(
+                    courier_dispatch_assignments.c.dispatch_id == DISPATCH,
+                    courier_dispatch_assignments.c.assignment_id != ASSIGNMENT,
+                )
+            )
+            connection.execute(
+                delete(courier_dispatch_offers).where(
+                    courier_dispatch_offers.c.dispatch_id == DISPATCH,
+                    courier_dispatch_offers.c.offer_id != OFFER,
+                )
+            )
+            connection.execute(
+                delete(audit_events).where(
+                    audit_events.c.resource_type == "courier_dispatch",
+                    audit_events.c.resource_id == str(DISPATCH),
+                )
+            )
         with postgres_engine.begin() as connection:
             connection.execute(
                 delete(identity_role_assignments).where(
@@ -217,6 +335,7 @@ def api_contract_state(postgres_engine):
                             MERCHANT_ACK_PERMISSION,
                             CUSTODY_MERCHANT_READ_PERMISSION,
                             CUSTODY_COURIER_PERMISSION,
+                            DISPATCH_MANAGE_PERMISSION,
                         )
                     )
                 )
@@ -224,11 +343,23 @@ def api_contract_state(postgres_engine):
             connection.execute(
                 delete(permissions).where(
                     permissions.c.permission_id.in_(
-                        (MERCHANT_READ_PERMISSION, MERCHANT_ACK_PERMISSION)
+                        (
+                            MERCHANT_READ_PERMISSION,
+                            MERCHANT_ACK_PERMISSION,
+                            CUSTODY_MERCHANT_READ_PERMISSION,
+                            CUSTODY_COURIER_PERMISSION,
+                            DISPATCH_MANAGE_PERMISSION,
+                        )
                     )
                 )
             )
         _cleanup_command_state(postgres_engine)
+        with postgres_engine.begin() as connection:
+            connection.execute(
+                delete(identities).where(
+                    identities.c.identity_id == REPLACEMENT_COURIER
+                )
+            )
 
 
 def _assert_public(response, fields) -> None:
@@ -341,18 +472,8 @@ def test_postgres_custody_read_distinguishes_absent_from_released_assignment(
     assert current.status_code == 200
     assert current.json() == {"availability": "not_started"}
 
+    _release_dispatch(postgres_composition)
     before = _effect_counts(postgres_engine)
-    with postgres_engine.begin() as connection:
-        connection.execute(
-            update(courier_dispatch_assignments)
-            .where(courier_dispatch_assignments.c.assignment_id == ASSIGNMENT)
-            .values(
-                state="released_before_pickup",
-                closed_at=NOW,
-                close_reason="courier_unavailable_before_pickup",
-                version=2,
-            )
-        )
     released = _client(PostgresRepositoryComposition(postgres_engine), _subject()).get(
         f"/api/mobile/courier-pickups/{PICKUP}/custody"
     )
@@ -447,9 +568,74 @@ def test_custody_activation_failure_rolls_back_merchant_acknowledgement(
 
 
 @pytest.mark.usefixtures("api_contract_state")
-def test_released_assignment_cannot_consume_custody_challenge(
+@pytest.mark.parametrize("authority_loss", ["release", "replacement"])
+def test_canonical_dispatch_authority_loss_denies_pickup_without_side_effects(
     postgres_engine,
     postgres_composition,
+    authority_loss,
+) -> None:
+    _lose_dispatch_authority(postgres_composition, authority_loss)
+    with postgres_engine.connect() as connection:
+        before_record = connection.execute(
+            select(
+                commerce_courier_pickups.c.state,
+                commerce_courier_pickups.c.version,
+            ).where(commerce_courier_pickups.c.pickup_id == PICKUP)
+        ).one()
+        before_effects = _effect_counts(postgres_engine)
+        before_audits = connection.execute(
+            select(func.count())
+            .select_from(audit_events)
+            .where(
+                audit_events.c.resource_type == "courier_pickup",
+                audit_events.c.resource_id == str(PICKUP),
+            )
+        ).scalar_one()
+
+    application = CourierPickupApplication(postgres_composition)
+    key = f"canonical-{authority_loss}-pickup-0001"
+    for _ in range(2):
+        with pytest.raises(
+            CourierPickupConflict, match="^courier_pickup_assignment_invalid$"
+        ):
+            application.courier_command(
+                _subject(),
+                pickup_id=PICKUP,
+                expected_version=1,
+                action=CourierPickupAction.START_TRAVEL,
+                idempotency_key=key,
+                at=NOW,
+            )
+    with postgres_engine.connect() as connection:
+        assert (
+            connection.execute(
+                select(
+                    commerce_courier_pickups.c.state,
+                    commerce_courier_pickups.c.version,
+                ).where(commerce_courier_pickups.c.pickup_id == PICKUP)
+            ).one()
+            == before_record
+        )
+        assert _effect_counts(postgres_engine) == before_effects
+        assert (
+            connection.execute(
+                select(func.count())
+                .select_from(audit_events)
+                .where(
+                    audit_events.c.resource_type == "courier_pickup",
+                    audit_events.c.resource_id == str(PICKUP),
+                )
+            ).scalar_one()
+            == before_audits
+        )
+
+
+@pytest.mark.usefixtures("api_contract_state")
+@pytest.mark.parametrize("authority_loss", ["release", "replacement"])
+def test_canonical_authority_loss_cannot_consume_custody_challenge(
+    postgres_engine,
+    postgres_composition,
+    authority_loss,
 ) -> None:
     pickup_application = CourierPickupApplication(postgres_composition)
     travelling = pickup_application.courier_command(
@@ -493,27 +679,7 @@ def test_released_assignment_cannot_consume_custody_challenge(
         idempotency_key="custody-authority-seal-0001",
         at=NOW,
     )
-    with postgres_engine.begin() as connection:
-        connection.execute(
-            update(commerce_courier_dispatch_requests)
-            .where(commerce_courier_dispatch_requests.c.dispatch_id == DISPATCH)
-            .values(
-                state="waiting_for_courier",
-                active_assignment_id=None,
-                assigned_courier_identity_id=None,
-                version=2,
-            )
-        )
-        connection.execute(
-            update(courier_dispatch_assignments)
-            .where(courier_dispatch_assignments.c.assignment_id == ASSIGNMENT)
-            .values(
-                state="released_before_pickup",
-                version=2,
-                closed_at=NOW,
-                close_reason="courier_unavailable_before_pickup",
-            )
-        )
+    _lose_dispatch_authority(postgres_composition, authority_loss)
     with postgres_engine.connect() as connection:
         before = (
             connection.execute(
@@ -539,7 +705,7 @@ def test_released_assignment_cannot_consume_custody_challenge(
                 custody_id=custody_id,
                 expected_version=issued.view.custody.version,
                 action=CustodyAction.VERIFY,
-                idempotency_key="custody-obsolete-verify-0001",
+                idempotency_key=f"custody-{authority_loss}-verify-0001",
                 at=NOW,
                 code=issued.display_code,
                 method=VerificationMethod.QR,
@@ -576,7 +742,7 @@ def test_released_assignment_cannot_consume_custody_challenge(
                 .where(
                     commerce_custody_idempotency.c.custody_id == custody_id,
                     commerce_custody_idempotency.c.idempotency_key
-                    == "custody-obsolete-verify-0001",
+                    == f"custody-{authority_loss}-verify-0001",
                 )
             ).scalar_one()
             == 0
@@ -588,6 +754,162 @@ def test_released_assignment_cannot_consume_custody_challenge(
                 )
             ).scalar_one()
             is None
+        )
+
+
+@pytest.mark.usefixtures("api_contract_state")
+@pytest.mark.parametrize("authority_loss", ["release", "replacement"])
+def test_canonical_authority_loss_cannot_create_custody_possession(
+    postgres_engine,
+    postgres_composition,
+    authority_loss,
+) -> None:
+    pickup_application = CourierPickupApplication(postgres_composition)
+    travelling = pickup_application.courier_command(
+        _subject(),
+        pickup_id=PICKUP,
+        expected_version=1,
+        action=CourierPickupAction.START_TRAVEL,
+        idempotency_key="custody-accept-travel-0001",
+        at=NOW,
+    )
+    arrived = pickup_application.courier_command(
+        _subject(),
+        pickup_id=PICKUP,
+        expected_version=travelling.pickup.version,
+        action=CourierPickupAction.MARK_ARRIVED,
+        idempotency_key="custody-accept-arrival-0001",
+        at=NOW,
+    )
+    pickup_application.merchant_acknowledge(
+        _merchant_subject(),
+        merchant_id=MERCHANT,
+        pickup_id=PICKUP,
+        expected_version=arrived.pickup.version,
+        idempotency_key="custody-accept-ack-0001",
+        at=NOW,
+    )
+    with postgres_engine.connect() as connection:
+        custody_id = connection.execute(
+            select(commerce_custody_records.c.custody_id).where(
+                commerce_custody_records.c.pickup_id == PICKUP
+            )
+        ).scalar_one()
+    custody_application = CustodyApplication(
+        postgres_composition, verification_pepper=b"test-custody-pepper" * 2
+    )
+    issued = custody_application.seal(
+        _merchant_subject(),
+        merchant_id=MERCHANT,
+        custody_id=custody_id,
+        expected_version=1,
+        idempotency_key="custody-accept-seal-0001",
+        at=NOW,
+    )
+    verified = custody_application.command(
+        _subject(),
+        custody_id=custody_id,
+        expected_version=issued.view.custody.version,
+        action=CustodyAction.VERIFY,
+        idempotency_key="custody-accept-verify-0001",
+        at=NOW,
+        code=issued.display_code,
+        method=VerificationMethod.QR,
+    )
+    released = custody_application.command(
+        _merchant_subject(),
+        merchant_id=MERCHANT,
+        custody_id=custody_id,
+        expected_version=verified.custody.version,
+        action=CustodyAction.RELEASE,
+        idempotency_key="custody-accept-release-0001",
+        at=NOW,
+    )
+    assert released.custody.state.value == "released"
+
+    _lose_dispatch_authority(postgres_composition, authority_loss)
+    with postgres_engine.connect() as connection:
+        before = (
+            connection.execute(
+                select(
+                    commerce_custody_records.c.state,
+                    commerce_custody_records.c.version,
+                ).where(commerce_custody_records.c.custody_id == custody_id)
+            ).one(),
+            connection.execute(
+                select(func.count())
+                .select_from(commerce_custody_events)
+                .where(commerce_custody_events.c.custody_id == custody_id)
+            ).scalar_one(),
+            connection.execute(
+                select(func.count())
+                .select_from(commerce_order_outbox)
+                .where(commerce_order_outbox.c.order_id == ORDER)
+            ).scalar_one(),
+            connection.execute(
+                select(func.count())
+                .select_from(audit_events)
+                .where(audit_events.c.resource_id == str(custody_id))
+            ).scalar_one(),
+        )
+
+    key = f"custody-{authority_loss}-accept-0001"
+    for _ in range(2):
+        with pytest.raises(CustodyConflict, match="^custody_not_found$"):
+            custody_application.command(
+                _subject(),
+                custody_id=custody_id,
+                expected_version=released.custody.version,
+                action=CustodyAction.ACCEPT,
+                idempotency_key=key,
+                at=NOW,
+            )
+
+    with postgres_engine.connect() as connection:
+        assert (
+            connection.execute(
+                select(
+                    commerce_custody_records.c.state,
+                    commerce_custody_records.c.version,
+                ).where(commerce_custody_records.c.custody_id == custody_id)
+            ).one()
+            == before[0]
+        )
+        assert before[0][0] == "released"
+        assert (
+            connection.execute(
+                select(func.count())
+                .select_from(commerce_custody_events)
+                .where(commerce_custody_events.c.custody_id == custody_id)
+            ).scalar_one()
+            == before[1]
+        )
+        assert (
+            connection.execute(
+                select(func.count())
+                .select_from(commerce_order_outbox)
+                .where(commerce_order_outbox.c.order_id == ORDER)
+            ).scalar_one()
+            == before[2]
+        )
+        assert (
+            connection.execute(
+                select(func.count())
+                .select_from(audit_events)
+                .where(audit_events.c.resource_id == str(custody_id))
+            ).scalar_one()
+            == before[3]
+        )
+        assert (
+            connection.execute(
+                select(func.count())
+                .select_from(commerce_custody_idempotency)
+                .where(
+                    commerce_custody_idempotency.c.custody_id == custody_id,
+                    commerce_custody_idempotency.c.idempotency_key == key,
+                )
+            ).scalar_one()
+            == 0
         )
 
 

@@ -9,14 +9,12 @@ from BACKEND.courier_pickup.engine import CourierPickupConflict
 from BACKEND.courier_pickup.models import CourierPickupAction
 from BACKEND.persistence.composition import PostgresRepositoryComposition
 from BACKEND.persistence.tables import (
-    commerce_courier_dispatch_requests,
     commerce_courier_pickups,
     courier_dispatch_assignments,
 )
 from tests.integration.test_courier_pickup_idempotency import (
     ACTOR,
     ASSIGNMENT,
-    DISPATCH,
     KEY,
     MERCHANT_OWNER,
     NOW,
@@ -145,39 +143,16 @@ def test_postgres_assignment_change_has_no_route_application_gap(
 
 
 @pytest.mark.usefixtures("authorization_ordering_state")
-@pytest.mark.parametrize("authority_loss", ["released", "stale_version"])
-def test_postgres_obsolete_assignment_is_denied_before_command_side_effects(
+def test_postgres_assignment_version_corruption_is_denied_before_side_effects(
     postgres_engine,
-    authority_loss,
 ) -> None:
+    """Corruption/invariant simulation, not canonical lifecycle evidence."""
     with postgres_engine.begin() as connection:
-        if authority_loss == "released":
-            connection.execute(
-                update(commerce_courier_dispatch_requests)
-                .where(commerce_courier_dispatch_requests.c.dispatch_id == DISPATCH)
-                .values(
-                    state="waiting_for_courier",
-                    active_assignment_id=None,
-                    assigned_courier_identity_id=None,
-                    version=2,
-                )
-            )
-            connection.execute(
-                update(courier_dispatch_assignments)
-                .where(courier_dispatch_assignments.c.assignment_id == ASSIGNMENT)
-                .values(
-                    state="released_before_pickup",
-                    version=2,
-                    closed_at=NOW,
-                    close_reason="courier_unavailable_before_pickup",
-                )
-            )
-        else:
-            connection.execute(
-                update(courier_dispatch_assignments)
-                .where(courier_dispatch_assignments.c.assignment_id == ASSIGNMENT)
-                .values(version=2)
-            )
+        connection.execute(
+            update(courier_dispatch_assignments)
+            .where(courier_dispatch_assignments.c.assignment_id == ASSIGNMENT)
+            .values(version=2)
+        )
 
     before = _effect_counts(postgres_engine)
     application = CourierPickupApplication(
@@ -192,7 +167,7 @@ def test_postgres_obsolete_assignment_is_denied_before_command_side_effects(
                 pickup_id=PICKUP,
                 expected_version=1,
                 action=CourierPickupAction.START_TRAVEL,
-                idempotency_key=f"obsolete-{authority_loss}-0001",
+                idempotency_key="assignment-version-corruption-0001",
                 at=NOW,
             )
     assert _effect_counts(postgres_engine) == before
