@@ -65,6 +65,8 @@ class CourierPickupApplication:
                 raise CourierPickupConflict("courier_pickup_unavailable")
             if value.pickup.assigned_courier_identity_id != subject.identity_id:
                 raise CourierPickupConflict("courier_pickup_unavailable")
+            if not matches_current_assignment(unit, value.pickup, lock=False):
+                raise CourierPickupConflict("courier_pickup_unavailable")
             if not unit.authorization.has_permission(
                 subject.identity_id,
                 "courier_pickup.manage_assigned",

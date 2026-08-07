@@ -1,6 +1,7 @@
 import logging
 from collections.abc import Callable
 from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Annotated
 from uuid import UUID
 
@@ -45,6 +46,11 @@ class CourierPickupCourierCommandResult(BaseModel):
     updated_at: datetime
 
 
+class CourierPickupPresentationAction(StrEnum):
+    START_TRAVEL = "start_travel"
+    NONE = "none"
+
+
 class CourierPickupCourierStatus(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
     pickup_id: UUID
@@ -57,6 +63,7 @@ class CourierPickupCourierStatus(BaseModel):
     waiting_duration_seconds: int | None
     terminal_reason: CourierPickupExceptionReason | None
     updated_at: datetime
+    presentation_action: CourierPickupPresentationAction
 
 
 class CourierPickupMerchantStatus(BaseModel):
@@ -114,6 +121,11 @@ def _courier_status(view: CourierPickupView) -> CourierPickupCourierStatus:
         waiting_duration_seconds=pickup.waiting_duration_seconds,
         terminal_reason=pickup.terminal_reason,
         updated_at=pickup.updated_at,
+        presentation_action=(
+            CourierPickupPresentationAction.START_TRAVEL
+            if pickup.state is CourierPickupState.ASSIGNED
+            else CourierPickupPresentationAction.NONE
+        ),
     )
 
 

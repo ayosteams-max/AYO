@@ -7,7 +7,7 @@ import { CourierHandoffStatusService } from '../services/courier-handoff-status.
 
 const pickupId = '11111111-1111-4111-8111-111111111111';
 const pickup = (state = 'waiting_for_pickup') => ({
-  pickup_id: pickupId, state, version: 4, assigned_at: '2026-08-07T01:00:00Z', travelling_at: '2026-08-07T01:05:00Z', arrived_at: '2026-08-07T01:15:00Z', merchant_acknowledged_at: state === 'waiting_for_pickup' ? '2026-08-07T01:16:00Z' : null, waiting_duration_seconds: state === 'waiting_for_pickup' ? 60 : null, terminal_reason: null, updated_at: '2026-08-07T01:16:00Z',
+  pickup_id: pickupId, state, version: 4, assigned_at: '2026-08-07T01:00:00Z', travelling_at: '2026-08-07T01:05:00Z', arrived_at: '2026-08-07T01:15:00Z', merchant_acknowledged_at: state === 'waiting_for_pickup' ? '2026-08-07T01:16:00Z' : null, waiting_duration_seconds: state === 'waiting_for_pickup' ? 60 : null, terminal_reason: null, updated_at: '2026-08-07T01:16:00Z', presentation_action: state === 'courier_assigned' ? 'start_travel' : 'none',
 });
 const custody = (state = 'waiting_for_pickup') => ({
   state, version: 1,
@@ -17,16 +17,23 @@ const custody = (state = 'waiting_for_pickup') => ({
 
 test('strictly parses exact public pickup and Custody responses', () => {
   assert.equal(parseCourierPickup(pickup()).state, 'waiting_for_pickup');
+  assert.equal(parseCourierPickup({ ...pickup('courier_assigned'), travelling_at: null, arrived_at: null, updated_at: '2026-08-07T01:00:00Z' }).presentationAction, 'start_travel');
   assert.equal(parseCourierCustody(custody('order_sealed')).requiredAction, 'verify_pickup');
   assert.throws(() => parseCourierPickup({ ...pickup(), courier_id: pickupId }), CourierHandoffContractError);
   assert.throws(() => parseCourierCustody({ ...custody(), state: 'invented' }), CourierHandoffContractError);
   assert.throws(() => parseCourierPickup({ ...pickup(), pickup_id: 'not-an-id' }), CourierHandoffContractError);
+  assert.throws(() => parseCourierPickup({ ...pickup(), presentation_action: 'invented' }), CourierHandoffContractError);
+  assert.throws(() => parseCourierPickup({ ...pickup(), presentation_action: 'start_travel' }), CourierHandoffContractError);
+  const { presentation_action: _omitted, ...missingAction } = pickup();
+  assert.throws(() => parseCourierPickup(missingAction), CourierHandoffContractError);
   assert.equal(parseCourierCustodyRead({ availability: 'not_started' }), undefined);
   assert.throws(() => parseCourierCustodyRead({ availability: 'not_started', assignment_id: pickupId }), CourierHandoffContractError);
 });
 
 test('projects only truthful lifecycle combinations', () => {
-  assert.equal(projectCourierHandoff(parseCourierPickup({ ...pickup('courier_assigned'), travelling_at: null, arrived_at: null, updated_at: '2026-08-07T01:00:00Z' })).status, 'pickup_current');
+  const current = projectCourierHandoff(parseCourierPickup({ ...pickup('courier_assigned'), travelling_at: null, arrived_at: null, updated_at: '2026-08-07T01:00:00Z' }));
+  assert.equal(current.status, 'pickup_current');
+  assert.equal(current.presentationAction, 'start_travel');
   assert.equal(projectCourierHandoff(parseCourierPickup(pickup()), parseCourierCustody(custody())).status, 'waiting_for_merchant');
   assert.equal(projectCourierHandoff(parseCourierPickup(pickup()), parseCourierCustody(custody('order_sealed'))).status, 'ready_for_handoff');
   assert.equal(projectCourierHandoff(parseCourierPickup(pickup()), parseCourierCustody(custody('courier_custody_accepted'))).status, 'pickup_confirmed');
@@ -37,7 +44,9 @@ test('projects only truthful lifecycle combinations', () => {
 test('service performs bounded sequential reads and accepts only explicit no-Custody evidence', async () => {
   const paths: string[] = [];
   const service = new CourierHandoffStatusService(async (path) => { paths.push(path); return paths.length === 1 ? pickup() : custody('order_sealed'); });
-  assert.equal((await service.load(pickupId)).status, 'ready_for_handoff');
+  const loaded = await service.load(pickupId);
+  assert.equal(loaded.status, 'ready_for_handoff');
+  assert.equal(loaded.presentationAction, 'none');
   assert.deepEqual(paths, [`/mobile/courier-pickups/${pickupId}`, `/mobile/courier-pickups/${pickupId}/custody`]);
   const absent = new CourierHandoffStatusService(async (path) => { if (path.endsWith('/custody')) return { availability: 'not_started' }; return { ...pickup('arrived_at_merchant'), merchant_acknowledged_at: null }; });
   assert.equal((await absent.load(pickupId)).status, 'at_merchant');
@@ -51,6 +60,17 @@ test('assignment loss between sequential reads is never interpreted as missing C
     return { ...pickup('arrived_at_merchant'), merchant_acknowledged_at: null };
   });
   await assert.rejects(replaced.load(pickupId), CourierHandoffNoLongerCurrentError);
+});
+
+test('initial Pickup authority loss is distinct from transient and malformed reads', async () => {
+  for (const status of [403, 404]) {
+    const lost = new CourierHandoffStatusService(async () => { throw new PublicApiError('not_found', status); });
+    await assert.rejects(lost.load(pickupId), CourierHandoffNoLongerCurrentError);
+  }
+  const unavailable = new CourierHandoffStatusService(async () => { throw new PublicApiError('temporarily_unavailable', 503); });
+  await assert.rejects(unavailable.load(pickupId), PublicApiError);
+  const malformed = new CourierHandoffStatusService(async () => ({ availability: 'not_started' }));
+  await assert.rejects(malformed.load(pickupId), CourierHandoffContractError);
 });
 
 test('localized resources remain exactly equivalent', async () => {
