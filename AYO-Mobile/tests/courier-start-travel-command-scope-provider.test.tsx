@@ -2,11 +2,11 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-
 import { Pressable, Text, View } from 'react-native';
 import { useState } from 'react';
 
-import { CourierStartTravelCommandScopeProvider, useStartTravelAttemptCapability, useStartTravelFreshEvidencePublisher } from '@/contexts/courier-start-travel-command-scope';
+import { CourierStartTravelCommandScopeProvider, TrustedCourierHandoffStatus, useStartTravelAttemptCapability } from '@/contexts/courier-start-travel-command-scope';
 import { IdentitySessionProvider, type IdentitySessionServices, useIdentityCommandRuntime, useIdentitySession } from '@/contexts/identity-session';
+import { LanguageProvider } from '@/contexts/language';
 import { OperationalContextProvider, useCourierCommandContext, useOperationalContext } from '@/contexts/operational-context';
 import type { AuthenticatedSession } from '@/domain/auth-session';
-import type { CourierHandoffSnapshot } from '@/domain/courier-handoff-status';
 import type { AuthenticationApi } from '@/services/authentication-api';
 import { type CredentialStore, SecureSessionVault } from '@/services/secure-session';
 import { SessionManager } from '@/services/session-manager';
@@ -18,7 +18,7 @@ const session: AuthenticatedSession = {
   identityId, sessionId, identityKind: 'driver', accessToken: 'a'.repeat(64), refreshToken: 'r'.repeat(64),
   accessExpiresAt: '2099-01-01T01:00:00Z', refreshExpiresAt: '2099-01-02T00:00:00Z',
 };
-const handoff: CourierHandoffSnapshot = Object.freeze({ status: 'pickup_current', pickupVersion: 7, updatedAt: '2026-08-07T06:00:00Z', presentationAction: 'start_travel' });
+const pickupResponse = { pickup_id: pickupId, state: 'courier_assigned', version: 7, assigned_at: '2026-08-07T06:00:00Z', travelling_at: null, arrived_at: null, merchant_acknowledged_at: null, waiting_duration_seconds: null, terminal_reason: null, updated_at: '2026-08-07T06:00:00Z', presentation_action: 'start_travel' };
 
 class MemoryStore implements CredentialStore {
   value: string | null = null;
@@ -39,9 +39,9 @@ function Consumer() {
   const operational = useOperationalContext();
   const commandContext = useCourierCommandContext();
   const capability = useStartTravelAttemptCapability();
-  const evidence = useStartTravelFreshEvidencePublisher();
   const [created, setCreated] = useState('none');
   return <View>
+    {operational.status === 'ready' ? <TrustedCourierHandoffStatus pickupId={pickupId} /> : null}
     <Text testID="identity-status">{publicIdentity.status}</Text>
     <Text testID="operational-status">{operational.status}</Text>
     <Text testID="operational-refreshing">{String(operational.refreshing)}</Text>
@@ -49,10 +49,9 @@ function Consumer() {
     <Text testID="operational-internals">{String('contextGeneration' in operational)}</Text>
     <Text testID="command-identity">{String(commandIdentity.readIdentity()?.identityGeneration ?? 'none')}</Text>
     <Text testID="command-context">{String(commandContext.readCourierContext()?.contextGeneration ?? 'none')}</Text>
+    <Text testID="publisher-exposed">{String('publishFresh' in capability)}</Text>
     <Text testID="created">{created}</Text>
-    <Pressable testID="publish-fresh" onPress={() => { evidence.publishFresh(pickupId, handoff); const attempt = capability.createAttempt(); setCreated(attempt ? `${attempt.pickupId}:${attempt.expectedVersion}` : 'none'); }}><Text>Test publication</Text></Pressable>
-    <Pressable testID="create-current" onPress={() => { const attempt = capability.createAttempt(); setCreated(attempt ? `${attempt.pickupId}:${attempt.expectedVersion}` : 'none'); }}><Text>Test creation</Text></Pressable>
-    <Pressable testID="clear-fresh" onPress={() => evidence.clearFresh(pickupId)}><Text>Test stale presentation</Text></Pressable>
+    <Pressable testID="create-current" onPress={() => { const handle = capability.createAttempt(); setCreated(handle ? `${Object.keys(handle).join(',')}:${handle.isCurrent()}` : 'none'); }}><Text>Test creation</Text></Pressable>
     <Pressable testID="select-personal" onPress={() => operational.selectArea('personal')}><Text>Test selection</Text></Pressable>
     <Pressable testID="invalidate-courier" onPress={() => operational.invalidateCourier(pickupId)}><Text>Test invalidation</Text></Pressable>
   </View>;
@@ -65,24 +64,34 @@ test('mounted trusted provider derives an attempt without exposing raw scope or 
   const api = { activation: async () => ({ activated: true }), signOut: async () => undefined } as unknown as AuthenticationApi;
   const manager = new SessionManager(vault, api);
   const contextRead = deferred<unknown>();
-  const services: IdentitySessionServices = { api: Promise.resolve(api), manager: Promise.resolve(manager), read: async () => contextRead.promise };
-  await act(() => { render(<IdentitySessionProvider services={services}><OperationalContextProvider><CourierStartTravelCommandScopeProvider><Consumer /></CourierStartTravelCommandScopeProvider></OperationalContextProvider></IdentitySessionProvider>); });
+  let pickupReads = 0;
+  const services: IdentitySessionServices = { api: Promise.resolve(api), manager: Promise.resolve(manager), read: async (path) => {
+    if (path === '/api/mobile/context') return contextRead.promise;
+    if (path.endsWith('/custody')) return { availability: 'not_started' };
+    pickupReads += 1;
+    if (pickupReads > 1) throw new Error('offline');
+    return pickupResponse;
+  } };
+  await act(() => { render(<IdentitySessionProvider services={services}><OperationalContextProvider><CourierStartTravelCommandScopeProvider><LanguageProvider><Consumer /></LanguageProvider></CourierStartTravelCommandScopeProvider></OperationalContextProvider></IdentitySessionProvider>); });
   await waitFor(() => expect(screen.getByTestId('identity-status').props.children).toBe('authenticated'));
   await act(async () => { contextRead.resolve({ personal: { available: true }, merchants: [], courier: { pickup_id: pickupId, availability: 'current_pickup' } }); });
   await waitFor(() => { expect(screen.getByTestId('operational-status').props.children).toBe('ready'); expect(screen.getByTestId('operational-refreshing').props.children).toBe('false'); });
   expect(screen.getByTestId('created').props.children).toBe('none');
   expect(screen.getByTestId('identity-internals').props.children).toBe('false');
   expect(screen.getByTestId('operational-internals').props.children).toBe('false');
+  expect(screen.getByTestId('publisher-exposed').props.children).toBe('false');
   expect(screen.getByTestId('command-identity').props.children).not.toBe('none');
   expect(screen.getByTestId('command-context').props.children).not.toBe('none');
-  await act(() => { fireEvent.press(screen.getByTestId('publish-fresh')); });
-  await waitFor(() => expect(screen.getByTestId('created').props.children).toBe(`${pickupId}:7`));
+  await waitFor(() => expect(screen.getByText('Pickup work is current')).toBeTruthy());
+  await act(() => { fireEvent.press(screen.getByTestId('create-current')); });
+  await waitFor(() => expect(screen.getByTestId('created').props.children).toBe('isCurrent:true'));
   const contextGeneration = screen.getByTestId('command-context').props.children;
   await act(() => { fireEvent.press(screen.getByTestId('select-personal')); });
   expect(screen.getByTestId('command-context').props.children).toBe(contextGeneration);
-  await act(() => { fireEvent.press(screen.getByTestId('clear-fresh')); fireEvent.press(screen.getByTestId('create-current')); });
+  await act(() => { fireEvent.press(screen.getByLabelText('Refresh')); });
+  await waitFor(() => expect(screen.getByText('Information may be out of date')).toBeTruthy());
+  await act(() => { fireEvent.press(screen.getByTestId('create-current')); });
   await waitFor(() => expect(screen.getByTestId('created').props.children).toBe('none'));
-  await act(() => { fireEvent.press(screen.getByTestId('publish-fresh')); });
   await act(() => { fireEvent.press(screen.getByTestId('invalidate-courier')); fireEvent.press(screen.getByTestId('create-current')); });
   await waitFor(() => expect(screen.getByTestId('created').props.children).toBe('none'));
 });

@@ -1,26 +1,32 @@
 import { createContext, type PropsWithChildren, useContext, useMemo } from 'react';
 
+import { CourierHandoffStatus } from '@/components/courier-handoff-status';
 import { useIdentityCommandRuntime } from '@/contexts/identity-session';
 import { useCourierCommandContext } from '@/contexts/operational-context';
 import type { CourierHandoffSnapshot } from '@/domain/courier-handoff-status';
-import type { StartTravelAttempt } from '@/domain/courier-start-travel-command';
-import { CourierStartTravelCommandScope } from '@/services/courier-start-travel-command-scope';
+import { CourierStartTravelCommandScope, type StartTravelAttemptHandle } from '@/services/courier-start-travel-command-scope';
 
-type StartTravelAttemptCapability = Readonly<{ createAttempt(): StartTravelAttempt | undefined }>;
-type FreshEvidencePublisher = Readonly<{
+type StartTravelAttemptCapability = Readonly<{
+  canCreateAttempt(): boolean;
+  createAttempt(): StartTravelAttemptHandle | undefined;
+}>;
+type StartTravelEvidenceIntegration = Readonly<{
   publishFresh(pickupId: string, snapshot: CourierHandoffSnapshot): void;
   clearFresh(pickupId: string): void;
 }>;
 
 const CapabilityContext = createContext<StartTravelAttemptCapability | undefined>(undefined);
-const EvidenceContext = createContext<FreshEvidencePublisher | undefined>(undefined);
+const EvidenceContext = createContext<StartTravelEvidenceIntegration | undefined>(undefined);
 
 export function CourierStartTravelCommandScopeProvider({ children }: PropsWithChildren) {
   const identity = useIdentityCommandRuntime();
   const courier = useCourierCommandContext();
   const scope = useMemo(() => new CourierStartTravelCommandScope(identity.readIdentity, courier.readCourierContext), [courier.readCourierContext, identity.readIdentity]);
-  const capability = useMemo<StartTravelAttemptCapability>(() => ({ createAttempt: () => scope.createForCurrentPickup() }), [scope]);
-  const evidence = useMemo<FreshEvidencePublisher>(() => ({
+  const capability = useMemo<StartTravelAttemptCapability>(() => ({
+    canCreateAttempt: () => scope.currentScope() !== undefined,
+    createAttempt: () => scope.createForCurrentPickup(),
+  }), [scope]);
+  const evidence = useMemo<StartTravelEvidenceIntegration>(() => ({
     publishFresh: (pickupId, snapshot) => scope.publishFresh(pickupId, snapshot),
     clearFresh: (pickupId) => scope.clearFresh(pickupId),
   }), [scope]);
@@ -34,9 +40,9 @@ export function useStartTravelAttemptCapability() {
   return value;
 }
 
-/** Infrastructure-only handoff evidence publication; not a presentation API. */
-export function useStartTravelFreshEvidencePublisher() {
-  const value = useContext(EvidenceContext);
-  if (!value) throw new Error('courier_start_travel_scope_provider_required');
-  return value;
+/** Authenticated Handoff integration owns evidence publication; ordinary descendants receive no writer. */
+export function TrustedCourierHandoffStatus({ pickupId }: { pickupId: string }) {
+  const evidence = useContext(EvidenceContext);
+  if (!evidence) throw new Error('courier_start_travel_scope_provider_required');
+  return <CourierHandoffStatus pickupId={pickupId} commandEvidence={evidence} />;
 }

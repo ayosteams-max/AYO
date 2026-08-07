@@ -13,11 +13,13 @@ type FreshHandoffEvidence = Readonly<{
   contextGeneration: number;
   snapshot: CourierHandoffSnapshot;
 }>;
+export type StartTravelAttemptHandle = Readonly<{ isCurrent(): boolean }>;
 
 export class CourierStartTravelCommandScope {
   private readonly readIdentity: IdentityReader;
   private readonly readCourierContext: CourierContextReader;
   private readonly createAttempt: AttemptFactory;
+  private readonly attempts = new WeakMap<StartTravelAttemptHandle, StartTravelAttempt>();
   private freshEvidence?: FreshHandoffEvidence;
 
   constructor(readIdentity: IdentityReader, readCourierContext: CourierContextReader, createAttempt: AttemptFactory = createStartTravelAttempt) {
@@ -45,9 +47,18 @@ export class CourierStartTravelCommandScope {
     if (this.freshEvidence?.pickupId === pickupId.toLowerCase()) this.freshEvidence = undefined;
   }
 
-  createForCurrentPickup(): StartTravelAttempt | undefined {
+  createForCurrentPickup(): StartTravelAttemptHandle | undefined {
     const scope = this.currentScope();
-    return scope ? this.createAttempt(scope) : undefined;
+    if (!scope) return undefined;
+    const attempt = this.createAttempt(scope);
+    const handle = Object.freeze({ isCurrent: () => this.attemptIsCurrent(attempt) });
+    this.attempts.set(handle, attempt);
+    return handle;
+  }
+
+  /** Trusted command infrastructure only; presentation receives the handle, never this scope owner. */
+  resolveForTrustedUse(handle: StartTravelAttemptHandle): StartTravelAttempt | undefined {
+    return this.attempts.get(handle);
   }
 
   attemptIsCurrent(attempt: StartTravelAttempt): boolean {

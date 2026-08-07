@@ -11,7 +11,7 @@ const sessionA = '33333333-3333-4333-8333-333333333333';
 const sessionB = '44444444-4444-4444-8444-444444444444';
 const pickupA = '55555555-5555-4555-8555-555555555555';
 const pickupB = '66666666-6666-4666-8666-666666666666';
-const key = '77777777-7777-4777-8777-777777777777';
+const keys = ['77777777-7777-4777-8777-777777777777', '88888888-8888-4888-8888-888888888888'] as const;
 
 const handoff = (overrides: Partial<CourierHandoffSnapshot> = {}): CourierHandoffSnapshot => Object.freeze({
   status: 'pickup_current',
@@ -22,29 +22,47 @@ const handoff = (overrides: Partial<CourierHandoffSnapshot> = {}): CourierHandof
 });
 
 function fixture() {
+  let creations = 0;
   let identity = { identityId: identityA, sessionId: sessionA, identityGeneration: 1 };
   let courier: { pickupId: string; contextGeneration: number; identityGeneration: number } | undefined = { pickupId: pickupA, contextGeneration: 1, identityGeneration: 1 };
   const scope = new CourierStartTravelCommandScope(
     () => identity,
     () => courier,
-    (value) => createStartTravelAttempt(value, () => key),
+    (value) => createStartTravelAttempt(value, () => keys[creations++] ?? keys[1]),
   );
   return {
     scope,
     setIdentity: (next: typeof identity) => { identity = next; },
     setCourier: (next: typeof courier) => { courier = next; },
+    creations: () => creations,
   };
 }
 
-test('fresh matching evidence creates one immutable attempt from trusted scope', () => {
-  const { scope } = fixture();
+test('presentation receives an opaque handle while trusted infrastructure retains the exact attempt', () => {
+  const { scope, creations } = fixture();
   scope.publishFresh(pickupA, handoff());
-  const attempt = scope.createForCurrentPickup();
+  const handle = scope.createForCurrentPickup();
+  assert.ok(handle);
+  assert.deepEqual(Object.keys(handle), ['isCurrent']);
+  for (const field of ['sessionId', 'identityGeneration', 'contextGeneration', 'idempotencyKey']) assert.equal(field in handle, false);
+  const attempt = scope.resolveForTrustedUse(handle);
   assert.deepEqual(attempt, {
-    action: 'start_travel', pickupId: pickupA, expectedVersion: 4, idempotencyKey: key,
+    action: 'start_travel', pickupId: pickupA, expectedVersion: 4, idempotencyKey: keys[0],
     identityId: identityA, sessionId: sessionA, identityGeneration: 1, contextGeneration: 1,
   });
-  assert.equal(Object.isFrozen(attempt), true);
+  assert.equal(creations(), 1);
+  assert.equal(handle.isCurrent(), true);
+  assert.equal(scope.resolveForTrustedUse(handle), attempt);
+  assert.equal(creations(), 1);
+});
+
+test('separate intents create separate opaque handles and internal keys', () => {
+  const { scope, creations } = fixture();
+  scope.publishFresh(pickupA, handoff());
+  const first = scope.createForCurrentPickup(); const second = scope.createForCurrentPickup();
+  assert.ok(first); assert.ok(second);
+  assert.notEqual(scope.resolveForTrustedUse(first)?.idempotencyKey, scope.resolveForTrustedUse(second)?.idempotencyKey);
+  assert.equal(creations(), 2);
 });
 
 test('stale, unavailable, non-presented, and mismatched evidence fail closed', () => {
@@ -61,47 +79,57 @@ test('stale, unavailable, non-presented, and mismatched evidence fail closed', (
 test('attempt version is taken only from the exact fresh handoff evidence', () => {
   const { scope } = fixture();
   scope.publishFresh(pickupA, handoff({ pickupVersion: 9 }));
-  assert.equal(scope.createForCurrentPickup()?.expectedVersion, 9);
+  const handle = scope.createForCurrentPickup(); assert.ok(handle);
+  assert.equal(scope.resolveForTrustedUse(handle)?.expectedVersion, 9);
 });
 
 test('identity and session replacement invalidate the old attempt', () => {
   const fixtureValue = fixture();
   fixtureValue.scope.publishFresh(pickupA, handoff());
-  const attempt = fixtureValue.scope.createForCurrentPickup();
-  assert.ok(attempt);
+  const handle = fixtureValue.scope.createForCurrentPickup();
+  assert.ok(handle);
   fixtureValue.setIdentity({ identityId: identityA, sessionId: sessionB, identityGeneration: 2 });
-  assert.equal(fixtureValue.scope.attemptIsCurrent(attempt), false);
+  assert.equal(handle.isCurrent(), false);
   fixtureValue.setIdentity({ identityId: identityB, sessionId: sessionB, identityGeneration: 3 });
-  assert.equal(fixtureValue.scope.attemptIsCurrent(attempt), false);
+  assert.equal(handle.isCurrent(), false);
 });
 
 test('courier invalidation and Pickup replacement invalidate the old attempt', () => {
   const fixtureValue = fixture();
   fixtureValue.scope.publishFresh(pickupA, handoff());
-  const attempt = fixtureValue.scope.createForCurrentPickup();
-  assert.ok(attempt);
+  const handle = fixtureValue.scope.createForCurrentPickup();
+  assert.ok(handle);
   fixtureValue.setCourier(undefined);
-  assert.equal(fixtureValue.scope.attemptIsCurrent(attempt), false);
+  assert.equal(handle.isCurrent(), false);
   fixtureValue.setCourier({ pickupId: pickupB, contextGeneration: 2, identityGeneration: 1 });
-  assert.equal(fixtureValue.scope.attemptIsCurrent(attempt), false);
+  assert.equal(handle.isCurrent(), false);
+});
+
+test('fresh evidence withdrawal invalidates the existing opaque handle without regenerating it', () => {
+  const { scope, creations } = fixture();
+  scope.publishFresh(pickupA, handoff());
+  const handle = scope.createForCurrentPickup(); assert.ok(handle);
+  scope.clearFresh(pickupA);
+  assert.equal(handle.isCurrent(), false);
+  assert.equal(creations(), 1);
 });
 
 test('same courier refresh and presentation-only selection preserve command scope', () => {
   const { scope } = fixture();
   scope.publishFresh(pickupA, handoff());
-  const attempt = scope.createForCurrentPickup();
-  assert.ok(attempt);
+  const handle = scope.createForCurrentPickup();
+  assert.ok(handle);
   // Selection is deliberately absent from the trusted readers.
   scope.publishFresh(pickupA, handoff());
-  assert.equal(scope.attemptIsCurrent(attempt), true);
+  assert.equal(handle.isCurrent(), true);
 });
 
 test('creation and dispatch validation use the same canonical current-scope source', () => {
   const fixtureValue = fixture();
   fixtureValue.scope.publishFresh(pickupA, handoff());
-  const attempt = fixtureValue.scope.createForCurrentPickup();
-  assert.ok(attempt);
-  assert.equal(fixtureValue.scope.attemptIsCurrent(attempt), true);
+  const handle = fixtureValue.scope.createForCurrentPickup();
+  assert.ok(handle);
+  assert.equal(handle.isCurrent(), true);
   fixtureValue.scope.publishFresh(pickupA, handoff({ pickupVersion: 5 }));
-  assert.equal(fixtureValue.scope.attemptIsCurrent(attempt), false);
+  assert.equal(handle.isCurrent(), false);
 });

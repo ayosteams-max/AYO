@@ -5,17 +5,19 @@ import { ActivityIndicator, Pressable, SafeAreaView, ScrollView, StyleSheet, Tex
 import { useAuthenticatedRead } from '@/contexts/identity-session';
 import { useLanguage } from '@/contexts/language';
 import { useOperationalContext } from '@/contexts/operational-context';
-import { useStartTravelFreshEvidencePublisher } from '@/contexts/courier-start-travel-command-scope';
 import { CourierHandoffConflictError, CourierHandoffContractError, CourierHandoffNoLongerCurrentError, type CourierHandoffSnapshot } from '@/domain/courier-handoff-status';
 import { courierHandoffCopy, guidanceKey } from '@/localization/courier-handoff-status';
 import { CourierHandoffStatusService } from '@/services/courier-handoff-status';
 
 type ViewStatus = 'loading' | 'fresh' | 'stale' | 'unavailable' | 'malformed' | 'conflicting';
+type StartTravelEvidenceIntegration = Readonly<{
+  publishFresh(pickupId: string, snapshot: CourierHandoffSnapshot): void;
+  clearFresh(pickupId: string): void;
+}>;
 
-export function CourierHandoffStatus({ pickupId }: { pickupId: string }) {
+export function CourierHandoffStatus({ pickupId, commandEvidence }: { pickupId: string; commandEvidence: StartTravelEvidenceIntegration }) {
   const read = useAuthenticatedRead();
   const operational = useOperationalContext();
-  const commandEvidence = useStartTravelFreshEvidencePublisher();
   const invalidateCourier = operational.invalidateCourier;
   const { locale } = useLanguage();
   const copy = courierHandoffCopy[locale];
