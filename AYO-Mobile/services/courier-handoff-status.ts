@@ -6,7 +6,12 @@ export class CourierHandoffStatusService {
   private readonly read: AuthenticatedRead;
   constructor(read: AuthenticatedRead) { this.read = read; }
   async load(pickupId: string, signal?: AbortSignal): Promise<CourierHandoffSnapshot> {
-    const pickup = parseCourierPickup(await this.read(`/mobile/courier-pickups/${encodeURIComponent(pickupId)}`, signal));
+    let pickup: ReturnType<typeof parseCourierPickup>;
+    try { pickup = parseCourierPickup(await this.read(`/mobile/courier-pickups/${encodeURIComponent(pickupId)}`, signal)); }
+    catch (error) {
+      if (error instanceof PublicApiError && (error.status === 403 || error.status === 404)) throw new CourierHandoffNoLongerCurrentError();
+      throw error;
+    }
     if (pickup.pickupId !== pickupId.toLowerCase()) throw new CourierHandoffConflictError();
     if (signal?.aborted) throw new PublicApiError('request_cancelled');
     let custody;

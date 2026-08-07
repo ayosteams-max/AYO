@@ -42,7 +42,9 @@ const session: AuthenticatedSession = {
 const personal = { personal: { available: true }, merchants: [], courier: null };
 const merchant = { personal: null, merchants: [{ merchant_id: '33333333-3333-4333-8333-333333333333', display_name: 'AYO Market', availability: 'available' }], courier: null };
 const courier = { personal: null, merchants: [], courier: { pickup_id: '44444444-4444-4444-8444-444444444444', availability: 'current_pickup' } };
+const personalAndCourier = { personal: { available: true }, merchants: [], courier: courier.courier };
 const pickupStatus = { pickup_id: '44444444-4444-4444-8444-444444444444', state: 'waiting_for_pickup', version: 4, assigned_at: '2026-08-07T01:00:00Z', travelling_at: '2026-08-07T01:05:00Z', arrived_at: '2026-08-07T01:15:00Z', merchant_acknowledged_at: '2026-08-07T01:16:00Z', waiting_duration_seconds: 60, terminal_reason: null, updated_at: '2026-08-07T01:16:00Z', presentation_action: 'none' };
+const currentPickupStatus = { ...pickupStatus, state: 'courier_assigned', travelling_at: null, arrived_at: null, merchant_acknowledged_at: null, waiting_duration_seconds: null, updated_at: '2026-08-07T01:00:00Z', presentation_action: 'start_travel' };
 const arrivedPickupStatus = { ...pickupStatus, state: 'arrived_at_merchant', merchant_acknowledged_at: null, waiting_duration_seconds: null, updated_at: '2026-08-07T01:15:00Z' };
 const custodyStatus = { state: 'order_sealed', version: 2, required_action: 'verify_pickup', waiting_for: 'courier', recovery: null, challenge_available: true, challenge_expires_at: '2026-08-07T01:30:00Z', supported_verification_methods: ['qr_code', 'barcode'] };
 
@@ -269,7 +271,7 @@ test('real courier entry renders fresh status, discloses stale refresh, recovers
   expect(rendered).not.toContain('66666666-6666-4666-8666-666666666666');
 });
 
-test('sign-out clears the real courier status while its pickup read is pending and stale completion cannot republish it', async () => {
+test('sign-out clears courier status and a late Pickup authority denial cannot affect the signed-out state', async () => {
   const context = deferred<unknown>(); const pickup = deferred<unknown>(); const remoteSignOut = deferred<void>();
   const mounted = await mount({ initial: session, reads: [context, pickup], signOut: remoteSignOut.promise, renderShell: true });
   await act(async () => { context.resolve(courier); });
@@ -279,7 +281,7 @@ test('sign-out clears the real courier status while its pickup read is pending a
   await waitFor(() => expect(screen.getByTestId('identity-status').props.children).toBe('signed_out'));
   expect(screen.queryByText('Handoff status')).toBeNull();
   expect(screen.getByTestId('redirect-target').props.children).toBe('/auth');
-  await act(async () => { pickup.resolve(pickupStatus); await Promise.resolve(); });
+  await act(async () => { pickup.reject(new PublicApiError('not_found', 404)); await Promise.resolve(); });
   expect(mounted.readCount()).toBe(2);
   expect(screen.queryByText('Ready for handoff')).toBeNull();
   remoteSignOut.resolve();
@@ -301,4 +303,69 @@ test('assignment replacement between Pickup and Custody reads revokes the courie
   const rendered = JSON.stringify(screen.toJSON());
   expect(rendered).not.toContain('44444444-4444-4444-8444-444444444444');
   expect(rendered).not.toContain('At the merchant');
+});
+
+test('initial Pickup authority loss clears start-travel status and the only courier locator', async () => {
+  const context = deferred<unknown>(); const pickup = deferred<unknown>(); const noCustody = deferred<unknown>(); const lost = deferred<unknown>();
+  const mounted = await mount({ initial: session, reads: [context, pickup, noCustody, lost], renderShell: true });
+  await act(async () => { context.resolve(courier); });
+  await waitFor(() => expect(mounted.readCount()).toBe(2));
+  await act(async () => { pickup.resolve(currentPickupStatus); });
+  await waitFor(() => expect(mounted.readCount()).toBe(3));
+  await act(async () => { noCustody.resolve({ availability: 'not_started' }); });
+  await waitFor(() => expect(screen.getByText('Pickup work is current')).toBeTruthy());
+
+  await act(async () => { fireEvent.press(screen.getByLabelText('Refresh')); });
+  await waitFor(() => expect(mounted.readCount()).toBe(4));
+  await act(async () => { lost.reject(new PublicApiError('not_found', 404)); });
+  await waitFor(() => expect(screen.getByText('No available area')).toBeTruthy());
+  expect(screen.queryByText('Handoff status')).toBeNull();
+  expect(screen.getByTestId('area-kinds').props.children).toBe('');
+  expect(screen.getByTestId('selected-area').props.children).toBe('none');
+  const rendered = JSON.stringify(screen.toJSON());
+  expect(rendered).not.toContain('44444444-4444-4444-8444-444444444444');
+  expect(rendered).not.toContain('Pickup work is current');
+});
+
+test('initial Pickup authority loss reconciles to another independently authorized area', async () => {
+  const context = deferred<unknown>(); const pickup = deferred<unknown>(); const noCustody = deferred<unknown>(); const lost = deferred<unknown>();
+  const mounted = await mount({ initial: session, reads: [context, pickup, noCustody, lost], renderShell: true });
+  await act(async () => { context.resolve(personalAndCourier); });
+  await waitFor(() => expect(screen.getByLabelText('Deliveries. Available')).toBeTruthy());
+  await act(async () => { fireEvent.press(screen.getByLabelText('Deliveries. Available')); });
+  await waitFor(() => expect(mounted.readCount()).toBe(2));
+  await act(async () => { pickup.resolve(currentPickupStatus); });
+  await waitFor(() => expect(mounted.readCount()).toBe(3));
+  await act(async () => { noCustody.resolve({ availability: 'not_started' }); });
+  await waitFor(() => expect(screen.getByText('Pickup work is current')).toBeTruthy());
+
+  await act(async () => { fireEvent.press(screen.getByLabelText('Refresh')); });
+  await waitFor(() => expect(mounted.readCount()).toBe(4));
+  await act(async () => { lost.reject(new PublicApiError('not_found', 404)); });
+  await waitFor(() => expect(screen.getByLabelText('Choose destination')).toBeTruthy());
+  expect(screen.queryByText('Handoff status')).toBeNull();
+  expect(screen.getByTestId('area-kinds').props.children).toBe('personal');
+  expect(screen.getByTestId('selected-area').props.children).toBe('personal');
+});
+
+test('late Pickup authority loss cannot revoke a newer operational context', async () => {
+  const context = deferred<unknown>(); const pickup = deferred<unknown>(); const noCustody = deferred<unknown>(); const oldPickup = deferred<unknown>(); const replacementContext = deferred<unknown>();
+  const mounted = await mount({ initial: session, reads: [context, pickup, noCustody, oldPickup, replacementContext], renderShell: true });
+  await act(async () => { context.resolve(courier); });
+  await waitFor(() => expect(mounted.readCount()).toBe(2));
+  await act(async () => { pickup.resolve(currentPickupStatus); });
+  await waitFor(() => expect(mounted.readCount()).toBe(3));
+  await act(async () => { noCustody.resolve({ availability: 'not_started' }); });
+  await waitFor(() => expect(screen.getByText('Pickup work is current')).toBeTruthy());
+
+  await act(async () => { fireEvent.press(screen.getByLabelText('Refresh')); });
+  await waitFor(() => expect(mounted.readCount()).toBe(4));
+  await act(async () => { fireEvent.press(screen.getByTestId('refresh')); });
+  await waitFor(() => expect(mounted.readCount()).toBe(5));
+  await act(async () => { replacementContext.resolve(personal); });
+  await waitFor(() => expect(screen.getByLabelText('Choose destination')).toBeTruthy());
+  await act(async () => { oldPickup.reject(new PublicApiError('not_found', 404)); await Promise.resolve(); });
+  expect(screen.getByTestId('area-kinds').props.children).toBe('personal');
+  expect(screen.getByTestId('selected-area').props.children).toBe('personal');
+  expect(screen.getByLabelText('Choose destination')).toBeTruthy();
 });

@@ -62,6 +62,17 @@ test('assignment loss between sequential reads is never interpreted as missing C
   await assert.rejects(replaced.load(pickupId), CourierHandoffNoLongerCurrentError);
 });
 
+test('initial Pickup authority loss is distinct from transient and malformed reads', async () => {
+  for (const status of [403, 404]) {
+    const lost = new CourierHandoffStatusService(async () => { throw new PublicApiError('not_found', status); });
+    await assert.rejects(lost.load(pickupId), CourierHandoffNoLongerCurrentError);
+  }
+  const unavailable = new CourierHandoffStatusService(async () => { throw new PublicApiError('temporarily_unavailable', 503); });
+  await assert.rejects(unavailable.load(pickupId), PublicApiError);
+  const malformed = new CourierHandoffStatusService(async () => ({ availability: 'not_started' }));
+  await assert.rejects(malformed.load(pickupId), CourierHandoffContractError);
+});
+
 test('localized resources remain exactly equivalent', async () => {
   const { courierHandoffCopy } = await import('../localization/courier-handoff-status.ts');
   assert.deepEqual(Object.keys(courierHandoffCopy.en), Object.keys(courierHandoffCopy.am));
