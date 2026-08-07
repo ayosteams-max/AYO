@@ -16,6 +16,76 @@ const scope = (overrides: Partial<CourierCommandScope> = {}): CourierCommandScop
 const result = (overrides: Record<string, unknown> = {}) => ({ pickup_id: pickupA, state: 'travelling_to_merchant', version: 5, assigned_at: '2026-08-07T01:00:00Z', travelling_at: '2026-08-07T01:01:00Z', arrived_at: null, merchant_acknowledged_at: null, waiting_duration_seconds: null, terminal_reason: null, updated_at: '2026-08-07T01:01:00Z', ...overrides });
 const pickup = (state: 'courier_assigned' | 'travelling_to_merchant', version: number) => ({ pickup_id: pickupA, state, version, assigned_at: '2026-08-07T01:00:00Z', travelling_at: state === 'travelling_to_merchant' ? '2026-08-07T01:01:00Z' : null, arrived_at: null, merchant_acknowledged_at: null, waiting_duration_seconds: null, terminal_reason: null, updated_at: state === 'travelling_to_merchant' ? '2026-08-07T01:01:00Z' : '2026-08-07T01:00:00Z', presentation_action: state === 'courier_assigned' ? 'start_travel' : 'none' });
 
+test('context change while session restore is pending prevents network dispatch', async () => {
+  const attempt = createStartTravelAttempt(scope(), () => keyA); let current = scope(); let resolveRestore!: (value: unknown) => void; let posts = 0;
+  const sessions = { restore: () => new Promise((resolve) => { resolveRestore = resolve; }), forceRefresh: async () => undefined } as never;
+  const transport = new CourierStartTravelTransport('https://api.example.test', sessions, async () => { posts += 1; return new Response(JSON.stringify(result()), { status: 200, headers: { 'Content-Type': 'application/json' } }); });
+  const service = new CourierStartTravelCommandService(transport, async () => pickup('courier_assigned', 4), () => current);
+  const pending = service.submit(attempt); await Promise.resolve(); current = scope({ contextGeneration: 10 });
+  resolveRestore({ identityId: identityA, sessionId: sessionA, accessToken: 't'.repeat(32) });
+  await assert.rejects(pending, StartTravelAttemptInvalidError); assert.equal(posts, 0);
+});
+
+test('sign-out and identity generation change while restore is pending prevent dispatch', async () => {
+  for (const next of [undefined, scope({ identityGeneration: 8 })]) {
+    const attempt = createStartTravelAttempt(scope(), () => keyA); let current: CourierCommandScope | undefined = scope(); let resolveRestore!: (value: unknown) => void; let posts = 0;
+    const sessions = { restore: () => new Promise((resolve) => { resolveRestore = resolve; }), forceRefresh: async () => undefined } as never;
+    const transport = new CourierStartTravelTransport('https://api.example.test', sessions, async () => { posts += 1; return new Response(JSON.stringify(result()), { status: 200 }); });
+    const service = new CourierStartTravelCommandService(transport, async () => pickup('courier_assigned', 4), () => current);
+    const pending = service.submit(attempt); await Promise.resolve(); current = next;
+    resolveRestore({ identityId: identityA, sessionId: sessionA, accessToken: 't'.repeat(32) });
+    await assert.rejects(pending, StartTravelAttemptInvalidError); assert.equal(posts, 0);
+  }
+});
+
+test('scope change during token refresh prevents a second dispatch', async () => {
+  const attempt = createStartTravelAttempt(scope(), () => keyA); let current = scope(); let resolveRefresh!: (value: unknown) => void; const keys: string[] = [];
+  const sessions = { restore: async () => ({ identityId: identityA, sessionId: sessionA, accessToken: 'a'.repeat(32) }), forceRefresh: () => new Promise((resolve) => { resolveRefresh = resolve; }) } as never;
+  const transport = new CourierStartTravelTransport('https://api.example.test', sessions, async (_input, init) => { keys.push((init?.headers as Record<string, string>)['Idempotency-Key']); return new Response('', { status: 401 }); });
+  const service = new CourierStartTravelCommandService(transport, async () => pickup('courier_assigned', 4), () => current);
+  const pending = service.submit(attempt); while (!resolveRefresh) await Promise.resolve(); current = scope({ contextGeneration: 10 });
+  resolveRefresh({ identityId: identityA, sessionId: sessionA, accessToken: 'b'.repeat(32) });
+  await assert.rejects(pending, StartTravelAttemptInvalidError); assert.deepEqual(keys, [keyA]);
+});
+
+test('current scope permits one refreshed-token retry with the same key', async () => {
+  const attempt = createStartTravelAttempt(scope(), () => keyA); const keys: string[] = []; let calls = 0;
+  const sessions = { restore: async () => ({ identityId: identityA, sessionId: sessionA, accessToken: 'a'.repeat(32) }), forceRefresh: async () => ({ identityId: identityA, sessionId: sessionA, accessToken: 'b'.repeat(32) }) } as never;
+  const transport = new CourierStartTravelTransport('https://api.example.test', sessions, async (_input, init) => { keys.push((init?.headers as Record<string, string>)['Idempotency-Key']); return ++calls === 1 ? new Response('', { status: 401 }) : new Response(JSON.stringify(result()), { status: 200 }); });
+  const service = new CourierStartTravelCommandService(transport, async () => pickup('courier_assigned', 4), () => scope());
+  assert.equal((await service.submit(attempt)).state, 'travelling_to_merchant'); assert.deepEqual(keys, [keyA, keyA]);
+});
+
+test('already-aborted signal is invalid before dispatch while in-flight uncertainty remains unknown', async () => {
+  const attempt = createStartTravelAttempt(scope(), () => keyA); const controller = new AbortController(); controller.abort(); let posts = 0;
+  const sessions = { restore: async () => ({ identityId: identityA, sessionId: sessionA, accessToken: 'a'.repeat(32) }), forceRefresh: async () => undefined } as never;
+  const transport = new CourierStartTravelTransport('https://api.example.test', sessions, async () => { posts += 1; throw new Error('network'); });
+  const service = new CourierStartTravelCommandService(transport, async () => pickup('courier_assigned', 4), () => scope());
+  await assert.rejects(service.submit(attempt, controller.signal), StartTravelAttemptInvalidError); assert.equal(posts, 0);
+  const uncertain = new CourierStartTravelCommandService({ post: async () => { throw new PublicApiError('temporarily_unavailable'); } }, async () => pickup('courier_assigned', 4), () => scope());
+  await assert.rejects(uncertain.submit(attempt), StartTravelOutcomeUnknownError);
+});
+
+test('abort during restore or refresh prevents the next not-yet-issued dispatch', async () => {
+  const attempt = createStartTravelAttempt(scope(), () => keyA);
+  {
+    const controller = new AbortController(); let resolveRestore!: (value: unknown) => void; let posts = 0;
+    const sessions = { restore: () => new Promise((resolve) => { resolveRestore = resolve; }), forceRefresh: async () => undefined } as never;
+    const transport = new CourierStartTravelTransport('https://api.example.test', sessions, async () => { posts += 1; return new Response(JSON.stringify(result()), { status: 200 }); });
+    const pending = new CourierStartTravelCommandService(transport, async () => pickup('courier_assigned', 4), () => scope()).submit(attempt, controller.signal);
+    await Promise.resolve(); controller.abort(); resolveRestore({ identityId: identityA, sessionId: sessionA, accessToken: 'a'.repeat(32) });
+    await assert.rejects(pending, StartTravelAttemptInvalidError); assert.equal(posts, 0);
+  }
+  {
+    const controller = new AbortController(); let resolveRefresh!: (value: unknown) => void; let posts = 0;
+    const sessions = { restore: async () => ({ identityId: identityA, sessionId: sessionA, accessToken: 'a'.repeat(32) }), forceRefresh: () => new Promise((resolve) => { resolveRefresh = resolve; }) } as never;
+    const transport = new CourierStartTravelTransport('https://api.example.test', sessions, async () => { posts += 1; return new Response('', { status: 401 }); });
+    const pending = new CourierStartTravelCommandService(transport, async () => pickup('courier_assigned', 4), () => scope()).submit(attempt, controller.signal);
+    while (!resolveRefresh) await Promise.resolve(); controller.abort(); resolveRefresh({ identityId: identityA, sessionId: sessionA, accessToken: 'b'.repeat(32) });
+    await assert.rejects(pending, StartTravelAttemptInvalidError); assert.equal(posts, 1);
+  }
+});
+
 test('secure command attempt is opaque, bounded, immutable, and each new intent is distinct', () => {
   const first = createStartTravelAttempt(scope(), () => keyA); const second = createStartTravelAttempt(scope(), () => keyB);
   assert.equal(first.idempotencyKey.length, 36); assert.notEqual(first.idempotencyKey, second.idempotencyKey);
@@ -64,7 +134,7 @@ test('authenticated transport sends the minimal canonical request and stable key
   const attempt = createStartTravelAttempt(scope(), () => keyA); let captured: [string, RequestInit] | undefined;
   const sessions = { restore: async () => ({ identityId: identityA, sessionId: sessionA, accessToken: 't'.repeat(32) }), forceRefresh: async () => undefined } as never;
   const transport = new CourierStartTravelTransport('https://api.example.test', sessions, async (input, init) => { captured = [String(input), init ?? {}]; return new Response(JSON.stringify(result()), { status: 200, headers: { 'Content-Type': 'application/json' } }); });
-  await transport.post(attempt); assert.equal(captured?.[0], `https://api.example.test/mobile/courier-pickups/${pickupA}/actions`);
+  await transport.post(attempt, () => true); assert.equal(captured?.[0], `https://api.example.test/mobile/courier-pickups/${pickupA}/actions`);
   assert.equal((captured?.[1].headers as Record<string, string>)['Idempotency-Key'], keyA);
   assert.deepEqual(JSON.parse(String(captured?.[1].body)), { expected_version: 4, action: 'start_travel' });
 });

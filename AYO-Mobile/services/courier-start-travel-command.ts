@@ -4,19 +4,23 @@ import type { SessionManager } from './session-manager.ts';
 
 type ScopeReader = () => CourierCommandScope | undefined;
 type AuthenticatedRead = (path: string, signal?: AbortSignal) => Promise<unknown>;
+type DispatchGuard = () => boolean;
 
 export class CourierStartTravelTransport {
   private readonly baseUrl: string;
   private readonly sessions: SessionManager;
   private readonly request: typeof fetch;
   constructor(baseUrl: string, sessions: SessionManager, request: typeof fetch = fetch) { this.baseUrl = validateApiBaseUrl(baseUrl); this.sessions = sessions; this.request = request; }
-  async post(attempt: StartTravelAttempt, signal?: AbortSignal): Promise<unknown> {
+  async post(attempt: StartTravelAttempt, dispatchAllowed: DispatchGuard, signal?: AbortSignal): Promise<unknown> {
+    this.requireDispatchable(dispatchAllowed, signal);
     const session = await this.sessions.restore();
     if (!session || session.identityId.toLowerCase() !== attempt.identityId || session.sessionId.toLowerCase() !== attempt.sessionId) throw new StartTravelAttemptInvalidError();
+    this.requireDispatchable(dispatchAllowed, signal);
     let response = await this.send(attempt, session.accessToken, signal);
     if (response.status === 401) {
       const refreshed = await this.sessions.forceRefresh(session.accessToken);
       if (!refreshed || refreshed.identityId.toLowerCase() !== attempt.identityId || refreshed.sessionId.toLowerCase() !== attempt.sessionId) throw new StartTravelAttemptInvalidError();
+      this.requireDispatchable(dispatchAllowed, signal);
       response = await this.send(attempt, refreshed.accessToken, signal);
     }
     if (!response.ok) {
@@ -30,6 +34,9 @@ export class CourierStartTravelTransport {
       method: 'POST', headers: { Accept: 'application/json', Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', 'Idempotency-Key': attempt.idempotencyKey },
       body: JSON.stringify({ expected_version: attempt.expectedVersion, action: 'start_travel' }), signal,
     });
+  }
+  private requireDispatchable(dispatchAllowed: DispatchGuard, signal?: AbortSignal) {
+    if (signal?.aborted || !dispatchAllowed()) throw new StartTravelAttemptInvalidError();
   }
 }
 
@@ -54,7 +61,7 @@ export class CourierStartTravelCommandService {
   async submit(attempt: StartTravelAttempt, signal?: AbortSignal): Promise<StartTravelResult> {
     if (!attemptMatchesScope(attempt, this.currentScope())) throw new StartTravelAttemptInvalidError();
     let value: unknown;
-    try { value = await this.transport.post(attempt, signal); }
+    try { value = await this.transport.post(attempt, () => attemptMatchesScope(attempt, this.currentScope()), signal); }
     catch (error) {
       if (error instanceof PublicApiError && (error.kind === 'request_cancelled' || error.status === undefined || error.status >= 500)) throw new StartTravelOutcomeUnknownError();
       throw error;
