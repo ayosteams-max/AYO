@@ -126,8 +126,12 @@ test('outcome unknown preserves the same attempt, blocks a new key, and requires
 });
 
 test('successful reconciliation withdraws stale start-travel evidence without fabricating a snapshot', async () => {
-  const value = fixture({ reconcile: async () => Object.freeze({ outcome: 'already_applied' as const, pickup: Object.freeze({ pickupId, state: 'travelling_to_merchant' as const, version: 5, updatedAt: applied.updatedAt, presentationAction: 'none' as const }) }) });
+  const value = fixture({
+    submit: async () => { throw new StartTravelOutcomeUnknownError(); },
+    reconcile: async () => Object.freeze({ outcome: 'already_applied' as const, pickup: Object.freeze({ pickupId, state: 'travelling_to_merchant' as const, version: 5, updatedAt: applied.updatedAt, presentationAction: 'none' as const }) }),
+  });
   const handle = value.controller.createAttempt(); assert.ok(handle);
+  assert.deepEqual(await value.controller.submit(handle), { outcome: 'outcome_unknown' });
   assert.deepEqual(await value.controller.reconcile(handle), { outcome: 'applied' });
   assert.equal(handle.isCurrent(), false);
   assert.equal(value.controller.createAttempt(), undefined);
@@ -139,6 +143,8 @@ test('version and transition rejection withdraw stale evidence and require fresh
     const value = fixture({ submit: async () => { throw new StartTravelRejectedError(reason); } });
     const handle = value.controller.createAttempt(); assert.ok(handle);
     assert.deepEqual(await value.controller.submit(handle), { outcome: 'rejected', reason });
+    assert.deepEqual(await value.controller.reconcile(handle), { outcome: 'rejected', reason });
+    assert.equal(value.reconciliations(), 0);
     assert.equal(handle.isCurrent(), false);
     assert.equal(value.controller.createAttempt(), undefined);
   }
@@ -147,7 +153,10 @@ test('version and transition rejection withdraw stale evidence and require fresh
 test('scope invalidation before dispatch is bounded and cannot generate a replacement intent', async () => {
   const value = fixture({ submit: async () => { throw new StartTravelAttemptInvalidError(); } });
   const handle = value.controller.createAttempt(); assert.ok(handle);
-  assert.deepEqual(await value.controller.submit(handle), { outcome: 'invalidated', reason: 'scope_changed' });
+  const expected = { outcome: 'invalidated', reason: 'scope_changed' } as const;
+  assert.deepEqual(await value.controller.submit(handle), expected);
+  assert.deepEqual(await value.controller.reconcile(handle), expected);
+  assert.equal(value.reconciliations(), 0);
   assert.equal(value.controller.createAttempt(), undefined);
   assert.equal(value.creations(), 1);
 });
@@ -183,6 +192,8 @@ test('403 and 404 authority loss settle, withdraw evidence, and cannot freely re
     const expected = { outcome: 'invalidated', reason: 'authority_lost' } as const;
     assert.deepEqual(await value.controller.submit(handle), expected);
     assert.deepEqual(await value.controller.submit(handle), expected);
+    assert.deepEqual(await value.controller.reconcile(handle), expected);
+    assert.equal(value.reconciliations(), 0);
     assert.equal(value.submissions(), 1);
     assert.equal(handle.isCurrent(), false);
     assert.equal(value.controller.createAttempt(), undefined);
@@ -196,6 +207,8 @@ test('post-refresh 401 settles as authority loss and cannot freely resubmit', as
   const expected = { outcome: 'invalidated', reason: 'authority_lost' } as const;
   assert.deepEqual(await value.controller.submit(handle), expected);
   assert.deepEqual(await value.controller.submit(handle), expected);
+  assert.deepEqual(await value.controller.reconcile(handle), expected);
+  assert.equal(value.reconciliations(), 0);
   assert.equal(value.submissions(), 1);
   assert.equal(value.creations(), 1);
 });
@@ -206,6 +219,8 @@ test('unknown 409 is definitive refresh-required rejection, not outcome unknown'
   const expected = { outcome: 'rejected', reason: 'refresh_required' } as const;
   assert.deepEqual(await value.controller.submit(handle), expected);
   assert.deepEqual(await value.controller.submit(handle), expected);
+  assert.deepEqual(await value.controller.reconcile(handle), expected);
+  assert.equal(value.reconciliations(), 0);
   assert.equal(value.submissions(), 1);
   assert.equal(handle.isCurrent(), false);
   assert.equal(value.creations(), 1);
@@ -225,4 +240,74 @@ test('other definitive 4xx and malformed responses are bounded while unexpected 
   const bugHandle = bug.controller.createAttempt(); assert.ok(bugHandle);
   await assert.rejects(bug.controller.submit(bugHandle), /programmer_fault/);
   assert.equal(bug.submissions(), 1);
+});
+
+test('applied is monotonic and never-submitted reconciliation fails closed without a GET', async () => {
+  const appliedValue = fixture();
+  const appliedHandle = appliedValue.controller.createAttempt(); assert.ok(appliedHandle);
+  assert.deepEqual(await appliedValue.controller.submit(appliedHandle), { outcome: 'applied' });
+  assert.deepEqual(await appliedValue.controller.reconcile(appliedHandle), { outcome: 'applied' });
+  assert.deepEqual(await appliedValue.controller.reconcile(appliedHandle), { outcome: 'applied' });
+  assert.equal(appliedValue.reconciliations(), 0);
+
+  const neverSubmitted = fixture();
+  const unusedHandle = neverSubmitted.controller.createAttempt(); assert.ok(unusedHandle);
+  assert.deepEqual(await neverSubmitted.controller.reconcile(unusedHandle), { outcome: 'rejected', reason: 'reconciliation_not_available' });
+  assert.equal(neverSubmitted.reconciliations(), 0);
+  assert.equal(neverSubmitted.creations(), 1);
+});
+
+test('ambiguous reconciliation terminal results remain monotonic', async () => {
+  for (const reason of ['authority_lost', 'state_changed'] as const) {
+    const value = fixture({
+      submit: async () => { throw new StartTravelOutcomeUnknownError(); },
+      reconcile: async () => Object.freeze({ outcome: 'invalidated' as const, reason }),
+    });
+    const handle = value.controller.createAttempt(); assert.ok(handle);
+    assert.deepEqual(await value.controller.submit(handle), { outcome: 'outcome_unknown' });
+    const expected = { outcome: 'invalidated', reason } as const;
+    assert.deepEqual(await value.controller.reconcile(handle), expected);
+    assert.deepEqual(await value.controller.reconcile(handle), expected);
+    assert.equal(value.reconciliations(), 1);
+    assert.equal(value.creations(), 1);
+  }
+});
+
+test('retry-same-attempt reconciliation runs once and preserves the exact attempt and key', async () => {
+  const value = fixture({ submit: async () => { throw new StartTravelOutcomeUnknownError(); } });
+  const handle = value.controller.createAttempt(); assert.ok(handle);
+  const attempt = value.scope.resolveForTrustedUse(handle); assert.ok(attempt);
+  assert.deepEqual(await value.controller.submit(handle), { outcome: 'outcome_unknown' });
+  assert.deepEqual(await value.controller.reconcile(handle), { outcome: 'retry_same_attempt' });
+  assert.deepEqual(await value.controller.reconcile(handle), { outcome: 'retry_same_attempt' });
+  assert.equal(value.reconciliations(), 1);
+  assert.equal(value.scope.resolveForTrustedUse(handle), attempt);
+  assert.equal(attempt.idempotencyKey, keys[0]);
+  assert.equal(value.creations(), 1);
+});
+
+test('submit and reconcile share one in-flight operation in either direction', async () => {
+  const submitGate = deferred<typeof applied>();
+  const submitting = fixture({ submit: async () => submitGate.promise });
+  const submitHandle = submitting.controller.createAttempt(); assert.ok(submitHandle);
+  const submitFlight = submitting.controller.submit(submitHandle);
+  assert.equal(submitting.controller.reconcile(submitHandle), submitFlight);
+  assert.equal(submitting.reconciliations(), 0);
+  submitGate.resolve(applied);
+  assert.deepEqual(await submitFlight, { outcome: 'applied' });
+
+  const reconcileGate = deferred<Readonly<{ outcome: 'retry_same_attempt'; pickup: Readonly<{ pickupId: string; state: 'courier_assigned'; version: number; updatedAt: string; presentationAction: 'start_travel' }> }>>();
+  const reconciling = fixture({
+    submit: async () => { throw new StartTravelOutcomeUnknownError(); },
+    reconcile: async () => reconcileGate.promise,
+  });
+  const reconcileHandle = reconciling.controller.createAttempt(); assert.ok(reconcileHandle);
+  assert.deepEqual(await reconciling.controller.submit(reconcileHandle), { outcome: 'outcome_unknown' });
+  const reconcileFlight = reconciling.controller.reconcile(reconcileHandle);
+  assert.equal(reconciling.controller.submit(reconcileHandle), reconcileFlight);
+  await Promise.resolve();
+  assert.equal(reconciling.reconciliations(), 1);
+  assert.equal(reconciling.submissions(), 1);
+  reconcileGate.resolve(Object.freeze({ outcome: 'retry_same_attempt', pickup: Object.freeze({ pickupId, state: 'courier_assigned', version: 4, updatedAt: handoff.updatedAt, presentationAction: 'start_travel' }) }));
+  assert.deepEqual(await reconcileFlight, { outcome: 'retry_same_attempt' });
 });

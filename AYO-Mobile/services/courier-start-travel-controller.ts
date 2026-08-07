@@ -17,7 +17,7 @@ export type StartTravelControllerResult =
   | Readonly<{ outcome: 'applied' }>
   | Readonly<{ outcome: 'outcome_unknown' }>
   | Readonly<{ outcome: 'retry_same_attempt' }>
-  | Readonly<{ outcome: 'rejected'; reason: StartTravelRejection | 'malformed_response' | 'refresh_required' }>
+  | Readonly<{ outcome: 'rejected'; reason: StartTravelRejection | 'malformed_response' | 'refresh_required' | 'reconciliation_not_available' }>
   | Readonly<{ outcome: 'invalidated'; reason: 'invalid_handle' | 'scope_changed' | 'authority_lost' | 'state_changed' | 'duplicate_intent' }>;
 
 type Operation = {
@@ -98,6 +98,10 @@ export class CourierStartTravelController {
       return Promise.resolve(Object.freeze({ outcome: 'invalidated', reason: 'invalid_handle' }));
     }
     if (operation.inFlight) return operation.inFlight;
+    if (!operation.settled) {
+      return Promise.resolve(Object.freeze({ outcome: 'rejected', reason: 'reconciliation_not_available' }));
+    }
+    if (operation.settled.outcome !== 'outcome_unknown') return Promise.resolve(operation.settled);
     const pending = this.executeReconcile(operation, signal);
     operation.inFlight = pending;
     const clearFlight = () => { if (operation.inFlight === pending) operation.inFlight = undefined; };
