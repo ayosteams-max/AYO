@@ -133,3 +133,62 @@ test('creation and dispatch validation use the same canonical current-scope sour
   fixtureValue.scope.publishFresh(pickupA, handoff({ pickupVersion: 5 }));
   assert.equal(handle.isCurrent(), false);
 });
+
+test('retirement terminally invalidates handles, capabilities, resolution, and late evidence', () => {
+  const { scope, creations } = fixture();
+  scope.publishFresh(pickupA, handoff());
+  const handle = scope.createForCurrentPickup(); assert.ok(handle);
+  assert.equal(handle.isCurrent(), true);
+  assert.ok(scope.currentScope());
+  scope.retire();
+  assert.equal(handle.isCurrent(), false);
+  assert.equal(scope.currentScope(), undefined);
+  assert.equal(scope.createForCurrentPickup(), undefined);
+  assert.equal(scope.resolveForTrustedUse(handle), undefined);
+  scope.publishFresh(pickupA, handoff());
+  scope.clearFresh(pickupA);
+  assert.equal(scope.currentScope(), undefined);
+  assert.equal(scope.createForCurrentPickup(), undefined);
+  assert.equal(creations(), 1);
+});
+
+test('forged and cross-scope handles cannot resolve internal attempts', () => {
+  const first = fixture();
+  const second = fixture();
+  first.scope.publishFresh(pickupA, handoff());
+  second.scope.publishFresh(pickupA, handoff());
+  const handle = first.scope.createForCurrentPickup(); assert.ok(handle);
+  const forged = Object.freeze({ isCurrent: () => true });
+  assert.equal(first.scope.resolveForTrustedUse(forged), undefined);
+  assert.equal(second.scope.resolveForTrustedUse(handle), undefined);
+});
+
+test('provider lifetime rehearsal preserves the live scope and real cleanup closes it', () => {
+  const { scope, creations } = fixture();
+  scope.publishFresh(pickupA, handoff());
+  const handle = scope.createForCurrentPickup(); assert.ok(handle);
+  scope.retainProviderLifetime();
+  scope.releaseProviderLifetime();
+  scope.retainProviderLifetime();
+  scope.publishFresh(pickupA, handoff());
+  assert.equal(handle.isCurrent(), true);
+  assert.equal(creations(), 1);
+  scope.releaseProviderLifetime();
+  assert.equal(handle.isCurrent(), false);
+  assert.equal(creations(), 1);
+});
+
+test('a replacement scope with identical values is independent from the retired owner', () => {
+  const first = fixture();
+  const second = fixture();
+  first.scope.publishFresh(pickupA, handoff());
+  const firstHandle = first.scope.createForCurrentPickup(); assert.ok(firstHandle);
+  first.scope.retire();
+  second.scope.publishFresh(pickupA, handoff());
+  const secondHandle = second.scope.createForCurrentPickup(); assert.ok(secondHandle);
+  assert.equal(firstHandle.isCurrent(), false);
+  assert.equal(secondHandle.isCurrent(), true);
+  assert.equal(second.scope.resolveForTrustedUse(firstHandle), undefined);
+  assert.equal(first.creations(), 1);
+  assert.equal(second.creations(), 1);
+});

@@ -21,6 +21,8 @@ export class CourierStartTravelCommandScope {
   private readonly createAttempt: AttemptFactory;
   private readonly attempts = new WeakMap<StartTravelAttemptHandle, StartTravelAttempt>();
   private freshEvidence?: FreshHandoffEvidence;
+  private retired = false;
+  private providerLifetimeActive = true;
 
   constructor(readIdentity: IdentityReader, readCourierContext: CourierContextReader, createAttempt: AttemptFactory = createStartTravelAttempt) {
     this.readIdentity = readIdentity;
@@ -28,7 +30,27 @@ export class CourierStartTravelCommandScope {
     this.createAttempt = createAttempt;
   }
 
+  /** React may rehearse cleanup/setup without retiring the logical provider instance. */
+  retainProviderLifetime(): void {
+    if (!this.retired) this.providerLifetimeActive = true;
+  }
+
+  /** Synchronously closes the mounted-provider lease and clears its evidence. */
+  releaseProviderLifetime(): void {
+    this.providerLifetimeActive = false;
+    this.freshEvidence = undefined;
+  }
+
+  /** Terminal provider-ownership boundary. A retired scope cannot be revived. */
+  retire(): void {
+    if (this.retired) return;
+    this.retired = true;
+    this.providerLifetimeActive = false;
+    this.freshEvidence = undefined;
+  }
+
   publishFresh(pickupId: string, snapshot: CourierHandoffSnapshot): void {
+    if (this.retired || !this.providerLifetimeActive) return;
     const courier = this.readCourierContext();
     const identity = this.readIdentity();
     if (!identity || !courier || courier.identityGeneration !== identity.identityGeneration || courier.pickupId !== pickupId.toLowerCase()) {
@@ -58,7 +80,7 @@ export class CourierStartTravelCommandScope {
 
   /** Trusted command infrastructure only; presentation receives the handle, never this scope owner. */
   resolveForTrustedUse(handle: StartTravelAttemptHandle): StartTravelAttempt | undefined {
-    return this.attempts.get(handle);
+    return this.retired || !this.providerLifetimeActive ? undefined : this.attempts.get(handle);
   }
 
   attemptIsCurrent(attempt: StartTravelAttempt): boolean {
@@ -66,6 +88,7 @@ export class CourierStartTravelCommandScope {
   }
 
   currentScope(): CourierCommandScope | undefined {
+    if (this.retired || !this.providerLifetimeActive) return undefined;
     const identity = this.readIdentity();
     const courier = this.readCourierContext();
     const evidence = this.freshEvidence;

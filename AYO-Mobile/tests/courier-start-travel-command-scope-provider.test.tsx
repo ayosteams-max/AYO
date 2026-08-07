@@ -10,6 +10,7 @@ import type { AuthenticatedSession } from '@/domain/auth-session';
 import type { AuthenticationApi } from '@/services/authentication-api';
 import { type CredentialStore, SecureSessionVault } from '@/services/secure-session';
 import { SessionManager } from '@/services/session-manager';
+import type { StartTravelAttemptHandle } from '@/services/courier-start-travel-command-scope';
 
 const identityId = '11111111-1111-4111-8111-111111111111';
 const sessionId = '22222222-2222-4222-8222-222222222222';
@@ -33,6 +34,15 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
+type RetainedCapability = Readonly<{
+  canCreateAttempt(): boolean;
+  createAttempt(): StartTravelAttemptHandle | undefined;
+}>;
+let retainedCapability: RetainedCapability | undefined;
+let retainedHandle: StartTravelAttemptHandle | undefined;
+const readRetainedCapability = (): RetainedCapability | undefined => retainedCapability;
+const readRetainedHandle = (): StartTravelAttemptHandle | undefined => retainedHandle;
+
 function Consumer() {
   const publicIdentity = useIdentitySession();
   const commandIdentity = useIdentityCommandRuntime();
@@ -51,13 +61,15 @@ function Consumer() {
     <Text testID="command-context">{String(commandContext.readCourierContext()?.contextGeneration ?? 'none')}</Text>
     <Text testID="publisher-exposed">{String('publishFresh' in capability)}</Text>
     <Text testID="created">{created}</Text>
-    <Pressable testID="create-current" onPress={() => { const handle = capability.createAttempt(); setCreated(handle ? `${Object.keys(handle).join(',')}:${handle.isCurrent()}` : 'none'); }}><Text>Test creation</Text></Pressable>
+    <Pressable testID="create-current" onPress={() => { retainedCapability = capability; retainedHandle = capability.createAttempt(); setCreated(retainedHandle ? `${Object.keys(retainedHandle).join(',')}:${retainedHandle.isCurrent()}` : 'none'); }}><Text>Test creation</Text></Pressable>
     <Pressable testID="select-personal" onPress={() => operational.selectArea('personal')}><Text>Test selection</Text></Pressable>
     <Pressable testID="invalidate-courier" onPress={() => operational.invalidateCourier(pickupId)}><Text>Test invalidation</Text></Pressable>
   </View>;
 }
 
 test('mounted trusted provider derives an attempt without exposing raw scope or submitting', async () => {
+  retainedCapability = undefined;
+  retainedHandle = undefined;
   const store = new MemoryStore();
   const vault = new SecureSessionVault(store);
   await vault.save(session);
@@ -94,4 +106,46 @@ test('mounted trusted provider derives an attempt without exposing raw scope or 
   await waitFor(() => expect(screen.getByTestId('created').props.children).toBe('none'));
   await act(() => { fireEvent.press(screen.getByTestId('invalidate-courier')); fireEvent.press(screen.getByTestId('create-current')); });
   await waitFor(() => expect(screen.getByTestId('created').props.children).toBe('none'));
+});
+
+test('provider retirement invalidates retained capability and handle while identical replacement remains independent', async () => {
+  retainedCapability = undefined;
+  retainedHandle = undefined;
+
+  async function mountProvider() {
+    const store = new MemoryStore();
+    const vault = new SecureSessionVault(store);
+    await vault.save(session);
+    const api = { activation: async () => ({ activated: true }), signOut: async () => undefined } as unknown as AuthenticationApi;
+    const manager = new SessionManager(vault, api);
+    const services: IdentitySessionServices = { api: Promise.resolve(api), manager: Promise.resolve(manager), read: async (path) => {
+      if (path === '/api/mobile/context') return { personal: { available: true }, merchants: [], courier: { pickup_id: pickupId, availability: 'current_pickup' } };
+      if (path.endsWith('/custody')) return { availability: 'not_started' };
+      return pickupResponse;
+    } };
+    const mounted = render(<IdentitySessionProvider services={services}><OperationalContextProvider><CourierStartTravelCommandScopeProvider><LanguageProvider><Consumer /></LanguageProvider></CourierStartTravelCommandScopeProvider></OperationalContextProvider></IdentitySessionProvider>);
+    await waitFor(() => expect(screen.getByTestId('identity-status').props.children).toBe('authenticated'));
+    await waitFor(() => expect(screen.getByText('Pickup work is current')).toBeTruthy());
+    await act(() => { fireEvent.press(screen.getByTestId('create-current')); });
+    await waitFor(() => expect(screen.getByTestId('created').props.children).toBe('isCurrent:true'));
+    return mounted;
+  }
+
+  const providerA = await mountProvider();
+  const capabilityA = readRetainedCapability(); const handleA = readRetainedHandle();
+  expect(capabilityA).toBeDefined(); expect(handleA).toBeDefined();
+  expect(handleA?.isCurrent()).toBe(true);
+  await act(() => providerA.unmount());
+  expect(handleA?.isCurrent()).toBe(false);
+  expect(capabilityA?.canCreateAttempt()).toBe(false);
+  expect(capabilityA?.createAttempt()).toBeUndefined();
+
+  retainedCapability = undefined;
+  retainedHandle = undefined;
+  const providerB = await mountProvider();
+  const handleB = readRetainedHandle();
+  expect(handleA?.isCurrent()).toBe(false);
+  expect(handleB).toBeDefined();
+  expect(handleB?.isCurrent()).toBe(true);
+  await act(() => providerB.unmount());
 });

@@ -1,4 +1,4 @@
-import { createContext, type PropsWithChildren, useContext, useMemo } from 'react';
+import { createContext, type PropsWithChildren, useContext, useEffect, useMemo } from 'react';
 
 import { CourierHandoffStatus } from '@/components/courier-handoff-status';
 import { useIdentityCommandRuntime } from '@/contexts/identity-session';
@@ -22,6 +22,10 @@ export function CourierStartTravelCommandScopeProvider({ children }: PropsWithCh
   const identity = useIdentityCommandRuntime();
   const courier = useCourierCommandContext();
   const scope = useMemo(() => new CourierStartTravelCommandScope(identity.readIdentity, courier.readCourierContext), [courier.readCourierContext, identity.readIdentity]);
+  useEffect(() => {
+    scope.retainProviderLifetime();
+    return () => scope.releaseProviderLifetime();
+  }, [scope]);
   const capability = useMemo<StartTravelAttemptCapability>(() => ({
     canCreateAttempt: () => scope.currentScope() !== undefined,
     createAttempt: () => scope.createForCurrentPickup(),
