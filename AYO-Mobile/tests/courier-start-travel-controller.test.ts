@@ -93,15 +93,14 @@ test('two concurrent submissions of one handle join the exact same single flight
   assert.deepEqual(await second, { outcome: 'applied' });
 });
 
-test('different handles for the same source cannot become concurrent logical executions', async () => {
-  const gate = deferred<typeof applied>();
-  const value = fixture({ submit: async () => gate.promise });
+test('scope-owned handles not installed by the controller cannot select an operation', async () => {
+  const value = fixture();
   const first = value.scope.createForCurrentPickup(); const second = value.scope.createForCurrentPickup();
   assert.ok(first); assert.ok(second); assert.notEqual(first, second);
-  const pending = value.controller.submit(first);
-  assert.deepEqual(await value.controller.submit(second), { outcome: 'invalidated', reason: 'duplicate_intent' });
-  assert.equal(value.submissions(), 1);
-  gate.resolve(applied); await pending;
+  const expected = { outcome: 'invalidated', reason: 'non_current_operation' } as const;
+  assert.deepEqual(await value.controller.submit(first), expected);
+  assert.deepEqual(await value.controller.submit(second), expected);
+  assert.equal(value.submissions(), 0);
 });
 
 test('controller attempt creation reuses one unresolved handle and key', () => {
@@ -310,4 +309,62 @@ test('submit and reconcile share one in-flight operation in either direction', a
   assert.equal(reconciling.submissions(), 1);
   reconcileGate.resolve(Object.freeze({ outcome: 'retry_same_attempt', pickup: Object.freeze({ pickupId, state: 'courier_assigned', version: 4, updatedAt: handoff.updatedAt, presentationAction: 'start_travel' }) }));
   assert.deepEqual(await reconcileFlight, { outcome: 'retry_same_attempt' });
+});
+
+test('an old different-version handle cannot evict an in-flight newer operation', async () => {
+  const gate = deferred<typeof applied>();
+  let calls = 0;
+  const value = fixture({ submit: async () => ++calls === 1 ? applied : gate.promise });
+  const handleA = value.controller.createAttempt(); assert.ok(handleA);
+  assert.deepEqual(await value.controller.submit(handleA), { outcome: 'applied' });
+  value.scope.publishFresh(pickupId, Object.freeze({ ...handoff, pickupVersion: 5 }));
+  const handleB = value.controller.createAttempt(); assert.ok(handleB); assert.notEqual(handleB, handleA);
+  const pendingB = value.controller.submit(handleB);
+  const staleA = value.controller.submit(handleA);
+  await Promise.resolve();
+  assert.deepEqual(await staleA, { outcome: 'invalidated', reason: 'non_current_operation' });
+  assert.equal(value.submissions(), 2);
+  gate.resolve(applied);
+  assert.deepEqual(await pendingB, { outcome: 'applied' });
+  assert.deepEqual(await value.controller.submit(handleB), { outcome: 'applied' });
+  assert.equal(value.submissions(), 2);
+});
+
+test('old handle cannot displace newer ambiguity or its exact-key reconciliation custody', async () => {
+  let calls = 0;
+  const value = fixture({
+    submit: async () => { if (++calls === 1) return applied; throw new StartTravelOutcomeUnknownError(); },
+    reconcile: async (attempt) => {
+      assert.equal(attempt.idempotencyKey, keys[1]);
+      return Object.freeze({ outcome: 'retry_same_attempt' as const, pickup: Object.freeze({ pickupId, state: 'courier_assigned' as const, version: 5, updatedAt: handoff.updatedAt, presentationAction: 'start_travel' as const }) });
+    },
+  });
+  const handleA = value.controller.createAttempt(); assert.ok(handleA);
+  assert.deepEqual(await value.controller.submit(handleA), { outcome: 'applied' });
+  value.scope.publishFresh(pickupId, Object.freeze({ ...handoff, pickupVersion: 5 }));
+  const handleB = value.controller.createAttempt(); assert.ok(handleB);
+  const attemptB = value.scope.resolveForTrustedUse(handleB); assert.ok(attemptB);
+  assert.equal(attemptB.idempotencyKey, keys[1]);
+  assert.deepEqual(await value.controller.submit(handleB), { outcome: 'outcome_unknown' });
+  assert.deepEqual(await value.controller.submit(handleA), { outcome: 'invalidated', reason: 'non_current_operation' });
+  assert.equal(value.submissions(), 2);
+  assert.deepEqual(await value.controller.reconcile(handleB), { outcome: 'retry_same_attempt' });
+  assert.deepEqual(await value.controller.submit(handleA), { outcome: 'invalidated', reason: 'non_current_operation' });
+  assert.deepEqual(await value.controller.reconcile(handleB), { outcome: 'retry_same_attempt' });
+  assert.equal(value.reconciliations(), 1);
+  assert.equal(value.scope.resolveForTrustedUse(handleB), attemptB);
+  assert.equal(value.creations(), 2);
+});
+
+test('only explicit createAttempt may replace terminal operation ownership', async () => {
+  const value = fixture();
+  const handleA = value.controller.createAttempt(); assert.ok(handleA);
+  assert.deepEqual(await value.controller.submit(handleA), { outcome: 'applied' });
+  value.scope.publishFresh(pickupId, Object.freeze({ ...handoff, pickupVersion: 5 }));
+  const handleB = value.controller.createAttempt(); assert.ok(handleB); assert.notEqual(handleB, handleA);
+  assert.deepEqual(await value.controller.submit(handleA), { outcome: 'invalidated', reason: 'non_current_operation' });
+  assert.equal(value.submissions(), 1);
+  assert.deepEqual(await value.controller.submit(handleB), { outcome: 'applied' });
+  assert.equal(value.submissions(), 2);
+  assert.equal(value.creations(), 2);
 });

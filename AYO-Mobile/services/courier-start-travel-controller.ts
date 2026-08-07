@@ -18,7 +18,7 @@ export type StartTravelControllerResult =
   | Readonly<{ outcome: 'outcome_unknown' }>
   | Readonly<{ outcome: 'retry_same_attempt' }>
   | Readonly<{ outcome: 'rejected'; reason: StartTravelRejection | 'malformed_response' | 'refresh_required' | 'reconciliation_not_available' }>
-  | Readonly<{ outcome: 'invalidated'; reason: 'invalid_handle' | 'scope_changed' | 'authority_lost' | 'state_changed' | 'duplicate_intent' }>;
+  | Readonly<{ outcome: 'invalidated'; reason: 'invalid_handle' | 'non_current_operation' | 'scope_changed' | 'authority_lost' | 'state_changed' }>;
 
 type Operation = {
   readonly handle: StartTravelAttemptHandle;
@@ -27,10 +27,6 @@ type Operation = {
   settled?: StartTravelControllerResult;
 };
 
-const sameSource = (left: StartTravelAttempt, right: StartTravelAttempt) =>
-  left.identityId === right.identityId && left.sessionId === right.sessionId &&
-  left.identityGeneration === right.identityGeneration && left.contextGeneration === right.contextGeneration &&
-  left.pickupId === right.pickupId && left.expectedVersion === right.expectedVersion && left.action === right.action;
 const unresolved = (operation: Operation) => !operation.settled || operation.settled.outcome === 'outcome_unknown' || operation.settled.outcome === 'retry_same_attempt';
 
 /** Trusted, scope-instance-bound orchestration. No presentation submit capability is exported. */
@@ -71,13 +67,9 @@ export class CourierStartTravelController {
   submit(handle: StartTravelAttemptHandle, signal?: AbortSignal): Promise<StartTravelControllerResult> {
     const attempt = this.scope.resolveForTrustedUse(handle);
     if (!attempt) return Promise.resolve(Object.freeze({ outcome: 'invalidated', reason: 'invalid_handle' }));
-    let operation = this.operation;
-    if (operation && operation.handle !== handle && sameSource(operation.attempt, attempt) && unresolved(operation)) {
-      return Promise.resolve(Object.freeze({ outcome: 'invalidated', reason: 'duplicate_intent' }));
-    }
-    if (!operation || operation.handle !== handle) {
-      operation = { handle, attempt };
-      this.operation = operation;
+    const operation = this.operation;
+    if (!operation || operation.handle !== handle || operation.attempt !== attempt) {
+      return Promise.resolve(Object.freeze({ outcome: 'invalidated', reason: 'non_current_operation' }));
     }
     if (operation.inFlight) return operation.inFlight;
     if (operation.settled?.outcome === 'outcome_unknown') return Promise.resolve(operation.settled);
