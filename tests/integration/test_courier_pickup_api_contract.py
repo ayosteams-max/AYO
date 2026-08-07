@@ -404,6 +404,46 @@ def test_custody_activation_failure_rolls_back_merchant_acknowledgement(
             idempotency_key="rollback-merchant-ack-0001",
             at=NOW,
         )
+    with postgres_engine.connect() as connection:
+        assert (
+            connection.execute(
+                select(commerce_courier_pickups.c.state).where(
+                    commerce_courier_pickups.c.pickup_id == PICKUP
+                )
+            ).scalar_one()
+            == "arrived_at_merchant"
+        )
+        assert (
+            connection.execute(
+                select(func.count())
+                .select_from(commerce_custody_records)
+                .where(commerce_custody_records.c.pickup_id == PICKUP)
+            ).scalar_one()
+            == 0
+        )
+        assert (
+            connection.execute(
+                select(func.count())
+                .select_from(commerce_courier_pickup_events)
+                .where(
+                    commerce_courier_pickup_events.c.pickup_id == PICKUP,
+                    commerce_courier_pickup_events.c.event_type
+                    == "commerce.courier_pickup.merchant_acknowledged",
+                )
+            ).scalar_one()
+            == 0
+        )
+        assert (
+            connection.execute(
+                select(func.count())
+                .select_from(commerce_order_outbox)
+                .where(
+                    commerce_order_outbox.c.order_id == ORDER,
+                    commerce_order_outbox.c.event_type == "commerce.custody.activated",
+                )
+            ).scalar_one()
+            == 0
+        )
 
 
 @pytest.mark.usefixtures("api_contract_state")
@@ -548,46 +588,6 @@ def test_released_assignment_cannot_consume_custody_challenge(
                 )
             ).scalar_one()
             is None
-        )
-    with postgres_engine.connect() as connection:
-        assert (
-            connection.execute(
-                select(commerce_courier_pickups.c.state).where(
-                    commerce_courier_pickups.c.pickup_id == PICKUP
-                )
-            ).scalar_one()
-            == "arrived_at_merchant"
-        )
-        assert (
-            connection.execute(
-                select(func.count())
-                .select_from(commerce_custody_records)
-                .where(commerce_custody_records.c.pickup_id == PICKUP)
-            ).scalar_one()
-            == 0
-        )
-        assert (
-            connection.execute(
-                select(func.count())
-                .select_from(commerce_courier_pickup_events)
-                .where(
-                    commerce_courier_pickup_events.c.pickup_id == PICKUP,
-                    commerce_courier_pickup_events.c.event_type
-                    == "commerce.courier_pickup.merchant_acknowledged",
-                )
-            ).scalar_one()
-            == 0
-        )
-        assert (
-            connection.execute(
-                select(func.count())
-                .select_from(commerce_order_outbox)
-                .where(
-                    commerce_order_outbox.c.order_id == ORDER,
-                    commerce_order_outbox.c.event_type == "commerce.custody.activated",
-                )
-            ).scalar_one()
-            == 0
         )
 
 
