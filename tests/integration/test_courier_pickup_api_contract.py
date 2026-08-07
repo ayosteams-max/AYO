@@ -34,6 +34,8 @@ from BACKEND.persistence.composition import PostgresRepositoryComposition
 from BACKEND.persistence.custody_repository import PostgresCustodyRepository
 from BACKEND.persistence.tables import (
     audit_events,
+    commerce_courier_dispatch_events,
+    commerce_courier_dispatch_idempotency,
     commerce_courier_dispatch_requests,
     commerce_courier_pickup_events,
     commerce_courier_pickup_idempotency,
@@ -44,6 +46,7 @@ from BACKEND.persistence.tables import (
     commerce_custody_records,
     commerce_order_outbox,
     courier_dispatch_assignments,
+    courier_dispatch_evidence,
     courier_dispatch_offers,
     identities,
     identity_role_assignments,
@@ -309,9 +312,24 @@ def api_contract_state(postgres_engine):
                 )
             )
             connection.execute(
+                delete(courier_dispatch_evidence).where(
+                    courier_dispatch_evidence.c.dispatch_id == DISPATCH
+                )
+            )
+            connection.execute(
                 delete(courier_dispatch_offers).where(
                     courier_dispatch_offers.c.dispatch_id == DISPATCH,
                     courier_dispatch_offers.c.offer_id != OFFER,
+                )
+            )
+            connection.execute(
+                delete(commerce_courier_dispatch_events).where(
+                    commerce_courier_dispatch_events.c.dispatch_id == DISPATCH
+                )
+            )
+            connection.execute(
+                delete(commerce_courier_dispatch_idempotency).where(
+                    commerce_courier_dispatch_idempotency.c.dispatch_id == DISPATCH
                 )
             )
             connection.execute(
