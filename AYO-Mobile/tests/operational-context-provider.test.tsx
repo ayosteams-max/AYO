@@ -39,13 +39,21 @@ const session: AuthenticatedSession = {
   identityId: '11111111-1111-4111-8111-111111111111', sessionId: '22222222-2222-4222-8222-222222222222', identityKind: 'rider',
   accessToken: 'a'.repeat(64), accessExpiresAt: '2099-01-01T01:00:00Z', refreshToken: 'r'.repeat(64), refreshExpiresAt: '2099-01-02T00:00:00Z',
 };
+const nextSession: AuthenticatedSession = {
+  ...session,
+  identityId: '77777777-7777-4777-8777-777777777777', sessionId: '88888888-8888-4888-8888-888888888888',
+  accessToken: 'b'.repeat(64), refreshToken: 's'.repeat(64),
+};
+const credentials = { contactKind: 'email' as const, contact: 'next@example.test', password: 'synthetic-password' };
 const personal = { personal: { available: true }, merchants: [], courier: null };
 const merchant = { personal: null, merchants: [{ merchant_id: '33333333-3333-4333-8333-333333333333', display_name: 'AYO Market', availability: 'available' }], courier: null };
 const courier = { personal: null, merchants: [], courier: { pickup_id: '44444444-4444-4444-8444-444444444444', availability: 'current_pickup' } };
 const personalAndCourier = { personal: { available: true }, merchants: [], courier: courier.courier };
+const nextCourier = { personal: null, merchants: [], courier: { pickup_id: '99999999-9999-4999-8999-999999999999', availability: 'current_pickup' } };
 const pickupStatus = { pickup_id: '44444444-4444-4444-8444-444444444444', state: 'waiting_for_pickup', version: 4, assigned_at: '2026-08-07T01:00:00Z', travelling_at: '2026-08-07T01:05:00Z', arrived_at: '2026-08-07T01:15:00Z', merchant_acknowledged_at: '2026-08-07T01:16:00Z', waiting_duration_seconds: 60, terminal_reason: null, updated_at: '2026-08-07T01:16:00Z', presentation_action: 'none' };
 const currentPickupStatus = { ...pickupStatus, state: 'courier_assigned', travelling_at: null, arrived_at: null, merchant_acknowledged_at: null, waiting_duration_seconds: null, updated_at: '2026-08-07T01:00:00Z', presentation_action: 'start_travel' };
 const arrivedPickupStatus = { ...pickupStatus, state: 'arrived_at_merchant', merchant_acknowledged_at: null, waiting_duration_seconds: null, updated_at: '2026-08-07T01:15:00Z' };
+const nextPickupStatus = { ...pickupStatus, pickup_id: nextCourier.courier.pickup_id };
 const custodyStatus = { state: 'order_sealed', version: 2, required_action: 'verify_pickup', waiting_for: 'courier', recovery: null, challenge_available: true, challenge_expires_at: '2026-08-07T01:30:00Z', supported_verification_methods: ['qr_code', 'barcode'] };
 
 class MemoryStore implements CredentialStore {
@@ -68,11 +76,14 @@ function Consumer() {
   const operational = useOperationalContext();
   return <View>
     <Text testID="identity-status">{identity.status}</Text>
+    <Text testID="authenticated-identity">{identity.identity?.identityId === nextSession.identityId ? 'B' : identity.identity ? 'A' : 'none'}</Text>
     <Text testID="operational-status">{operational.status}</Text>
     <Text testID="area-kinds">{operational.areas.map((area) => area.kind).join(',')}</Text>
     <Text testID="selected-area">{operational.selected?.kind ?? 'none'}</Text>
+    <Text testID="courier-locator">{operational.selected?.kind === 'courier' ? operational.selected.pickupId === nextCourier.courier.pickup_id ? 'courier-B' : 'courier-A' : 'none'}</Text>
     <Text testID="refreshing">{operational.refreshing ? 'yes' : 'no'}</Text>
     <Pressable testID="sign-out" onPress={() => operations.push(identity.signOut())}><Text>sign out</Text></Pressable>
+    <Pressable testID="sign-in" onPress={() => operations.push(identity.signIn(credentials))}><Text>sign in</Text></Pressable>
     <Pressable testID="refresh" onPress={() => operations.push(operational.refresh())}><Text>refresh</Text></Pressable>
   </View>;
 }
@@ -95,12 +106,12 @@ function PersonalNavigationHarness() {
   </View>;
 }
 
-async function mount(options: { initial?: AuthenticatedSession; reads?: Array<ReturnType<typeof deferred<unknown>>>; signOut?: Promise<void>; renderShell?: boolean } = {}) {
+async function mount(options: { initial?: AuthenticatedSession; reads?: Array<ReturnType<typeof deferred<unknown>>>; signOut?: Promise<void>; signIn?: AuthenticatedSession; renderShell?: boolean } = {}) {
   operations.length = 0;
   const store = new MemoryStore();
   const vault = new SecureSessionVault(store);
   if (options.initial) await vault.save(options.initial);
-  const api = { activation: async () => ({ activated: true }), signOut: async () => options.signOut } as unknown as AuthenticationApi;
+  const api = { activation: async () => ({ activated: true }), signOut: async () => options.signOut, signIn: async () => options.signIn ?? nextSession } as unknown as AuthenticationApi;
   const manager = new SessionManager(vault, api);
   const reads = [...(options.reads ?? [])];
   let readCount = 0;
@@ -368,4 +379,52 @@ test('late Pickup authority loss cannot revoke a newer operational context', asy
   expect(screen.getByTestId('area-kinds').props.children).toBe('personal');
   expect(screen.getByTestId('selected-area').props.children).toBe('personal');
   expect(screen.getByLabelText('Choose destination')).toBeTruthy();
+});
+
+test('late Pickup authority loss from identity A cannot revoke authenticated identity B', async () => {
+  const contextA = deferred<unknown>(); const pickupA = deferred<unknown>(); const noCustodyA = deferred<unknown>(); const latePickupA = deferred<unknown>();
+  const contextB = deferred<unknown>(); const pickupB = deferred<unknown>(); const custodyB = deferred<unknown>();
+  const mounted = await mount({ initial: session, signIn: nextSession, reads: [contextA, pickupA, noCustodyA, latePickupA, contextB, pickupB, custodyB], renderShell: true });
+
+  await act(async () => { contextA.resolve(courier); });
+  await waitFor(() => expect(mounted.readCount()).toBe(2));
+  await act(async () => { pickupA.resolve(currentPickupStatus); });
+  await waitFor(() => expect(mounted.readCount()).toBe(3));
+  await act(async () => { noCustodyA.resolve({ availability: 'not_started' }); });
+  await waitFor(() => expect(screen.getByText('Pickup work is current')).toBeTruthy());
+
+  await act(async () => { fireEvent.press(screen.getByLabelText('Refresh')); });
+  await waitFor(() => expect(mounted.readCount()).toBe(4));
+
+  await act(async () => { fireEvent.press(screen.getByTestId('sign-out')); await operations.at(-1); });
+  await waitFor(() => expect(screen.getByTestId('identity-status').props.children).toBe('signed_out'));
+  await act(async () => { fireEvent.press(screen.getByTestId('sign-in')); await operations.at(-1); });
+  await waitFor(() => expect(screen.getByTestId('authenticated-identity').props.children).toBe('B'));
+  await waitFor(() => expect(mounted.readCount()).toBe(5));
+  await act(async () => { contextB.resolve(nextCourier); });
+  await waitFor(() => expect(mounted.readCount()).toBe(6));
+  await act(async () => { pickupB.resolve(nextPickupStatus); });
+  await waitFor(() => expect(mounted.readCount()).toBe(7));
+  await act(async () => { custodyB.resolve(custodyStatus); });
+  await waitFor(() => expect(screen.getByText('Ready for handoff')).toBeTruthy());
+
+  const before = {
+    identity: screen.getByTestId('authenticated-identity').props.children,
+    area: screen.getByTestId('selected-area').props.children,
+    locator: screen.getByTestId('courier-locator').props.children,
+    status: screen.getByText('Ready for handoff').props.children,
+  };
+  expect(before).toEqual({ identity: 'B', area: 'courier', locator: 'courier-B', status: 'Ready for handoff' });
+
+  await act(async () => { latePickupA.reject(new PublicApiError('not_found', 404)); await Promise.resolve(); });
+
+  expect({
+    identity: screen.getByTestId('authenticated-identity').props.children,
+    area: screen.getByTestId('selected-area').props.children,
+    locator: screen.getByTestId('courier-locator').props.children,
+    status: screen.getByText('Ready for handoff').props.children,
+  }).toEqual(before);
+  expect(screen.queryByText('Pickup work is current')).toBeNull();
+  expect(screen.queryByText('No available area')).toBeNull();
+  expect(mounted.readCount()).toBe(7);
 });
