@@ -843,7 +843,7 @@ def test_canonical_authority_loss_cannot_create_custody_possession(
         idempotency_key="custody-accept-release-0001",
         at=NOW,
     )
-    assert released.custody.state.value == "released"
+    assert released.custody.state.value == "merchant_released"
 
     _lose_dispatch_authority(postgres_composition, authority_loss)
     with postgres_engine.connect() as connection:
@@ -893,7 +893,7 @@ def test_canonical_authority_loss_cannot_create_custody_possession(
             ).one()
             == before[0]
         )
-        assert before[0][0] == "released"
+        assert before[0][0] == "merchant_released"
         assert (
             connection.execute(
                 select(func.count())
