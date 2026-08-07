@@ -15,6 +15,11 @@ type IdentityContextValue = Readonly<{ status: SessionStatus; identity?: Session
 const Context = createContext<IdentityContextValue | undefined>(undefined);
 type AuthenticatedRead = (path: string, signal?: AbortSignal) => Promise<unknown>;
 const AuthenticatedReadContext = createContext<AuthenticatedRead | undefined>(undefined);
+export type CommandIdentitySnapshot = Readonly<{ identityId: string; sessionId: string; identityGeneration: number }>;
+export type IdentityCommandRuntime = Readonly<{
+  readIdentity(): CommandIdentitySnapshot | undefined;
+}>;
+const IdentityCommandRuntimeContext = createContext<IdentityCommandRuntime | undefined>(undefined);
 const DEVICE_KEY = 'ayo.mobile.installation-id.v1';
 export type IdentitySessionServices = Readonly<{ api: Promise<AuthenticationApi>; manager: Promise<SessionManager>; read?: AuthenticatedRead }>;
 type IdentitySessionProviderProps = PropsWithChildren<{ services?: IdentitySessionServices }>;
@@ -26,6 +31,8 @@ export function IdentitySessionProvider({ children, services: suppliedServices }
   const [identity, setIdentity] = useState<SessionIdentity>();
   const [error, setError] = useState<string>();
   const generation = useRef(0);
+  const commandIdentityGeneration = useRef(0);
+  const commandIdentityRef = useRef<CommandIdentitySnapshot | undefined>(undefined);
   const services = useMemo(() => {
     if (suppliedServices) return suppliedServices;
     const store = new ExpoSecureCredentialStore();
@@ -39,10 +46,22 @@ export function IdentitySessionProvider({ children, services: suppliedServices }
     const manager = api.then(client => new SessionManager(vault, client));
     return { api, manager };
   }, [suppliedServices]);
+  const applyCommandIdentity = useCallback((session: Awaited<ReturnType<SessionManager['restore']>>) => {
+    const previous = commandIdentityRef.current;
+    if (session && previous?.identityId === session.identityId && previous.sessionId === session.sessionId) return;
+    if (!session && !previous) return;
+    commandIdentityGeneration.current += 1;
+    commandIdentityRef.current = session ? Object.freeze({
+      identityId: session.identityId,
+      sessionId: session.sessionId,
+      identityGeneration: commandIdentityGeneration.current,
+    }) : undefined;
+  }, []);
   const apply = useCallback((session: Awaited<ReturnType<SessionManager['restore']>>, activated = true) => {
+    applyCommandIdentity(session);
     if (session) { setIdentity({ identityId: session.identityId, identityKind: session.identityKind }); setStatus(activated ? 'authenticated' : 'verification_required'); }
     else { setIdentity(undefined); setStatus('signed_out'); }
-  }, []);
+  }, [applyCommandIdentity]);
   const restore = useCallback(async () => {
     const current = ++generation.current; setError(undefined);
     try { const instance = await services.manager; const session = await instance.restore(); const activated = session ? (await (await services.api).activation(session.accessToken)).activated : false; if (current === generation.current) apply(session, activated); }
@@ -50,7 +69,7 @@ export function IdentitySessionProvider({ children, services: suppliedServices }
   }, [apply, services]);
   useEffect(() => { void restore(); }, [restore]);
   const authenticate = useCallback(async (mode: 'signIn' | 'register', credentials: Credentials) => {
-    const current = ++generation.current; setError(undefined);
+    const current = ++generation.current; setError(undefined); applyCommandIdentity(undefined);
     try {
       const [api, manager] = await Promise.all([services.api, services.manager]);
       if (current !== generation.current) return;
@@ -61,7 +80,7 @@ export function IdentitySessionProvider({ children, services: suppliedServices }
       if (current === generation.current) apply(session, activated);
     }
     catch (cause) { if (current === generation.current) { setError(cause instanceof Error ? cause.message : 'temporary_failure'); apply(undefined); } throw cause; }
-  }, [apply, services]);
+  }, [apply, applyCommandIdentity, services]);
   const verificationApi = useCallback(async () => { const session = await (await services.manager).restore(); if (!session) throw new Error('authentication_required'); return { api: await services.api, session }; }, [services]);
   const value = useMemo<IdentityContextValue>(() => ({ status, identity, error, signIn: (c) => authenticate('signIn', c), register: (c) => authenticate('register', c), prepareVerification: async (kind, contact) => { const { api, session } = await verificationApi(); return api.prepareVerification(session.accessToken, kind, contact); }, completeVerification: async (challengeId, code) => { const { api, session } = await verificationApi(); const progress = await api.completeVerification(session.accessToken, challengeId, code); apply(session, progress.activated); }, retry: restore, signOut: async () => {
     const current = ++generation.current;
@@ -74,8 +93,13 @@ export function IdentitySessionProvider({ children, services: suppliedServices }
     if (suppliedServices?.read) return suppliedServices.read(path, signal);
     return new AuthenticatedReadTransport(baseUrl(), await services.manager).get(path, signal);
   }, [services.manager, suppliedServices]);
-  return <Context.Provider value={value}><AuthenticatedReadContext.Provider value={authenticatedRead}>{children}</AuthenticatedReadContext.Provider></Context.Provider>;
+  const commandRuntime = useMemo<IdentityCommandRuntime>(() => ({
+    readIdentity: () => commandIdentityRef.current,
+  }), []);
+  return <Context.Provider value={value}><IdentityCommandRuntimeContext.Provider value={commandRuntime}><AuthenticatedReadContext.Provider value={authenticatedRead}>{children}</AuthenticatedReadContext.Provider></IdentityCommandRuntimeContext.Provider></Context.Provider>;
 }
 
 export function useIdentitySession() { const value = useContext(Context); if (!value) throw new Error('identity_session_provider_required'); return value; }
 export function useAuthenticatedRead() { const value = useContext(AuthenticatedReadContext); if (!value) throw new Error('identity_session_provider_required'); return value; }
+/** Infrastructure-only capability. Ordinary presentation code must use useIdentitySession(). */
+export function useIdentityCommandRuntime() { const value = useContext(IdentityCommandRuntimeContext); if (!value) throw new Error('identity_session_provider_required'); return value; }

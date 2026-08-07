@@ -7,9 +7,13 @@ import { useLanguage } from '@/contexts/language';
 import { useOperationalContext } from '@/contexts/operational-context';
 import type { OperationalArea } from '@/domain/mobile-context';
 import { operationalShellCopy } from '@/localization/operational-shell';
-import { CourierHandoffStatus } from '@/components/courier-handoff-status';
+import { CourierStartTravelCommandScopeProvider, TrustedCourierHandoffStatus } from '@/contexts/courier-start-travel-command-scope';
 
 export function OperationalShell({ personal }: { personal: ReactNode }) {
+  return <CourierStartTravelCommandScopeProvider><OperationalShellContent personal={personal} /></CourierStartTravelCommandScopeProvider>;
+}
+
+function OperationalShellContent({ personal }: { personal: ReactNode }) {
   const session = useIdentitySession();
   const context = useOperationalContext();
   const { locale } = useLanguage();
@@ -29,7 +33,7 @@ export function OperationalShell({ personal }: { personal: ReactNode }) {
     </View> : null}
     {personal}<AreaFooter />
   </View>;
-  if (context.selected.kind === 'courier') return <CourierHandoffStatus key={context.selected.pickupId} pickupId={context.selected.pickupId} />;
+  if (context.selected.kind === 'courier') return <TrustedCourierHandoffStatus key={context.selected.pickupId} pickupId={context.selected.pickupId} />;
   return <Placeholder key={context.selected.key} area={context.selected} />;
 }
 
