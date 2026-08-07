@@ -1,14 +1,25 @@
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
 from pydantic import ValidationError
 
+from BACKEND.audit.models import ActorType
+from BACKEND.authorization.contracts import AuthorizationSubject
 from BACKEND.config.settings import AppEnvironment, Settings
+from BACKEND.courier_dispatch.models import CourierAssignmentState, CourierDispatchState
+from BACKEND.courier_pickup.models import CourierPickupState
 from BACKEND.custody.application import CustodyApplication
 from BACKEND.custody.engine import CustodyConflict, target_state
-from BACKEND.custody.models import CustodyAction, CustodyRecord, CustodyState
+from BACKEND.custody.models import (
+    CustodyAction,
+    CustodyRecord,
+    CustodyState,
+    VerificationMethod,
+)
+from BACKEND.identity.models import IdentityType
 
 
 def record(state=CustodyState.WAITING):
@@ -81,3 +92,114 @@ def test_short_pepper_and_production_activation_fail_closed():
     assert Settings().CUSTODY_PLATFORM_ENABLED is False
     with pytest.raises(ValidationError):
         Settings(ENVIRONMENT=AppEnvironment.PRODUCTION, CUSTODY_PLATFORM_ENABLED=True)
+
+
+@pytest.mark.parametrize(
+    "action,state",
+    [
+        (CustodyAction.VERIFY, CustodyState.SEALED),
+        (CustodyAction.ACCEPT, CustodyState.RELEASED),
+    ],
+)
+@pytest.mark.parametrize(
+    "dispatch_state,assignment_state,assignment_version",
+    [
+        (
+            CourierDispatchState.WAITING,
+            CourierAssignmentState.RELEASED,
+            2,
+        ),
+        (CourierDispatchState.ASSIGNED, CourierAssignmentState.ASSIGNED, 2),
+    ],
+)
+def test_courier_custody_commands_recheck_assignment_before_reservation(
+    action, state, dispatch_state, assignment_state, assignment_version
+):
+    current = record(state)
+    dispatch_id = uuid4()
+    assignment_id = uuid4()
+    pickup = SimpleNamespace(
+        pickup_id=current.pickup_id,
+        order_id=current.order_id,
+        merchant_id=current.merchant_id,
+        dispatch_id=dispatch_id,
+        assignment_id=assignment_id,
+        assignment_version=1,
+        assigned_courier_identity_id=current.courier_identity_id,
+        state=CourierPickupState.WAITING,
+    )
+    calls = {"reserve": 0, "verify": 0, "transition": 0}
+    custody = SimpleNamespace(
+        get=lambda *args, **kwargs: current,
+        reserve=lambda **kwargs: calls.__setitem__("reserve", calls["reserve"] + 1),
+        verify=lambda *args, **kwargs: calls.__setitem__("verify", calls["verify"] + 1),
+        transition=lambda *args, **kwargs: calls.__setitem__(
+            "transition", calls["transition"] + 1
+        ),
+    )
+    dispatch = SimpleNamespace(
+        dispatch_id=dispatch_id,
+        order_id=current.order_id,
+        merchant_id=current.merchant_id,
+        state=dispatch_state,
+        active_assignment_id=(
+            assignment_id if dispatch_state is CourierDispatchState.ASSIGNED else None
+        ),
+        assigned_courier_identity_id=(
+            current.courier_identity_id
+            if dispatch_state is CourierDispatchState.ASSIGNED
+            else None
+        ),
+    )
+    assignment = SimpleNamespace(
+        dispatch_id=dispatch_id,
+        courier_identity_id=current.courier_identity_id,
+        state=assignment_state,
+        version=assignment_version,
+    )
+    unit = SimpleNamespace(
+        custody=custody,
+        courier_pickup=SimpleNamespace(get=lambda *args, **kwargs: pickup),
+        courier_dispatch=SimpleNamespace(
+            get=lambda *args, **kwargs: dispatch,
+            get_assignment=lambda *args, **kwargs: assignment,
+        ),
+    )
+    unit.__enter__ = lambda: unit
+    unit.__exit__ = lambda *args: False
+
+    class UnitContext:
+        def __enter__(self):
+            return unit
+
+        def __exit__(self, *args):
+            return False
+
+    application = CustodyApplication(
+        SimpleNamespace(unit_of_work=lambda: UnitContext()),
+        verification_pepper=b"assignment-authority-pepper-value",
+    )
+    actor = AuthorizationSubject(
+        identity_id=current.courier_identity_id,
+        identity_type=IdentityType.DRIVER,
+        actor_type=ActorType.DRIVER,
+    )
+
+    for _ in range(2):
+        with pytest.raises(CustodyConflict, match="^custody_not_found$"):
+            application.command(
+                actor,
+                custody_id=current.custody_id,
+                expected_version=current.version,
+                action=action,
+                idempotency_key="obsolete-custody-assignment-0001",
+                at=datetime.now(UTC),
+                code="challenge" if action is CustodyAction.VERIFY else None,
+                method=(
+                    VerificationMethod.QR if action is CustodyAction.VERIFY else None
+                ),
+            )
+
+    assert calls == {"reserve": 0, "verify": 0, "transition": 0}
+    assert current.state is state
+    assert current.version == 1

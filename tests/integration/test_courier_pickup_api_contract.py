@@ -14,6 +14,8 @@ from BACKEND.config.settings import Settings
 from BACKEND.courier_pickup.application import CourierPickupApplication
 from BACKEND.courier_pickup.models import CourierPickupAction
 from BACKEND.custody.application import CustodyApplication
+from BACKEND.custody.engine import CustodyConflict
+from BACKEND.custody.models import CustodyAction, VerificationMethod
 from BACKEND.identity.models import IdentityType
 from BACKEND.main import (
     CourierPickupPlatformActivation,
@@ -24,10 +26,13 @@ from BACKEND.merchant.models import MerchantKind, OnboardingSource
 from BACKEND.persistence.composition import PostgresRepositoryComposition
 from BACKEND.persistence.custody_repository import PostgresCustodyRepository
 from BACKEND.persistence.tables import (
+    commerce_courier_dispatch_requests,
     commerce_courier_pickup_events,
     commerce_courier_pickup_idempotency,
     commerce_courier_pickups,
+    commerce_custody_challenges,
     commerce_custody_events,
+    commerce_custody_idempotency,
     commerce_custody_records,
     commerce_order_outbox,
     courier_dispatch_assignments,
@@ -40,6 +45,7 @@ from tests.integration.test_courier_pickup_idempotency import (
     ACTOR,
     ASSIGNMENT,
     CUSTOMER,
+    DISPATCH,
     KEY,
     MERCHANT,
     MERCHANT_OWNER,
@@ -397,6 +403,151 @@ def test_custody_activation_failure_rolls_back_merchant_acknowledgement(
             expected_version=arrived.pickup.version,
             idempotency_key="rollback-merchant-ack-0001",
             at=NOW,
+        )
+
+
+@pytest.mark.usefixtures("api_contract_state")
+def test_released_assignment_cannot_consume_custody_challenge(
+    postgres_engine,
+    postgres_composition,
+) -> None:
+    pickup_application = CourierPickupApplication(postgres_composition)
+    travelling = pickup_application.courier_command(
+        _subject(),
+        pickup_id=PICKUP,
+        expected_version=1,
+        action=CourierPickupAction.START_TRAVEL,
+        idempotency_key="custody-authority-travel-0001",
+        at=NOW,
+    )
+    arrived = pickup_application.courier_command(
+        _subject(),
+        pickup_id=PICKUP,
+        expected_version=travelling.pickup.version,
+        action=CourierPickupAction.MARK_ARRIVED,
+        idempotency_key="custody-authority-arrival-0001",
+        at=NOW,
+    )
+    pickup_application.merchant_acknowledge(
+        _merchant_subject(),
+        merchant_id=MERCHANT,
+        pickup_id=PICKUP,
+        expected_version=arrived.pickup.version,
+        idempotency_key="custody-authority-ack-0001",
+        at=NOW,
+    )
+    with postgres_engine.connect() as connection:
+        custody_id = connection.execute(
+            select(commerce_custody_records.c.custody_id).where(
+                commerce_custody_records.c.pickup_id == PICKUP
+            )
+        ).scalar_one()
+    custody_application = CustodyApplication(
+        postgres_composition, verification_pepper=b"test-custody-pepper" * 2
+    )
+    issued = custody_application.seal(
+        _merchant_subject(),
+        merchant_id=MERCHANT,
+        custody_id=custody_id,
+        expected_version=1,
+        idempotency_key="custody-authority-seal-0001",
+        at=NOW,
+    )
+    with postgres_engine.begin() as connection:
+        connection.execute(
+            update(commerce_courier_dispatch_requests)
+            .where(commerce_courier_dispatch_requests.c.dispatch_id == DISPATCH)
+            .values(
+                state="waiting_for_courier",
+                active_assignment_id=None,
+                assigned_courier_identity_id=None,
+                version=2,
+            )
+        )
+        connection.execute(
+            update(courier_dispatch_assignments)
+            .where(courier_dispatch_assignments.c.assignment_id == ASSIGNMENT)
+            .values(
+                state="released_before_pickup",
+                version=2,
+                closed_at=NOW,
+                close_reason="courier_unavailable_before_pickup",
+            )
+        )
+    with postgres_engine.connect() as connection:
+        before = (
+            connection.execute(
+                select(
+                    commerce_custody_records.c.state, commerce_custody_records.c.version
+                ).where(commerce_custody_records.c.custody_id == custody_id)
+            ).one(),
+            connection.execute(
+                select(func.count())
+                .select_from(commerce_custody_events)
+                .where(commerce_custody_events.c.custody_id == custody_id)
+            ).scalar_one(),
+            connection.execute(
+                select(func.count())
+                .select_from(commerce_order_outbox)
+                .where(commerce_order_outbox.c.order_id == ORDER)
+            ).scalar_one(),
+        )
+    for _ in range(2):
+        with pytest.raises(CustodyConflict, match="^custody_not_found$"):
+            custody_application.command(
+                _subject(),
+                custody_id=custody_id,
+                expected_version=issued.view.custody.version,
+                action=CustodyAction.VERIFY,
+                idempotency_key="custody-obsolete-verify-0001",
+                at=NOW,
+                code=issued.display_code,
+                method=VerificationMethod.QR,
+            )
+    with postgres_engine.connect() as connection:
+        assert (
+            connection.execute(
+                select(
+                    commerce_custody_records.c.state, commerce_custody_records.c.version
+                ).where(commerce_custody_records.c.custody_id == custody_id)
+            ).one()
+            == before[0]
+        )
+        assert (
+            connection.execute(
+                select(func.count())
+                .select_from(commerce_custody_events)
+                .where(commerce_custody_events.c.custody_id == custody_id)
+            ).scalar_one()
+            == before[1]
+        )
+        assert (
+            connection.execute(
+                select(func.count())
+                .select_from(commerce_order_outbox)
+                .where(commerce_order_outbox.c.order_id == ORDER)
+            ).scalar_one()
+            == before[2]
+        )
+        assert (
+            connection.execute(
+                select(func.count())
+                .select_from(commerce_custody_idempotency)
+                .where(
+                    commerce_custody_idempotency.c.custody_id == custody_id,
+                    commerce_custody_idempotency.c.idempotency_key
+                    == "custody-obsolete-verify-0001",
+                )
+            ).scalar_one()
+            == 0
+        )
+        assert (
+            connection.execute(
+                select(commerce_custody_challenges.c.used_at).where(
+                    commerce_custody_challenges.c.custody_id == custody_id
+                )
+            ).scalar_one()
+            is None
         )
     with postgres_engine.connect() as connection:
         assert (

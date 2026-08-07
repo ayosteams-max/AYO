@@ -4,10 +4,7 @@ from uuid import UUID
 
 from BACKEND.audit.models import AuditEvent, AuditOutcome
 from BACKEND.authorization.contracts import AuthorizationSubject
-from BACKEND.courier_dispatch.models import (
-    CourierAssignmentState,
-    CourierDispatchState,
-)
+from BACKEND.courier_dispatch.current_assignment import matches_current_assignment
 from BACKEND.courier_pickup.engine import (
     CourierPickupConflict,
     CourierPickupPolicy,
@@ -217,6 +214,8 @@ class CourierPickupApplication:
                 raise CourierPickupConflict("access_denied")
             if current.assignment_id is None:
                 raise CourierPickupConflict("courier_pickup_assignment_invalid")
+            if merchant_id is None:
+                self._require_current_assignment(unit, current)
             digest = CourierPickupCommandDigestV1(
                 pickup_id=pickup_id,
                 actor_identity_id=subject.identity_id,
@@ -324,24 +323,7 @@ class CourierPickupApplication:
 
     @staticmethod
     def _require_current_assignment(unit: Any, current: Any) -> None:
-        dispatch = unit.courier_dispatch.get(current.dispatch_id, lock=True)
-        assignment = unit.courier_dispatch.get_assignment(
-            current.assignment_id, lock=True
-        )
-        if (
-            dispatch is None
-            or dispatch.state is not CourierDispatchState.ASSIGNED
-            or dispatch.order_id != current.order_id
-            or dispatch.merchant_id != current.merchant_id
-            or dispatch.active_assignment_id != current.assignment_id
-            or dispatch.assigned_courier_identity_id
-            != current.assigned_courier_identity_id
-            or assignment is None
-            or assignment.dispatch_id != current.dispatch_id
-            or assignment.courier_identity_id != current.assigned_courier_identity_id
-            or assignment.state is not CourierAssignmentState.ASSIGNED
-            or assignment.version != current.assignment_version
-        ):
+        if not matches_current_assignment(unit, current, lock=True):
             raise CourierPickupConflict("courier_pickup_assignment_invalid")
 
     @staticmethod

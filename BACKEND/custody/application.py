@@ -6,10 +6,7 @@ from typing import Any
 from uuid import UUID
 
 from BACKEND.authorization.contracts import AuthorizationSubject
-from BACKEND.courier_dispatch.models import (
-    CourierAssignmentState,
-    CourierDispatchState,
-)
+from BACKEND.courier_dispatch.current_assignment import matches_current_assignment
 from BACKEND.courier_pickup.models import CourierPickupState
 from BACKEND.custody.engine import CustodyConflict, target_state
 from BACKEND.custody.models import (
@@ -87,24 +84,7 @@ class CustodyApplication:
                 or pickup.assigned_courier_identity_id != subject.identity_id
             ):
                 raise CustodyConflict("custody_not_found")
-            dispatch = unit.courier_dispatch.get(pickup.dispatch_id, lock=False)
-            assignment = unit.courier_dispatch.get_assignment(
-                pickup.assignment_id, lock=False
-            )
-            if (
-                dispatch is None
-                or dispatch.state is not CourierDispatchState.ASSIGNED
-                or dispatch.order_id != pickup.order_id
-                or dispatch.merchant_id != pickup.merchant_id
-                or dispatch.active_assignment_id != pickup.assignment_id
-                or dispatch.assigned_courier_identity_id
-                != pickup.assigned_courier_identity_id
-                or assignment is None
-                or assignment.dispatch_id != pickup.dispatch_id
-                or assignment.courier_identity_id != pickup.assigned_courier_identity_id
-                or assignment.state is not CourierAssignmentState.ASSIGNED
-                or assignment.version != pickup.assignment_version
-            ):
+            if not matches_current_assignment(unit, pickup, lock=False):
                 raise CustodyConflict("custody_not_found")
             if pickup.state is CourierPickupState.ENDED_BEFORE_CUSTODY:
                 raise CustodyConflict("custody_not_found")
@@ -207,6 +187,8 @@ class CustodyApplication:
                     raise CustodyConflict("access_denied")
             elif current.courier_identity_id != subject.identity_id:
                 raise CustodyConflict("access_denied")
+            else:
+                self._require_current_assignment(unit, current, subject)
             replay = unit.custody.reserve(
                 actor_id=subject.identity_id,
                 custody_id=custody_id,
@@ -239,6 +221,25 @@ class CustodyApplication:
                 key=idempotency_key,
                 at=at,
             )
+
+    @staticmethod
+    def _require_current_assignment(
+        unit: Any,
+        current: Any,
+        subject: AuthorizationSubject,
+    ) -> None:
+        pickup = unit.courier_pickup.get(current.pickup_id, lock=True)
+        if (
+            pickup is None
+            or pickup.state is not CourierPickupState.WAITING
+            or pickup.order_id != current.order_id
+            or pickup.merchant_id != current.merchant_id
+            or pickup.assigned_courier_identity_id != subject.identity_id
+            or current.courier_identity_id != subject.identity_id
+        ):
+            raise CustodyConflict("custody_not_found")
+        if not matches_current_assignment(unit, pickup, lock=True):
+            raise CustodyConflict("custody_not_found")
 
     def _digest(self, code: str) -> str:
         return hmac.new(self._pepper, code.encode(), hashlib.sha256).hexdigest()
