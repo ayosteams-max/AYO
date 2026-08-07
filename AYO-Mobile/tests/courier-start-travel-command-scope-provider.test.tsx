@@ -258,7 +258,11 @@ test('reader dependency replacement closes scope A before scope B layout observa
     status: 'ready', areas: [], selected: undefined, chooserVisible: false, refreshing: false,
     refresh: async () => undefined, selectArea: () => undefined, showChooser: () => undefined, invalidateCourier: () => undefined,
   };
-  const identitySpy = jest.spyOn(identitySessionContext, 'useIdentityCommandRuntime').mockImplementation(() => ({ readIdentity }));
+  const createCommandService = jest.fn(async () => { throw new Error('command_submission_not_exposed'); });
+  const identitySpy = jest.spyOn(identitySessionContext, 'useIdentityCommandRuntime').mockImplementation(() => ({
+    readIdentity,
+    createStartTravelCommandService: createCommandService,
+  }));
   const readSpy = jest.spyOn(identitySessionContext, 'useAuthenticatedRead').mockImplementation(() => authenticatedRead);
   const courierSpy = jest.spyOn(operationalContext, 'useCourierCommandContext').mockImplementation(() => ({ readCourierContext }));
   const operationalSpy = jest.spyOn(operationalContext, 'useOperationalContext').mockImplementation(() => operationalValue);
@@ -269,12 +273,14 @@ test('reader dependency replacement closes scope A before scope B layout observa
     await act(() => { fireEvent.press(screen.getByTestId('create-minimal')); });
     const capabilityA = readRetainedCapability(); const handleA = readRetainedHandle();
     expect(capabilityA).toBeDefined(); expect(handleA).toBeDefined(); expect(handleA?.isCurrent()).toBe(true);
+    expect(createCommandService).not.toHaveBeenCalled();
 
     readIdentity = () => identityValue;
     readCourierContext = () => courierValue;
     let observation: ReplacementObservation | undefined;
     await mounted.rerender(tree(<ReplacementObserver previousCapability={capabilityA!} previousHandle={handleA!} observe={(value) => { observation = value; }} />));
     expect(observation).toEqual({ distinctCapability: true, oldHandleCurrent: false, oldCanCreate: false, oldCreate: undefined });
+    expect(createCommandService).not.toHaveBeenCalled();
     await mounted.unmount();
   } finally {
     identitySpy.mockRestore(); readSpy.mockRestore(); courierSpy.mockRestore(); operationalSpy.mockRestore();

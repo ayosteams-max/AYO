@@ -4,6 +4,7 @@ import { CourierHandoffStatus } from '@/components/courier-handoff-status';
 import { useIdentityCommandRuntime } from '@/contexts/identity-session';
 import { useCourierCommandContext } from '@/contexts/operational-context';
 import type { CourierHandoffSnapshot } from '@/domain/courier-handoff-status';
+import { CourierStartTravelController } from '@/services/courier-start-travel-controller';
 import { CourierStartTravelCommandScope, type StartTravelAttemptHandle } from '@/services/courier-start-travel-command-scope';
 
 type StartTravelAttemptCapability = Readonly<{
@@ -22,14 +23,15 @@ export function CourierStartTravelCommandScopeProvider({ children }: PropsWithCh
   const identity = useIdentityCommandRuntime();
   const courier = useCourierCommandContext();
   const scope = useMemo(() => new CourierStartTravelCommandScope(identity.readIdentity, courier.readCourierContext), [courier.readCourierContext, identity.readIdentity]);
+  const controller = useMemo(() => new CourierStartTravelController(scope, () => identity.createStartTravelCommandService(scope)), [identity, scope]);
   useLayoutEffect(() => {
     scope.retainProviderLifetime();
     return () => scope.releaseProviderLifetime();
   }, [scope]);
   const capability = useMemo<StartTravelAttemptCapability>(() => ({
-    canCreateAttempt: () => scope.currentScope() !== undefined,
-    createAttempt: () => scope.createForCurrentPickup(),
-  }), [scope]);
+    canCreateAttempt: () => controller.canCreateAttempt(),
+    createAttempt: () => controller.createAttempt(),
+  }), [controller]);
   const evidence = useMemo<StartTravelEvidenceIntegration>(() => ({
     publishFresh: (pickupId, snapshot) => scope.publishFresh(pickupId, snapshot),
     clearFresh: (pickupId) => scope.clearFresh(pickupId),

@@ -9,6 +9,8 @@ import { ExpoSecureCredentialStore } from '@/services/expo-secure-credential-sto
 import { SecureSessionVault } from '@/services/secure-session';
 import { SessionManager } from '@/services/session-manager';
 import { AuthenticatedReadTransport } from '@/services/authenticated-read-transport';
+import { CourierStartTravelCommandService, CourierStartTravelTransport } from '@/services/courier-start-travel-command';
+import type { CourierStartTravelCommandScope } from '@/services/courier-start-travel-command-scope';
 
 type SessionStatus = 'restoring' | 'signed_out' | 'verification_required' | 'authenticated';
 type IdentityContextValue = Readonly<{ status: SessionStatus; identity?: SessionIdentity; error?: string; signIn(c: Credentials): Promise<void>; register(c: Credentials): Promise<void>; prepareVerification(kind: Credentials['contactKind'], contact: string): Promise<string>; completeVerification(challengeId: string, code: string): Promise<void>; retry(): Promise<void>; signOut(): Promise<void> }>;
@@ -18,6 +20,7 @@ const AuthenticatedReadContext = createContext<AuthenticatedRead | undefined>(un
 export type CommandIdentitySnapshot = Readonly<{ identityId: string; sessionId: string; identityGeneration: number }>;
 export type IdentityCommandRuntime = Readonly<{
   readIdentity(): CommandIdentitySnapshot | undefined;
+  createStartTravelCommandService(scope: CourierStartTravelCommandScope): Promise<CourierStartTravelCommandService>;
 }>;
 const IdentityCommandRuntimeContext = createContext<IdentityCommandRuntime | undefined>(undefined);
 const DEVICE_KEY = 'ayo.mobile.installation-id.v1';
@@ -95,7 +98,12 @@ export function IdentitySessionProvider({ children, services: suppliedServices }
   }, [services.manager, suppliedServices]);
   const commandRuntime = useMemo<IdentityCommandRuntime>(() => ({
     readIdentity: () => commandIdentityRef.current,
-  }), []);
+    createStartTravelCommandService: async (scope) => new CourierStartTravelCommandService(
+      new CourierStartTravelTransport(baseUrl(), await services.manager),
+      authenticatedRead,
+      () => scope.currentScope(),
+    ),
+  }), [authenticatedRead, services.manager]);
   return <Context.Provider value={value}><IdentityCommandRuntimeContext.Provider value={commandRuntime}><AuthenticatedReadContext.Provider value={authenticatedRead}>{children}</AuthenticatedReadContext.Provider></IdentityCommandRuntimeContext.Provider></Context.Provider>;
 }
 

@@ -1,0 +1,148 @@
+import {
+  StartTravelAttemptInvalidError,
+  StartTravelContractError,
+  StartTravelOutcomeUnknownError,
+  StartTravelRejectedError,
+  type StartTravelAttempt,
+  type StartTravelRejection,
+} from '../domain/courier-start-travel-command.ts';
+import type { CourierStartTravelCommandService } from './courier-start-travel-command.ts';
+import { CourierStartTravelCommandScope, type StartTravelAttemptHandle } from './courier-start-travel-command-scope.ts';
+
+type CommandService = Pick<CourierStartTravelCommandService, 'submit' | 'reconcile'>;
+type CommandServiceFactory = () => CommandService | Promise<CommandService>;
+
+export type StartTravelControllerResult =
+  | Readonly<{ outcome: 'applied' }>
+  | Readonly<{ outcome: 'outcome_unknown' }>
+  | Readonly<{ outcome: 'retry_same_attempt' }>
+  | Readonly<{ outcome: 'rejected'; reason: StartTravelRejection | 'malformed_response' }>
+  | Readonly<{ outcome: 'invalidated'; reason: 'invalid_handle' | 'scope_changed' | 'authority_lost' | 'state_changed' | 'duplicate_intent' }>;
+
+type Operation = {
+  readonly handle: StartTravelAttemptHandle;
+  readonly attempt: StartTravelAttempt;
+  inFlight?: Promise<StartTravelControllerResult>;
+  settled?: StartTravelControllerResult;
+};
+
+const sameSource = (left: StartTravelAttempt, right: StartTravelAttempt) =>
+  left.identityId === right.identityId && left.sessionId === right.sessionId &&
+  left.identityGeneration === right.identityGeneration && left.contextGeneration === right.contextGeneration &&
+  left.pickupId === right.pickupId && left.expectedVersion === right.expectedVersion && left.action === right.action;
+const unresolved = (operation: Operation) => !operation.settled || operation.settled.outcome === 'outcome_unknown' || operation.settled.outcome === 'retry_same_attempt';
+
+/** Trusted, scope-instance-bound orchestration. No presentation submit capability is exported. */
+export class CourierStartTravelController {
+  private readonly scope: CourierStartTravelCommandScope;
+  private readonly createService: CommandServiceFactory;
+  private service?: Promise<CommandService>;
+  private operation?: Operation;
+
+  constructor(scope: CourierStartTravelCommandScope, createService: CommandServiceFactory) {
+    this.scope = scope;
+    this.createService = createService;
+  }
+
+  createAttempt(): StartTravelAttemptHandle | undefined {
+    const existing = this.operation;
+    if (existing && unresolved(existing)) {
+      if (existing.handle.isCurrent()) return existing.handle;
+      if (existing.inFlight || existing.settled?.outcome === 'outcome_unknown' || existing.settled?.outcome === 'retry_same_attempt') return undefined;
+    }
+    const handle = this.scope.createForCurrentPickup();
+    if (!handle) return undefined;
+    const attempt = this.scope.resolveForTrustedUse(handle);
+    if (!attempt) return undefined;
+    this.operation = { handle, attempt };
+    return handle;
+  }
+
+  canCreateAttempt(): boolean {
+    const existing = this.operation;
+    if (existing && unresolved(existing)) {
+      if (existing.handle.isCurrent()) return true;
+      if (existing.inFlight || existing.settled?.outcome === 'outcome_unknown' || existing.settled?.outcome === 'retry_same_attempt') return false;
+    }
+    return this.scope.currentScope() !== undefined;
+  }
+
+  submit(handle: StartTravelAttemptHandle, signal?: AbortSignal): Promise<StartTravelControllerResult> {
+    const attempt = this.scope.resolveForTrustedUse(handle);
+    if (!attempt) return Promise.resolve(Object.freeze({ outcome: 'invalidated', reason: 'invalid_handle' }));
+    let operation = this.operation;
+    if (operation && operation.handle !== handle && sameSource(operation.attempt, attempt) && unresolved(operation)) {
+      return Promise.resolve(Object.freeze({ outcome: 'invalidated', reason: 'duplicate_intent' }));
+    }
+    if (!operation || operation.handle !== handle) {
+      operation = { handle, attempt };
+      this.operation = operation;
+    }
+    if (operation.inFlight) return operation.inFlight;
+    if (operation.settled?.outcome === 'outcome_unknown') return Promise.resolve(operation.settled);
+    if (operation.settled && operation.settled.outcome !== 'retry_same_attempt') {
+      return Promise.resolve(operation.settled);
+    }
+    const pending = this.executeSubmit(operation, signal);
+    operation.inFlight = pending;
+    const clearFlight = () => { if (operation?.inFlight === pending) operation.inFlight = undefined; };
+    void pending.then(clearFlight, clearFlight);
+    return pending;
+  }
+
+  reconcile(handle: StartTravelAttemptHandle, signal?: AbortSignal): Promise<StartTravelControllerResult> {
+    const operation = this.operation;
+    const attempt = this.scope.resolveForTrustedUse(handle);
+    if (!operation || operation.handle !== handle || !attempt || attempt !== operation.attempt) {
+      return Promise.resolve(Object.freeze({ outcome: 'invalidated', reason: 'invalid_handle' }));
+    }
+    if (operation.inFlight) return operation.inFlight;
+    const pending = this.executeReconcile(operation, signal);
+    operation.inFlight = pending;
+    const clearFlight = () => { if (operation.inFlight === pending) operation.inFlight = undefined; };
+    void pending.then(clearFlight, clearFlight);
+    return pending;
+  }
+
+  private commandService(): Promise<CommandService> {
+    return this.service ??= Promise.resolve(this.createService());
+  }
+
+  private async executeSubmit(operation: Operation, signal?: AbortSignal): Promise<StartTravelControllerResult> {
+    try {
+      const result = await (await this.commandService()).submit(operation.attempt, signal);
+      this.scope.clearFresh(operation.attempt.pickupId);
+      void result;
+      return operation.settled = Object.freeze({ outcome: 'applied' });
+    } catch (error) {
+      if (error instanceof StartTravelOutcomeUnknownError) {
+        return operation.settled = Object.freeze({ outcome: 'outcome_unknown' });
+      }
+      if (error instanceof StartTravelRejectedError) {
+        this.scope.clearFresh(operation.attempt.pickupId);
+        return operation.settled = Object.freeze({ outcome: 'rejected', reason: error.reason });
+      }
+      if (error instanceof StartTravelContractError) {
+        this.scope.clearFresh(operation.attempt.pickupId);
+        return operation.settled = Object.freeze({ outcome: 'rejected', reason: 'malformed_response' });
+      }
+      if (error instanceof StartTravelAttemptInvalidError) {
+        this.scope.clearFresh(operation.attempt.pickupId);
+        return operation.settled = Object.freeze({ outcome: 'invalidated', reason: 'scope_changed' });
+      }
+      throw error;
+    }
+  }
+
+  private async executeReconcile(operation: Operation, signal?: AbortSignal): Promise<StartTravelControllerResult> {
+    const reconciled = await (await this.commandService()).reconcile(operation.attempt, signal);
+    if (reconciled.outcome === 'retry_same_attempt') {
+      return operation.settled = Object.freeze({ outcome: 'retry_same_attempt' });
+    }
+    this.scope.clearFresh(operation.attempt.pickupId);
+    if (reconciled.outcome === 'already_applied') {
+      return operation.settled = Object.freeze({ outcome: 'applied' });
+    }
+    return operation.settled = Object.freeze({ outcome: 'invalidated', reason: reconciled.reason });
+  }
+}
