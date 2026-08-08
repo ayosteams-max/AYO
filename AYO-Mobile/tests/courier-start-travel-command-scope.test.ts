@@ -27,7 +27,11 @@ function fixture() {
   let courier: { pickupId: string; contextGeneration: number; identityGeneration: number } | undefined = { pickupId: pickupA, contextGeneration: 1, identityGeneration: 1 };
   const scope = new CourierStartTravelCommandScope(
     () => identity,
-    () => courier,
+    () => courier && ({
+      pickupId: courier.pickupId,
+      contextGeneration: courier.contextGeneration,
+      identityContinuity: Object.freeze({ isCurrent: () => identity.identityGeneration === courier?.identityGeneration }),
+    }),
     (value) => createStartTravelAttempt(value, () => keys[creations++] ?? keys[1]),
   );
   return {

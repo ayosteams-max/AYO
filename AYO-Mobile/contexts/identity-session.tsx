@@ -9,17 +9,24 @@ import { ExpoSecureCredentialStore } from '@/services/expo-secure-credential-sto
 import { SecureSessionVault } from '@/services/secure-session';
 import { SessionManager } from '@/services/session-manager';
 import { AuthenticatedReadTransport } from '@/services/authenticated-read-transport';
+import { CourierStartTravelCommandService, CourierStartTravelTransport } from '@/services/courier-start-travel-command';
+import type { CourierStartTravelCommandScope } from '@/services/courier-start-travel-command-scope';
+import { CourierStartTravelCommandInfrastructureProvider } from '@/contexts/courier-start-travel-command-scope';
 
 type SessionStatus = 'restoring' | 'signed_out' | 'verification_required' | 'authenticated';
 type IdentityContextValue = Readonly<{ status: SessionStatus; identity?: SessionIdentity; error?: string; signIn(c: Credentials): Promise<void>; register(c: Credentials): Promise<void>; prepareVerification(kind: Credentials['contactKind'], contact: string): Promise<string>; completeVerification(challengeId: string, code: string): Promise<void>; retry(): Promise<void>; signOut(): Promise<void> }>;
 const Context = createContext<IdentityContextValue | undefined>(undefined);
 type AuthenticatedRead = (path: string, signal?: AbortSignal) => Promise<unknown>;
 const AuthenticatedReadContext = createContext<AuthenticatedRead | undefined>(undefined);
-export type CommandIdentitySnapshot = Readonly<{ identityId: string; sessionId: string; identityGeneration: number }>;
-export type IdentityCommandRuntime = Readonly<{
+type CommandIdentitySnapshot = Readonly<{ identityId: string; sessionId: string; identityGeneration: number }>;
+type IdentityCommandRuntime = Readonly<{
   readIdentity(): CommandIdentitySnapshot | undefined;
+  createStartTravelCommandService(scope: CourierStartTravelCommandScope): Promise<CourierStartTravelCommandService>;
 }>;
 const IdentityCommandRuntimeContext = createContext<IdentityCommandRuntime | undefined>(undefined);
+export type IdentityContinuityHandle = Readonly<{ isCurrent(): boolean }>;
+type IdentityContinuityReader = Readonly<{ readIdentityContinuity(): IdentityContinuityHandle | undefined }>;
+const IdentityContinuityContext = createContext<IdentityContinuityReader | undefined>(undefined);
 const DEVICE_KEY = 'ayo.mobile.installation-id.v1';
 export type IdentitySessionServices = Readonly<{ api: Promise<AuthenticationApi>; manager: Promise<SessionManager>; read?: AuthenticatedRead }>;
 type IdentitySessionProviderProps = PropsWithChildren<{ services?: IdentitySessionServices }>;
@@ -33,6 +40,7 @@ export function IdentitySessionProvider({ children, services: suppliedServices }
   const generation = useRef(0);
   const commandIdentityGeneration = useRef(0);
   const commandIdentityRef = useRef<CommandIdentitySnapshot | undefined>(undefined);
+  const commandIdentityContinuityRef = useRef<IdentityContinuityHandle | undefined>(undefined);
   const services = useMemo(() => {
     if (suppliedServices) return suppliedServices;
     const store = new ExpoSecureCredentialStore();
@@ -56,6 +64,10 @@ export function IdentitySessionProvider({ children, services: suppliedServices }
       sessionId: session.sessionId,
       identityGeneration: commandIdentityGeneration.current,
     }) : undefined;
+    const capturedGeneration = commandIdentityRef.current?.identityGeneration;
+    commandIdentityContinuityRef.current = capturedGeneration === undefined ? undefined : Object.freeze({
+      isCurrent: () => commandIdentityRef.current?.identityGeneration === capturedGeneration,
+    });
   }, []);
   const apply = useCallback((session: Awaited<ReturnType<SessionManager['restore']>>, activated = true) => {
     applyCommandIdentity(session);
@@ -95,11 +107,26 @@ export function IdentitySessionProvider({ children, services: suppliedServices }
   }, [services.manager, suppliedServices]);
   const commandRuntime = useMemo<IdentityCommandRuntime>(() => ({
     readIdentity: () => commandIdentityRef.current,
+    createStartTravelCommandService: async (scope) => new CourierStartTravelCommandService(
+      new CourierStartTravelTransport(baseUrl(), await services.manager),
+      authenticatedRead,
+      () => scope.currentScope(),
+    ),
+  }), [authenticatedRead, services.manager]);
+  const identityContinuity = useMemo<IdentityContinuityReader>(() => ({
+    readIdentityContinuity: () => commandIdentityContinuityRef.current,
   }), []);
-  return <Context.Provider value={value}><IdentityCommandRuntimeContext.Provider value={commandRuntime}><AuthenticatedReadContext.Provider value={authenticatedRead}>{children}</AuthenticatedReadContext.Provider></IdentityCommandRuntimeContext.Provider></Context.Provider>;
+  return <Context.Provider value={value}><IdentityCommandRuntimeContext.Provider value={commandRuntime}><IdentityContinuityContext.Provider value={identityContinuity}><AuthenticatedReadContext.Provider value={authenticatedRead}>{children}</AuthenticatedReadContext.Provider></IdentityContinuityContext.Provider></IdentityCommandRuntimeContext.Provider></Context.Provider>;
 }
 
 export function useIdentitySession() { const value = useContext(Context); if (!value) throw new Error('identity_session_provider_required'); return value; }
 export function useAuthenticatedRead() { const value = useContext(AuthenticatedReadContext); if (!value) throw new Error('identity_session_provider_required'); return value; }
-/** Infrastructure-only capability. Ordinary presentation code must use useIdentitySession(). */
-export function useIdentityCommandRuntime() { const value = useContext(IdentityCommandRuntimeContext); if (!value) throw new Error('identity_session_provider_required'); return value; }
+/** Opaque operational continuity only: no session identifier or numeric generation is exposed. */
+export function useIdentityContinuity() { const value = useContext(IdentityContinuityContext); if (!value) throw new Error('identity_session_provider_required'); return value; }
+
+/** Trusted composition boundary. Descendants receive only the scope provider's opaque capability. */
+export function TrustedCourierStartTravelCommandProvider({ children }: PropsWithChildren) {
+  const identity = useContext(IdentityCommandRuntimeContext);
+  if (!identity) throw new Error('identity_session_provider_required');
+  return <CourierStartTravelCommandInfrastructureProvider identity={identity}>{children}</CourierStartTravelCommandInfrastructureProvider>;
+}
