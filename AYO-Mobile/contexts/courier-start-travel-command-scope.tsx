@@ -1,6 +1,7 @@
 import { createContext, type PropsWithChildren, useContext, useLayoutEffect, useMemo, useRef } from 'react';
 
 import { CourierHandoffStatus } from '@/components/courier-handoff-status';
+import { useTrustedMarkArrivedEvidence } from '@/contexts/courier-mark-arrived-command-scope';
 import { useCourierCommandContext } from '@/contexts/operational-context';
 import type { CourierHandoffSnapshot } from '@/domain/courier-handoff-status';
 import { CourierStartTravelController, type StartTravelControllerResult } from '@/services/courier-start-travel-controller';
@@ -67,7 +68,19 @@ export function useStartTravelCommand() {
 /** Authenticated Handoff integration owns evidence publication; ordinary descendants receive no writer. */
 export function TrustedCourierHandoffStatus({ pickupId }: { pickupId: string }) {
   const evidence = useContext(EvidenceContext);
+  const markArrivedEvidence = useTrustedMarkArrivedEvidence();
   const command = useContext(CapabilityContext);
-  if (!evidence || !command) throw new Error('courier_start_travel_scope_provider_required');
-  return <CourierHandoffStatus pickupId={pickupId} commandEvidence={evidence} startTravelCommand={command} />;
+  const combinedEvidence = useMemo<StartTravelEvidenceIntegration | undefined>(() => evidence ? ({
+    publishFresh: (currentPickupId, snapshot, explicitRecovery) => {
+      evidence.publishFresh(currentPickupId, snapshot, explicitRecovery);
+      markArrivedEvidence?.publishFresh(currentPickupId, snapshot);
+    },
+    clearFresh: (currentPickupId) => {
+      evidence.clearFresh(currentPickupId);
+      markArrivedEvidence?.clearFresh(currentPickupId);
+    },
+    isUnexpectedStartFailureLatched: evidence.isUnexpectedStartFailureLatched,
+  }) : undefined, [evidence, markArrivedEvidence]);
+  if (!combinedEvidence || !command) throw new Error('courier_start_travel_scope_provider_required');
+  return <CourierHandoffStatus pickupId={pickupId} commandEvidence={combinedEvidence} startTravelCommand={command} />;
 }
