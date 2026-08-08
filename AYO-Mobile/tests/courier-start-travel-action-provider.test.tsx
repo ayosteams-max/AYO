@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
 import { CourierHandoffStatus, CourierStartTravelAction } from '@/components/courier-handoff-status';
-import type { StartTravelPresentationCommand } from '@/contexts/courier-start-travel-command-scope';
+import type { MarkArrivedPresentationCommand, StartTravelPresentationCommand } from '@/contexts/courier-start-travel-command-scope';
 import { LanguageProvider } from '@/contexts/language';
 import type { CourierHandoffSnapshot } from '@/domain/courier-handoff-status';
 import { courierHandoffCopy } from '@/localization/courier-handoff-status';
@@ -42,6 +42,13 @@ function command({ actionable = true, start = async () => ({ outcome: 'applied' 
     reconcileStartTravel: jest.fn(reconcile),
   }) satisfies StartTravelPresentationCommand;
 }
+
+const unavailableMarkCommand = Object.freeze({
+  canMarkArrived: () => false,
+  canReconcileMarkArrived: () => false,
+  markArrived: async () => ({ outcome: 'invalidated' as const, reason: 'scope_changed' as const }),
+  reconcileMarkArrived: async () => ({ outcome: 'rejected' as const, reason: 'reconciliation_not_available' as const }),
+}) satisfies MarkArrivedPresentationCommand;
 
 async function show(value: StartTravelPresentationCommand, options: Partial<React.ComponentProps<typeof CourierStartTravelAction>> = {}) {
   return render(<CourierStartTravelAction beginCommandInteraction={() => () => undefined} command={value} copy={courierHandoffCopy.en} explicitRecoveryGeneration={0} isUnexpectedStartFailureLatched={() => false} operationalReady refreshing={false} snapshot={snapshot} viewStatus="fresh" {...options} />);
@@ -252,7 +259,7 @@ test('START boundary blocks Refresh and invalidates an older Handoff read before
   });
   let mounted: Awaited<ReturnType<typeof render>> | undefined;
   try {
-    mounted = await render(<LanguageProvider><CourierHandoffStatus pickupId={pickupId} commandEvidence={{ publishFresh, clearFresh: jest.fn(), isUnexpectedStartFailureLatched: () => false }} startTravelCommand={commandValue} /></LanguageProvider>);
+    mounted = await render(<LanguageProvider><CourierHandoffStatus pickupId={pickupId} commandEvidence={{ publishFresh, clearFresh: jest.fn(), isUnexpectedStartFailureLatched: () => false }} markArrivedCommand={unavailableMarkCommand} startTravelCommand={commandValue} /></LanguageProvider>);
     await screen.findByLabelText(courierHandoffCopy.en.startTravel);
     const oldStartControl = screen.getByLabelText(courierHandoffCopy.en.startTravel);
     expect(publishFresh).toHaveBeenCalledTimes(1);

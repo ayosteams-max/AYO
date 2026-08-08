@@ -115,6 +115,7 @@ export function TrustedCourierHandoffStatus({ pickupId }: { pickupId: string }) 
   const evidence = useContext(EvidenceContext);
   const markArrivedEvidence = useContext(MarkArrivedEvidenceContext);
   const command = useContext(CapabilityContext);
+  const markArrivedCommand = useContext(MarkArrivedCapabilityContext);
   const combinedEvidence = useMemo<StartTravelEvidenceIntegration | undefined>(() => evidence ? ({
     publishFresh: (currentPickupId, snapshot, explicitRecovery) => {
       evidence.publishFresh(currentPickupId, snapshot, explicitRecovery);
@@ -126,6 +127,6 @@ export function TrustedCourierHandoffStatus({ pickupId }: { pickupId: string }) 
     },
     isUnexpectedStartFailureLatched: evidence.isUnexpectedStartFailureLatched,
   }) : undefined, [evidence, markArrivedEvidence]);
-  if (!combinedEvidence || !command) throw new Error('courier_start_travel_scope_provider_required');
-  return <CourierHandoffStatus pickupId={pickupId} commandEvidence={combinedEvidence} startTravelCommand={command} />;
+  if (!combinedEvidence || !command || !markArrivedCommand) throw new Error('courier_start_travel_scope_provider_required');
+  return <CourierHandoffStatus pickupId={pickupId} commandEvidence={combinedEvidence} markArrivedCommand={markArrivedCommand} startTravelCommand={command} />;
 }
