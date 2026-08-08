@@ -1,4 +1,4 @@
-import { createContext, type PropsWithChildren, useContext, useLayoutEffect, useMemo } from 'react';
+import { createContext, type PropsWithChildren, useContext, useLayoutEffect, useMemo, useRef } from 'react';
 
 import { CourierHandoffStatus } from '@/components/courier-handoff-status';
 import { useCourierCommandContext } from '@/contexts/operational-context';
@@ -17,7 +17,7 @@ export type StartTravelPresentationCommand = Readonly<{
   reconcileStartTravel(signal?: AbortSignal): Promise<StartTravelControllerResult>;
 }>;
 type StartTravelEvidenceIntegration = Readonly<{
-  publishFresh(pickupId: string, snapshot: CourierHandoffSnapshot): void;
+  publishFresh(pickupId: string, snapshot: CourierHandoffSnapshot, explicitRecovery: boolean): void;
   clearFresh(pickupId: string): void;
 }>;
 
@@ -28,17 +28,28 @@ export function CourierStartTravelCommandInfrastructureProvider({ children, iden
   const courier = useCourierCommandContext();
   const scope = useMemo(() => new CourierStartTravelCommandScope(identity.readIdentity, courier.readCourierContext), [courier.readCourierContext, identity.readIdentity]);
   const controller = useMemo(() => new CourierStartTravelController(scope, () => identity.createStartTravelCommandService(scope)), [identity, scope]);
+  const unexpectedStartFailure = useRef(false);
   useLayoutEffect(() => {
     scope.retainProviderLifetime();
     return () => scope.releaseProviderLifetime();
   }, [scope]);
   const capability = useMemo<StartTravelPresentationCommand>(() => Object.freeze({
-    canStartTravel: () => controller.isStartTravelActionable(),
-    startTravel: (signal) => controller.startTravel(signal),
+    canStartTravel: () => !unexpectedStartFailure.current && controller.isStartTravelActionable(),
+    startTravel: async (signal) => {
+      try {
+        return await controller.startTravel(signal);
+      } catch (error) {
+        unexpectedStartFailure.current = true;
+        throw error;
+      }
+    },
     reconcileStartTravel: (signal) => controller.reconcileCurrentOperation(signal),
   }), [controller]);
   const evidence = useMemo<StartTravelEvidenceIntegration>(() => ({
-    publishFresh: (pickupId, snapshot) => scope.publishFresh(pickupId, snapshot),
+    publishFresh: (pickupId, snapshot, explicitRecovery) => {
+      scope.publishFresh(pickupId, snapshot);
+      if (explicitRecovery) unexpectedStartFailure.current = false;
+    },
     clearFresh: (pickupId) => scope.clearFresh(pickupId),
   }), [scope]);
   return <CapabilityContext.Provider value={capability}><EvidenceContext.Provider value={evidence}>{children}</EvidenceContext.Provider></CapabilityContext.Provider>;

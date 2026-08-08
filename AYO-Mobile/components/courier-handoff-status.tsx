@@ -12,7 +12,7 @@ import type { StartTravelPresentationCommand } from '@/contexts/courier-start-tr
 
 type ViewStatus = 'loading' | 'fresh' | 'stale' | 'unavailable' | 'malformed' | 'conflicting';
 type StartTravelEvidenceIntegration = Readonly<{
-  publishFresh(pickupId: string, snapshot: CourierHandoffSnapshot): void;
+  publishFresh(pickupId: string, snapshot: CourierHandoffSnapshot, explicitRecovery: boolean): void;
   clearFresh(pickupId: string): void;
 }>;
 type StartTravelResult = Awaited<ReturnType<StartTravelPresentationCommand['startTravel']>>;
@@ -36,7 +36,7 @@ export function CourierHandoffStatus({ pickupId, commandEvidence, startTravelCom
   const commandPendingRef = useRef(false);
 
   useEffect(() => { snapshotRef.current = snapshot; }, [snapshot]);
-  const refresh = useCallback(() => {
+  const refresh = useCallback((explicitRecovery = true) => {
     if (commandPendingRef.current) return Promise.resolve();
     if (request.current) return request.current;
     const current = generation.current;
@@ -44,7 +44,7 @@ export function CourierHandoffStatus({ pickupId, commandEvidence, startTravelCom
     setRefreshing(true); if (!snapshotRef.current) setViewStatus('loading');
     const operation = service.load(pickupId, abort.signal).then((next) => {
       if (current !== generation.current || abort.signal.aborted) return;
-      commandEvidence.publishFresh(pickupId, next);
+      commandEvidence.publishFresh(pickupId, next, explicitRecovery);
       snapshotRef.current = next; setSnapshot(next); setViewStatus('fresh');
     }).catch((error: unknown) => {
       if (current !== generation.current || abort.signal.aborted) return;
@@ -83,7 +83,7 @@ export function CourierHandoffStatus({ pickupId, commandEvidence, startTravelCom
   }, []);
 
   useEffect(() => {
-    generation.current += 1; controller.current?.abort(); request.current = undefined; commandEvidence.clearFresh(pickupId); snapshotRef.current = undefined; setSnapshot(undefined); setViewStatus('loading'); setRefreshing(false); void refresh();
+    generation.current += 1; controller.current?.abort(); request.current = undefined; commandEvidence.clearFresh(pickupId); snapshotRef.current = undefined; setSnapshot(undefined); setViewStatus('loading'); setRefreshing(false); void refresh(false);
     return () => { generation.current += 1; controller.current?.abort(); commandEvidence.clearFresh(pickupId); };
   }, [commandEvidence, pickupId, refresh]);
 

@@ -227,6 +227,7 @@ test('START boundary blocks Refresh and invalidates an older Handoff read before
     await screen.findByLabelText(courierHandoffCopy.en.startTravel);
     const oldStartControl = screen.getByLabelText(courierHandoffCopy.en.startTravel);
     expect(publishFresh).toHaveBeenCalledTimes(1);
+    expect(publishFresh).toHaveBeenLastCalledWith(pickupId, snapshot, false);
 
     fireEvent.press(screen.getByLabelText(courierHandoffCopy.en.refresh));
     expect(pickupReads).toBe(2);
@@ -245,6 +246,7 @@ test('START boundary blocks Refresh and invalidates an older Handoff read before
     fireEvent.press(screen.getByLabelText(courierHandoffCopy.en.refresh));
     await waitFor(() => expect(pickupReads).toBe(3));
     await waitFor(() => expect(publishFresh).toHaveBeenCalledTimes(2));
+    expect(publishFresh).toHaveBeenLastCalledWith(pickupId, snapshot, true);
     await waitFor(() => expect(screen.getByLabelText(courierHandoffCopy.en.refresh).props.accessibilityState).toMatchObject({ disabled: false }));
   } finally {
     await act(async () => { mounted?.unmount(); });
