@@ -17,6 +17,7 @@ export class CourierMarkArrivedController {
   private readonly createService: () => Service | Promise<Service>;
   private service?: Promise<Service>;
   private operation?: Operation;
+  private unexpectedSubmitFailure = false;
   constructor(scope: CourierMarkArrivedCommandScope, createService: () => Service | Promise<Service>) { this.scope = scope; this.createService = createService; }
 
   createAttempt(): MarkArrivedAttemptHandle | undefined {
@@ -29,6 +30,61 @@ export class CourierMarkArrivedController {
     const attempt = this.scope.resolveForSubmit(handle); if (!attempt) return undefined;
     this.operation = { handle, attempt }; return handle;
   }
+
+  /** Pure presentation actionability; command custody and key creation remain internal. */
+  isMarkArrivedActionable(): boolean {
+    if (this.unexpectedSubmitFailure) return false;
+    const operation = this.operation;
+    if (operation) {
+      if (operation.inFlight) return false;
+      if (!operation.settled) return this.scope.resolveForSubmit(operation.handle) !== undefined;
+      if (operation.settled.outcome === 'outcome_unknown') return false;
+      if (operation.settled.outcome === 'retry_same_attempt') return this.scope.resolveForSubmit(operation.handle) !== undefined;
+    }
+    return this.scope.currentScope() !== undefined;
+  }
+
+  /** Pure visibility for reconciliation of the current ambiguous operation. */
+  isReconciliationAvailable(): boolean {
+    const operation = this.operation;
+    return !!operation && !operation.inFlight && operation.settled?.outcome === 'outcome_unknown' &&
+      this.scope.resolveForOperation(operation.handle) !== undefined;
+  }
+
+  /** Bounded explicit action; the handle and immutable attempt never cross this boundary. */
+  markArrived(signal?: AbortSignal): Promise<MarkArrivedControllerResult> {
+    if (this.unexpectedSubmitFailure) return Promise.resolve(Object.freeze({ outcome: 'invalidated', reason: 'scope_changed' }));
+    const handle = this.createAttempt();
+    if (!handle) {
+      const settled = this.operation?.settled;
+      if (settled && settled.outcome !== 'retry_same_attempt') return Promise.resolve(settled);
+      return Promise.resolve(Object.freeze({ outcome: 'invalidated', reason: 'scope_changed' }));
+    }
+    return this.submit(handle, signal);
+  }
+
+  /** Reconciles only an existing ambiguous operation and never creates an attempt or key. */
+  reconcileCurrentOperation(signal?: AbortSignal): Promise<MarkArrivedControllerResult> {
+    const operation = this.operation;
+    if (!operation || (!operation.settled && operation.inFlight) ||
+      (!operation.inFlight && operation.settled?.outcome !== 'outcome_unknown')) {
+      return Promise.resolve(Object.freeze({ outcome: 'rejected', reason: 'reconciliation_not_available' }));
+    }
+    return this.reconcile(operation.handle, signal);
+  }
+
+  /** Explicit trusted-refresh recovery for unexpected submit failures only. */
+  recoverUnexpectedSubmitFailure(): void {
+    if (!this.unexpectedSubmitFailure) return;
+    const operation = this.operation;
+    if (operation?.inFlight || operation?.settled?.outcome === 'outcome_unknown') return;
+    if (operation && !this.scope.resolveForSubmit(operation.handle)) {
+      operation.settled = Object.freeze({ outcome: 'invalidated', reason: 'scope_changed' });
+    }
+    this.unexpectedSubmitFailure = false;
+  }
+
+  isUnexpectedSubmitFailureLatched(): boolean { return this.unexpectedSubmitFailure; }
 
   submit(handle: MarkArrivedAttemptHandle, signal?: AbortSignal): Promise<MarkArrivedControllerResult> {
     const operation = this.operation;
@@ -71,6 +127,7 @@ export class CourierMarkArrivedController {
       if (error instanceof MarkArrivedRejectedError) { this.scope.clearFreshForAttempt(operation.attempt); return operation.settled = Object.freeze({ outcome: 'rejected', reason: error.reason }); }
       if (error instanceof MarkArrivedContractError) { this.scope.clearFreshForAttempt(operation.attempt); return operation.settled = Object.freeze({ outcome: 'rejected', reason: 'malformed_response' }); }
       if (error instanceof MarkArrivedAttemptInvalidError) { this.scope.clearFreshForAttempt(operation.attempt); return operation.settled = Object.freeze({ outcome: 'invalidated', reason: 'scope_changed' }); }
+      if (!(error instanceof PublicApiError)) this.unexpectedSubmitFailure = true;
       return this.boundPublicError(operation, error);
     }
   }
