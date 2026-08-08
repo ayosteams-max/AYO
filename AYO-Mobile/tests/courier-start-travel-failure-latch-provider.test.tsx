@@ -36,6 +36,7 @@ test('unexpected START failure survives remount and failed Refresh until a succe
   const identity = Object.freeze({
     readIdentity: () => Object.freeze({ identityId: '11111111-1111-4111-8111-111111111111', sessionId: '22222222-2222-4222-8222-222222222222', identityGeneration: 1 }),
     createStartTravelCommandService: jest.fn(async () => { throw new Error('unexpected command failure'); }),
+    createMarkArrivedCommandService: jest.fn(async () => { throw new Error('not_exposed'); }),
   });
   const courier = Object.freeze({ pickupId, contextGeneration: 1, identityContinuity: Object.freeze({ isCurrent: () => true }) });
   mockUseAuthenticatedRead.mockReturnValue(read);
@@ -111,6 +112,7 @@ test('remount preserves Check Status for controller-owned outcome unknown', asyn
       submit: async () => { throw new StartTravelOutcomeUnknownError(); },
       reconcile: async () => Object.freeze({ outcome: 'retry_same_attempt' as const, pickup: Object.freeze({ pickupId, state: 'courier_assigned' as const, version: 4, updatedAt: '2026-08-08T01:00:00Z', presentationAction: 'start_travel' as const }) }),
     }) as never),
+    createMarkArrivedCommandService: jest.fn(async () => { throw new Error('not_exposed'); }),
   });
   const courier = Object.freeze({ pickupId, contextGeneration: 1, identityContinuity: Object.freeze({ isCurrent: () => true }) });
   mockUseAuthenticatedRead.mockReturnValue(read);

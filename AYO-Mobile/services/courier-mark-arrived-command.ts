@@ -3,6 +3,7 @@ import { boundedFetch, parsePublicError, PublicApiError, validateApiBaseUrl } fr
 import type { SessionManager } from './session-manager.ts';
 
 type ScopeReader = () => MarkArrivedCommandScope | undefined;
+type OperationContinuity = (attempt: MarkArrivedAttempt) => boolean;
 type AuthenticatedRead = (path: string, signal?: AbortSignal) => Promise<unknown>;
 type DispatchGuard = () => boolean;
 
@@ -57,7 +58,10 @@ export class CourierMarkArrivedCommandService {
   private readonly transport: Pick<CourierMarkArrivedTransport, 'post'>;
   private readonly read: AuthenticatedRead;
   private readonly currentScope: ScopeReader;
-  constructor(transport: Pick<CourierMarkArrivedTransport, 'post'>, read: AuthenticatedRead, currentScope: ScopeReader) { this.transport = transport; this.read = read; this.currentScope = currentScope; }
+  private readonly operationIsCurrent: OperationContinuity;
+  constructor(transport: Pick<CourierMarkArrivedTransport, 'post'>, read: AuthenticatedRead, currentScope: ScopeReader, operationIsCurrent: OperationContinuity = (attempt) => markArrivedAttemptMatchesScope(attempt, currentScope())) {
+    this.transport = transport; this.read = read; this.currentScope = currentScope; this.operationIsCurrent = operationIsCurrent;
+  }
   async submit(attempt: MarkArrivedAttempt, signal?: AbortSignal): Promise<MarkArrivedResult> {
     if (!markArrivedAttemptMatchesScope(attempt, this.currentScope())) throw new MarkArrivedAttemptInvalidError();
     let value: unknown;
@@ -70,10 +74,10 @@ export class CourierMarkArrivedCommandService {
     return parseMarkArrivedResult(value, attempt);
   }
   async reconcile(attempt: MarkArrivedAttempt, signal?: AbortSignal): Promise<MarkArrivedReconciliation> {
-    if (!markArrivedAttemptMatchesScope(attempt, this.currentScope())) return Object.freeze({ outcome: 'invalidated', reason: 'authority_lost' });
+    if (!this.operationIsCurrent(attempt)) return Object.freeze({ outcome: 'invalidated', reason: 'authority_lost' });
     try {
       const value = await this.read(`/mobile/courier-pickups/${encodeURIComponent(attempt.pickupId)}`, signal);
-      if (!markArrivedAttemptMatchesScope(attempt, this.currentScope())) return Object.freeze({ outcome: 'invalidated', reason: 'authority_lost' });
+      if (!this.operationIsCurrent(attempt)) return Object.freeze({ outcome: 'invalidated', reason: 'authority_lost' });
       return reconcileMarkArrivedRead(value, attempt);
     } catch (error) {
       if (error instanceof PublicApiError && (error.status === 403 || error.status === 404)) return Object.freeze({ outcome: 'invalidated', reason: 'authority_lost' });

@@ -253,7 +253,7 @@ test('reader dependency replacement closes scope A before scope B layout observa
   const courierSpy = jest.spyOn(operationalContext, 'useCourierCommandContext').mockImplementation(() => ({ readCourierContext }));
   const operationalSpy = jest.spyOn(operationalContext, 'useOperationalContext').mockImplementation(() => operationalValue);
   try {
-    const identity = { readIdentity, createStartTravelCommandService: createCommandService };
+    const identity = { readIdentity, createStartTravelCommandService: createCommandService, createMarkArrivedCommandService: jest.fn(async () => { throw new Error('not_exposed'); }) };
     const tree = (child: React.ReactNode) => <CourierStartTravelCommandInfrastructureProvider identity={identity}><LanguageProvider>{child}</LanguageProvider></CourierStartTravelCommandInfrastructureProvider>;
     const mounted = await render(tree(<MinimalConsumer />));
     await waitFor(() => expect(screen.getByText('Pickup work is current')).toBeTruthy());
@@ -264,7 +264,7 @@ test('reader dependency replacement closes scope A before scope B layout observa
 
     readIdentity = () => identityValue;
     readCourierContext = () => courierValue;
-    const replacementIdentity = { readIdentity, createStartTravelCommandService: createCommandService };
+    const replacementIdentity = { readIdentity, createStartTravelCommandService: createCommandService, createMarkArrivedCommandService: jest.fn(async () => { throw new Error('not_exposed'); }) };
     let observation: ReplacementObservation | undefined;
     await mounted.rerender(<CourierStartTravelCommandInfrastructureProvider identity={replacementIdentity}><LanguageProvider><ReplacementObserver previousCapability={capabilityA!} observe={(value) => { observation = value; }} /></LanguageProvider></CourierStartTravelCommandInfrastructureProvider>);
     await waitFor(() => expect(observation).toEqual({ distinctCapability: true, oldCanStart: false, oldStart: { outcome: 'invalidated', reason: 'scope_changed' } }));

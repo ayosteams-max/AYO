@@ -12,6 +12,8 @@ import { AuthenticatedReadTransport } from '@/services/authenticated-read-transp
 import { CourierStartTravelCommandService, CourierStartTravelTransport } from '@/services/courier-start-travel-command';
 import type { CourierStartTravelCommandScope } from '@/services/courier-start-travel-command-scope';
 import { CourierStartTravelCommandInfrastructureProvider } from '@/contexts/courier-start-travel-command-scope';
+import { CourierMarkArrivedCommandService, CourierMarkArrivedTransport } from '@/services/courier-mark-arrived-command';
+import type { CourierMarkArrivedCommandScope } from '@/services/courier-mark-arrived-command-scope';
 
 type SessionStatus = 'restoring' | 'signed_out' | 'verification_required' | 'authenticated';
 type IdentityContextValue = Readonly<{ status: SessionStatus; identity?: SessionIdentity; error?: string; signIn(c: Credentials): Promise<void>; register(c: Credentials): Promise<void>; prepareVerification(kind: Credentials['contactKind'], contact: string): Promise<string>; completeVerification(challengeId: string, code: string): Promise<void>; retry(): Promise<void>; signOut(): Promise<void> }>;
@@ -22,6 +24,7 @@ type CommandIdentitySnapshot = Readonly<{ identityId: string; sessionId: string;
 type IdentityCommandRuntime = Readonly<{
   readIdentity(): CommandIdentitySnapshot | undefined;
   createStartTravelCommandService(scope: CourierStartTravelCommandScope): Promise<CourierStartTravelCommandService>;
+  createMarkArrivedCommandService(scope: CourierMarkArrivedCommandScope): Promise<CourierMarkArrivedCommandService>;
 }>;
 const IdentityCommandRuntimeContext = createContext<IdentityCommandRuntime | undefined>(undefined);
 export type IdentityContinuityHandle = Readonly<{ isCurrent(): boolean }>;
@@ -111,6 +114,12 @@ export function IdentitySessionProvider({ children, services: suppliedServices }
       new CourierStartTravelTransport(baseUrl(), await services.manager),
       authenticatedRead,
       () => scope.currentScope(),
+    ),
+    createMarkArrivedCommandService: async (scope) => new CourierMarkArrivedCommandService(
+      new CourierMarkArrivedTransport(baseUrl(), await services.manager),
+      authenticatedRead,
+      () => scope.currentScope(),
+      (attempt) => scope.operationIsCurrent(attempt),
     ),
   }), [authenticatedRead, services.manager]);
   const identityContinuity = useMemo<IdentityContinuityReader>(() => ({
