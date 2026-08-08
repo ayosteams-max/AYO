@@ -8,16 +8,21 @@ from fastapi import FastAPI, Request
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
-from BACKEND.courier_pickup.application import CourierPickupApplication
+from BACKEND.courier_dispatch.models import CourierDispatchState
+from BACKEND.courier_pickup.application import (
+    CourierPickupApplication,
+    CourierPickupMerchantRead,
+)
 from BACKEND.courier_pickup.engine import CourierPickupConflict
 from BACKEND.courier_pickup.models import (
     CourierPickupAction,
     CourierPickupExceptionReason,
+    CourierPickupState,
     CourierPickupView,
 )
 from BACKEND.identity.models import IdentityType
 from BACKEND.merchant.models import MerchantState
-from BACKEND.routes.courier_pickup import create_courier_pickup_router
+from BACKEND.routes.courier_pickup import _merchant_status, create_courier_pickup_router
 from tests.test_courier_pickup_increment1 import application, subject
 
 NOW = datetime(2026, 8, 5, tzinfo=UTC)
@@ -58,8 +63,10 @@ class _RouteApplication:
     def __init__(self, view: CourierPickupView) -> None:
         self.view = view
 
-    def merchant_detail(self, *args: object, **kwargs: object) -> CourierPickupView:
-        return self.view
+    def merchant_detail(
+        self, *args: object, **kwargs: object
+    ) -> CourierPickupMerchantRead:
+        return CourierPickupMerchantRead(view=self.view, current_assignment=True)
 
     def merchant_acknowledge(
         self, *args: object, **kwargs: object
@@ -194,7 +201,7 @@ def test_merchant_status_evidence_remains_owner_approved_and_pickup_bound() -> N
             subject(merchant_owner, IdentityType.MERCHANT),
             merchant_id=value.merchant_id,
             order_id=value.order_id,
-        ).pickup
+        ).view.pickup
         == original_pickup
     )
 
@@ -239,6 +246,62 @@ def test_merchant_status_evidence_remains_owner_approved_and_pickup_bound() -> N
             order_id=value.order_id,
         )
 
+    assert unit.courier_pickup.replays == {}
+    assert unit.audit_events == []
+    assert unit.custody.value is None
+
+
+def test_merchant_arrival_evidence_requires_current_assignment() -> None:
+    app_value, value, _, merchant_owner = application(
+        permissions={
+            "courier_pickup.read_own_merchant",
+            "courier_pickup.acknowledge_own_merchant",
+        }
+    )
+    unit = app_value._composition.unit
+    unit.courier_pickup.value = unit.courier_pickup.value.model_copy(
+        update={"state": CourierPickupState.ARRIVED, "version": 3, "arrived_at": NOW}
+    )
+    unit.courier_pickup.get_by_order = lambda order_id: (
+        unit.courier_pickup._view() if order_id == value.order_id else None
+    )
+    original_pickup = unit.courier_pickup.value
+    merchant = subject(merchant_owner, IdentityType.MERCHANT)
+
+    current_read = app_value.merchant_detail(
+        merchant, merchant_id=value.merchant_id, order_id=value.order_id
+    )
+    assert current_read.current_assignment is True
+    assert _merchant_status(current_read).presentation_action == "acknowledge_arrival"
+
+    unit.courier_dispatch.get = lambda *args, **kwargs: SimpleNamespace(
+        dispatch_id=value.dispatch_id,
+        order_id=value.order_id,
+        merchant_id=value.merchant_id,
+        state=CourierDispatchState.ASSIGNED,
+        active_assignment_id=uuid4(),
+        assigned_courier_identity_id=value.assigned_courier_identity_id,
+    )
+    stale_read = app_value.merchant_detail(
+        merchant, merchant_id=value.merchant_id, order_id=value.order_id
+    )
+    assert stale_read.view.pickup == original_pickup
+    assert stale_read.current_assignment is False
+    assert _merchant_status(stale_read).presentation_action == "none"
+
+    with pytest.raises(
+        CourierPickupConflict, match="^courier_pickup_assignment_invalid$"
+    ):
+        app_value.merchant_acknowledge(
+            merchant,
+            merchant_id=value.merchant_id,
+            pickup_id=value.pickup_id,
+            expected_version=3,
+            idempotency_key="merchant-stale-assignment-0001",
+            at=NOW,
+        )
+
+    assert unit.courier_pickup.value == original_pickup
     assert unit.courier_pickup.replays == {}
     assert unit.audit_events == []
     assert unit.custody.value is None

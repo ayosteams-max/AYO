@@ -10,7 +10,10 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from BACKEND.authorization.contracts import AuthorizationSubject
 from BACKEND.authorization.enforcement import AuthorizationRoute
-from BACKEND.courier_pickup.application import CourierPickupApplication
+from BACKEND.courier_pickup.application import (
+    CourierPickupApplication,
+    CourierPickupMerchantRead,
+)
 from BACKEND.courier_pickup.engine import CourierPickupConflict
 from BACKEND.courier_pickup.models import (
     CourierPickupAction,
@@ -156,8 +159,16 @@ def _courier_status(view: CourierPickupView) -> CourierPickupCourierStatus:
     )
 
 
-def _merchant_status(view: CourierPickupView) -> CourierPickupMerchantStatus:
+def _merchant_status(read: CourierPickupMerchantRead) -> CourierPickupMerchantStatus:
+    view = read.view
     pickup = view.pickup
+    presentation_action = MERCHANT_PRESENTATION_ACTION_BY_STATE[pickup.state]
+    if (
+        presentation_action
+        is CourierPickupMerchantPresentationAction.ACKNOWLEDGE_ARRIVAL
+        and not read.current_assignment
+    ):
+        presentation_action = CourierPickupMerchantPresentationAction.NONE
     return CourierPickupMerchantStatus(
         pickup_id=pickup.pickup_id,
         state=pickup.state,
@@ -167,7 +178,7 @@ def _merchant_status(view: CourierPickupView) -> CourierPickupMerchantStatus:
         waiting_duration_seconds=pickup.waiting_duration_seconds,
         terminal_reason=pickup.terminal_reason,
         updated_at=pickup.updated_at,
-        presentation_action=MERCHANT_PRESENTATION_ACTION_BY_STATE[pickup.state],
+        presentation_action=presentation_action,
     )
 
 

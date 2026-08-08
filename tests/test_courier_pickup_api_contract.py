@@ -11,7 +11,10 @@ from pydantic import ValidationError
 from BACKEND.authorization.contracts import AuthorizationSubject
 from BACKEND.authorization.enforcement import AuthorizationEnforcer
 from BACKEND.config.settings import Settings
-from BACKEND.courier_pickup.application import CourierPickupApplication
+from BACKEND.courier_pickup.application import (
+    CourierPickupApplication,
+    CourierPickupMerchantRead,
+)
 from BACKEND.courier_pickup.engine import CourierPickupConflict
 from BACKEND.courier_pickup.models import CourierPickupState, CourierPickupView
 from BACKEND.custody.application import CustodyApplication
@@ -109,8 +112,8 @@ class _RouteApplication:
         assert self.view is not None
         return self.view
 
-    def merchant_detail(self, *args, **kwargs) -> CourierPickupView:
-        return self._result()
+    def merchant_detail(self, *args, **kwargs) -> CourierPickupMerchantRead:
+        return CourierPickupMerchantRead(view=self._result(), current_assignment=True)
 
     def merchant_acknowledge(self, *args, **kwargs) -> CourierPickupView:
         return self._result()
@@ -187,7 +190,7 @@ def test_distinct_pure_mappers_emit_only_exact_caller_fields() -> None:
         _courier_command_result(view),
         _courier_status(view),
         _merchant_command_result(view),
-        _merchant_status(view),
+        _merchant_status(CourierPickupMerchantRead(view, current_assignment=True)),
     )
     assert [set(result.model_dump()) for result in results] == [
         COURIER_FIELDS,
@@ -238,8 +241,31 @@ def test_merchant_status_derives_only_bounded_presentation_action(
     view, _, _ = _view()
     pickup = view.pickup.model_copy(update={"state": state})
     assert (
-        _merchant_status(view.model_copy(update={"pickup": pickup})).presentation_action
+        _merchant_status(
+            CourierPickupMerchantRead(
+                view.model_copy(update={"pickup": pickup}), current_assignment=True
+            )
+        ).presentation_action
         == expected
+    )
+
+
+def test_arrived_merchant_status_suppresses_action_for_stale_assignment() -> None:
+    view, _, _ = _view()
+    pickup = view.pickup.model_copy(update={"state": CourierPickupState.ARRIVED})
+    arrived = view.model_copy(update={"pickup": pickup})
+
+    assert (
+        _merchant_status(
+            CourierPickupMerchantRead(arrived, current_assignment=True)
+        ).presentation_action
+        == "acknowledge_arrival"
+    )
+    assert (
+        _merchant_status(
+            CourierPickupMerchantRead(arrived, current_assignment=False)
+        ).presentation_action
+        == "none"
     )
 
 

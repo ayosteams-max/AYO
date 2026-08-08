@@ -527,6 +527,66 @@ def test_postgres_composed_http_exposes_exact_caller_contracts(
 
 
 @pytest.mark.usefixtures("api_contract_state")
+def test_merchant_arrival_evidence_suppresses_released_assignment_without_side_effects(
+    postgres_engine,
+    postgres_composition,
+) -> None:
+    courier = _client(postgres_composition, _subject())
+    courier.post(
+        f"/api/mobile/courier-pickups/{PICKUP}/actions",
+        headers={"Idempotency-Key": KEY},
+        json={"expected_version": 1, "action": "start_travel"},
+    )
+    arrived = courier.post(
+        f"/api/mobile/courier-pickups/{PICKUP}/actions",
+        headers={"Idempotency-Key": "postgres-stale-arrival-0001"},
+        json={"expected_version": 2, "action": "mark_arrived"},
+    )
+    assert arrived.status_code == 200
+
+    with postgres_engine.begin() as connection:
+        connection.execute(
+            update(courier_dispatch_assignments)
+            .where(courier_dispatch_assignments.c.assignment_id == ASSIGNMENT)
+            .values(
+                state="released_before_pickup",
+                closed_at=NOW,
+                close_reason="replaced",
+                version=2,
+            )
+        )
+    before_read = _effect_counts(postgres_engine)
+    merchant = _client(postgres_composition, _merchant_subject())
+    status = merchant.get(
+        f"/api/mobile/merchants/{MERCHANT}/orders/{ORDER}/courier-pickup"
+    )
+
+    assert status.status_code == 200
+    assert status.json()["state"] == "arrived_at_merchant"
+    assert status.json()["presentation_action"] == "none"
+    assert _effect_counts(postgres_engine) == before_read
+    with postgres_engine.connect() as connection:
+        assert (
+            connection.execute(
+                select(func.count())
+                .select_from(commerce_custody_records)
+                .where(commerce_custody_records.c.pickup_id == PICKUP)
+            ).scalar_one()
+            == 0
+        )
+
+    acknowledge = merchant.post(
+        f"/api/mobile/merchants/{MERCHANT}/courier-pickups/{PICKUP}/acknowledge",
+        headers={"Idempotency-Key": "postgres-stale-merchant-0001"},
+        json={"expected_version": 3, "action": "acknowledge_arrival"},
+    )
+    assert acknowledge.status_code == 409
+    assert acknowledge.json() == {
+        "detail": {"code": "courier_pickup_temporarily_unavailable"}
+    }
+
+
+@pytest.mark.usefixtures("api_contract_state")
 def test_postgres_custody_read_distinguishes_absent_from_released_assignment(
     postgres_engine,
     postgres_composition,

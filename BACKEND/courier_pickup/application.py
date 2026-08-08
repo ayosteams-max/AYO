@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
@@ -21,6 +22,12 @@ from BACKEND.custody.engine import CustodyConflict
 from BACKEND.merchant.models import MerchantState
 
 
+@dataclass(frozen=True)
+class CourierPickupMerchantRead:
+    view: CourierPickupView
+    current_assignment: bool
+
+
 class CourierPickupApplication:
     def __init__(
         self, composition: Any, policy: CourierPickupPolicy | None = None
@@ -38,7 +45,7 @@ class CourierPickupApplication:
 
     def merchant_detail(
         self, subject: AuthorizationSubject, *, merchant_id: UUID, order_id: UUID
-    ) -> CourierPickupView:
+    ) -> CourierPickupMerchantRead:
         with self._composition.unit_of_work() as unit:
             merchant = unit.merchants.get_profile(merchant_id, lock=False)
             if merchant is None or merchant.owner_identity_id != subject.identity_id:
@@ -54,7 +61,12 @@ class CourierPickupApplication:
                 at=datetime.now(UTC),
             ):
                 raise CourierPickupConflict("access_denied")
-            return value
+            return CourierPickupMerchantRead(
+                view=value,
+                current_assignment=matches_current_assignment(
+                    unit, value.pickup, lock=False
+                ),
+            )
 
     def courier_detail(
         self, subject: AuthorizationSubject, *, pickup_id: UUID
