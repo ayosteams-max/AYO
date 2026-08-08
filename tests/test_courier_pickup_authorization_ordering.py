@@ -16,6 +16,7 @@ from BACKEND.courier_pickup.models import (
     CourierPickupView,
 )
 from BACKEND.identity.models import IdentityType
+from BACKEND.merchant.models import MerchantState
 from BACKEND.routes.courier_pickup import create_courier_pickup_router
 from tests.test_courier_pickup_increment1 import application, subject
 
@@ -176,6 +177,71 @@ def test_missing_merchant_pickup_is_unavailable_before_permission_lookup() -> No
     assert unit.courier_pickup.value == original_pickup
     assert unit.courier_pickup.replays == {}
     assert unit.audit_events == []
+
+
+def test_merchant_status_evidence_remains_owner_approved_and_pickup_bound() -> None:
+    app_value, value, _, merchant_owner = application(
+        permissions={"courier_pickup.read_own_merchant"}
+    )
+    unit = app_value._composition.unit
+    unit.courier_pickup.get_by_order = lambda order_id: (
+        unit.courier_pickup._view() if order_id == value.order_id else None
+    )
+    original_pickup = unit.courier_pickup.value
+
+    assert (
+        app_value.merchant_detail(
+            subject(merchant_owner, IdentityType.MERCHANT),
+            merchant_id=value.merchant_id,
+            order_id=value.order_id,
+        ).pickup
+        == original_pickup
+    )
+
+    with pytest.raises(CourierPickupConflict, match="^courier_pickup_unavailable$"):
+        app_value.merchant_detail(
+            subject(uuid4(), IdentityType.MERCHANT),
+            merchant_id=value.merchant_id,
+            order_id=value.order_id,
+        )
+
+    with pytest.raises(CourierPickupConflict, match="^courier_pickup_unavailable$"):
+        app_value.merchant_detail(
+            subject(merchant_owner, IdentityType.MERCHANT),
+            merchant_id=uuid4(),
+            order_id=value.order_id,
+        )
+
+    unit.merchants.get_profile = lambda merchant_id, lock=False: SimpleNamespace(
+        merchant_id=merchant_id,
+        owner_identity_id=merchant_owner,
+        state=MerchantState.SUSPENDED,
+    )
+    with pytest.raises(CourierPickupConflict, match="^merchant_unavailable$"):
+        app_value.merchant_detail(
+            subject(merchant_owner, IdentityType.MERCHANT),
+            merchant_id=value.merchant_id,
+            order_id=value.order_id,
+        )
+
+    unit.merchants.get_profile = lambda merchant_id, lock=False: SimpleNamespace(
+        merchant_id=merchant_id,
+        owner_identity_id=merchant_owner,
+        state=MerchantState.APPROVED,
+    )
+    unit.courier_pickup.value = original_pickup.model_copy(
+        update={"merchant_id": uuid4()}
+    )
+    with pytest.raises(CourierPickupConflict, match="^courier_pickup_unavailable$"):
+        app_value.merchant_detail(
+            subject(merchant_owner, IdentityType.MERCHANT),
+            merchant_id=value.merchant_id,
+            order_id=value.order_id,
+        )
+
+    assert unit.courier_pickup.replays == {}
+    assert unit.audit_events == []
+    assert unit.custody.value is None
 
 
 def test_missing_courier_pickup_is_unavailable_before_permission_lookup() -> None:

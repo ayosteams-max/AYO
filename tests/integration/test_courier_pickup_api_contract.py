@@ -97,6 +97,7 @@ COURIER_FIELDS = {
 }
 COURIER_STATUS_FIELDS = COURIER_FIELDS | {"presentation_action"}
 MERCHANT_FIELDS = COURIER_FIELDS - {"assigned_at", "travelling_at"}
+MERCHANT_STATUS_FIELDS = MERCHANT_FIELDS | {"presentation_action"}
 CUSTODY_COMMON_FIELDS = {
     "custody_id",
     "order_id",
@@ -416,9 +417,22 @@ def test_postgres_composed_http_exposes_exact_caller_contracts(
         json={"expected_version": 2, "action": "mark_arrived"},
     )
     merchant = _client(postgres_composition, _merchant_subject())
+    before_merchant_status = _effect_counts(postgres_engine)
     merchant_status = merchant.get(
         f"/api/mobile/merchants/{MERCHANT}/orders/{ORDER}/courier-pickup"
     )
+    assert merchant_status.status_code == 200
+    assert merchant_status.json()["presentation_action"] == "acknowledge_arrival"
+    assert _effect_counts(postgres_engine) == before_merchant_status
+    with postgres_engine.connect() as connection:
+        assert (
+            connection.execute(
+                select(func.count())
+                .select_from(commerce_custody_records)
+                .where(commerce_custody_records.c.pickup_id == PICKUP)
+            ).scalar_one()
+            == 0
+        )
     merchant_command = merchant.post(
         f"/api/mobile/merchants/{MERCHANT}/courier-pickups/{PICKUP}/acknowledge",
         headers={"Idempotency-Key": "postgres-merchant-contract-0001"},
@@ -428,8 +442,8 @@ def test_postgres_composed_http_exposes_exact_caller_contracts(
     for response in (courier_start, courier_arrive):
         _assert_public(response, COURIER_FIELDS)
     _assert_public(travelling_status, COURIER_STATUS_FIELDS)
-    for response in (merchant_status, merchant_command):
-        _assert_public(response, MERCHANT_FIELDS)
+    _assert_public(merchant_status, MERCHANT_STATUS_FIELDS)
+    _assert_public(merchant_command, MERCHANT_FIELDS)
     replay = merchant.post(
         f"/api/mobile/merchants/{MERCHANT}/courier-pickups/{PICKUP}/acknowledge",
         headers={"Idempotency-Key": "postgres-merchant-contract-0001"},
