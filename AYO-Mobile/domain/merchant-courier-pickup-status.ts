@@ -113,12 +113,14 @@ export function parseMerchantCourierPickupStatus(value: unknown): MerchantCourie
   const state = item.state as MerchantCourierPickupState;
   const presentationAction = item.presentation_action as MerchantCourierPickupPresentationAction;
   if (presentationAction === 'acknowledge_arrival' && state !== 'arrived_at_merchant') throw new MerchantCourierPickupContractError();
+  const arrivedAt = nullableInstant(item.arrived_at);
+  if (state === 'arrived_at_merchant' && !arrivedAt) throw new MerchantCourierPickupContractError();
 
   return Object.freeze({
     pickupId: parseMerchantCourierPickupIdentifier(item.pickup_id),
     state,
     version: positiveVersion(item.version),
-    arrivedAt: nullableInstant(item.arrived_at),
+    arrivedAt,
     merchantAcknowledgedAt: nullableInstant(item.merchant_acknowledged_at),
     waitingDurationSeconds: waitingDuration(item.waiting_duration_seconds),
     terminalReason: terminalReason(item.terminal_reason),

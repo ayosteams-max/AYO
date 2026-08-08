@@ -39,7 +39,18 @@ test('all exact merchant lifecycle and action combinations parse', () => {
 test('ARRIVED plus none is valid when server suppresses stale-assignment authority', () => {
   const value = parseMerchantCourierPickupStatus({ ...base, presentation_action: 'none' });
   assert.equal(value.state, 'arrived_at_merchant');
+  assert.equal(value.arrivedAt, base.arrived_at);
   assert.equal(value.presentationAction, 'none');
+});
+
+test('ARRIVED requires its canonical arrival timestamp for every presentation action', () => {
+  assert.equal(parseMerchantCourierPickupStatus(base).presentationAction, 'acknowledge_arrival');
+  for (const presentation_action of ['acknowledge_arrival', 'none']) {
+    assert.throws(
+      () => parseMerchantCourierPickupStatus({ ...base, arrived_at: null, presentation_action }),
+      MerchantCourierPickupContractError,
+    );
+  }
 });
 
 test('acknowledge arrival fails closed outside ARRIVED', () => {
