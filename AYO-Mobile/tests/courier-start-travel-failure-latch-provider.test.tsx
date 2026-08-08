@@ -81,6 +81,7 @@ test('unexpected START failure survives remount and failed Refresh until a succe
   await waitFor(() => expect(pickupReads).toBe(4));
   await screen.findByLabelText(courierHandoffCopy.en.startTravel);
   expect(identity.createStartTravelCommandService).toHaveBeenCalledTimes(1);
+  expect(screen.queryByText(courierHandoffCopy.en.genericCommandFailure)).toBeNull();
   expect(JSON.stringify(mounted.toJSON())).not.toContain('unexpected command failure');
 
   await act(async () => { fireEvent.press(screen.getByLabelText(courierHandoffCopy.en.startTravel)); });
@@ -90,6 +91,7 @@ test('unexpected START failure survives remount and failed Refresh until a succe
   fireEvent.press(screen.getByLabelText(courierHandoffCopy.en.refresh));
   await waitFor(() => expect(pickupReads).toBe(5));
   await waitFor(() => expect(screen.getByText(courierHandoffCopy.en.travelling)).toBeTruthy());
+  expect(screen.queryByText(courierHandoffCopy.en.genericCommandFailure)).toBeNull();
   expect(screen.queryByLabelText(courierHandoffCopy.en.startTravel)).toBeNull();
   expect(screen.queryByLabelText(courierHandoffCopy.en.retryStartTravel)).toBeNull();
   expect(screen.queryByLabelText(courierHandoffCopy.en.checkStatus)).toBeNull();

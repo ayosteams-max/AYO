@@ -43,7 +43,7 @@ function command({ actionable = true, start = async () => ({ outcome: 'applied' 
 }
 
 async function show(value: StartTravelPresentationCommand, options: Partial<React.ComponentProps<typeof CourierStartTravelAction>> = {}) {
-  return render(<CourierStartTravelAction beginCommandInteraction={() => () => undefined} command={value} copy={courierHandoffCopy.en} isUnexpectedStartFailureLatched={() => false} operationalReady refreshing={false} snapshot={snapshot} viewStatus="fresh" {...options} />);
+  return render(<CourierStartTravelAction beginCommandInteraction={() => () => undefined} command={value} copy={courierHandoffCopy.en} explicitRecoveryGeneration={0} isUnexpectedStartFailureLatched={() => false} operationalReady refreshing={false} snapshot={snapshot} viewStatus="fresh" {...options} />);
 }
 
 test('START is visible only for fresh server action evidence plus bounded actionability', async () => {
@@ -162,6 +162,24 @@ test('provider-latched unexpected failure does not masquerade as remount reconci
   expect(screen.queryByLabelText(courierHandoffCopy.en.checkStatus)).toBeNull();
   expect(value.startTravel).not.toHaveBeenCalled();
   expect(value.reconcileStartTravel).not.toHaveBeenCalled();
+});
+
+test('successful explicit recovery clears only stale unexpected START failure copy', async () => {
+  const startFailure = command({ start: async () => { throw new Error('unexpected start failure'); } });
+  const mounted = await show(startFailure, { isUnexpectedStartFailureLatched: () => true });
+  await act(async () => { fireEvent.press(screen.getByLabelText(courierHandoffCopy.en.startTravel)); });
+  expect(screen.getByText(courierHandoffCopy.en.genericCommandFailure)).toBeTruthy();
+  await mounted.rerender(<CourierStartTravelAction beginCommandInteraction={() => () => undefined} command={startFailure} copy={courierHandoffCopy.en} explicitRecoveryGeneration={0} isUnexpectedStartFailureLatched={() => true} operationalReady refreshing={false} snapshot={snapshot} viewStatus="stale" />);
+  expect(screen.getByText(courierHandoffCopy.en.genericCommandFailure)).toBeTruthy();
+  await mounted.rerender(<CourierStartTravelAction beginCommandInteraction={() => () => undefined} command={startFailure} copy={courierHandoffCopy.en} explicitRecoveryGeneration={1} isUnexpectedStartFailureLatched={() => false} operationalReady refreshing={false} snapshot={snapshot} viewStatus="fresh" />);
+  expect(screen.queryByText(courierHandoffCopy.en.genericCommandFailure)).toBeNull();
+
+  const reconcileFailure = command({ actionable: false, reconcile: async () => { throw new Error('unexpected reconciliation failure'); } });
+  await mounted.rerender(<CourierStartTravelAction beginCommandInteraction={() => () => undefined} command={reconcileFailure} copy={courierHandoffCopy.en} explicitRecoveryGeneration={1} isUnexpectedStartFailureLatched={() => false} operationalReady refreshing={false} snapshot={snapshot} viewStatus="fresh" />);
+  await act(async () => { fireEvent.press(screen.getByLabelText(courierHandoffCopy.en.checkStatus)); });
+  expect(screen.getByText(courierHandoffCopy.en.genericCommandFailure)).toBeTruthy();
+  await mounted.rerender(<CourierStartTravelAction beginCommandInteraction={() => () => undefined} command={reconcileFailure} copy={courierHandoffCopy.en} explicitRecoveryGeneration={2} isUnexpectedStartFailureLatched={() => false} operationalReady refreshing={false} snapshot={snapshot} viewStatus="fresh" />);
+  expect(screen.getByText(courierHandoffCopy.en.genericCommandFailure)).toBeTruthy();
 });
 
 test('English and Amharic command keys are aligned and no technical reason is user copy', () => {

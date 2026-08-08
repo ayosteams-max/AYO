@@ -30,6 +30,7 @@ export function CourierHandoffStatus({ pickupId, commandEvidence, startTravelCom
   const [snapshot, setSnapshot] = useState<CourierHandoffSnapshot>();
   const [refreshing, setRefreshing] = useState(false);
   const [commandPending, setCommandPending] = useState(false);
+  const [explicitRecoveryGeneration, setExplicitRecoveryGeneration] = useState(0);
   const generation = useRef(0);
   const request = useRef<Promise<void> | undefined>(undefined);
   const controller = useRef<AbortController | undefined>(undefined);
@@ -46,6 +47,7 @@ export function CourierHandoffStatus({ pickupId, commandEvidence, startTravelCom
     const operation = service.load(pickupId, abort.signal).then((next) => {
       if (current !== generation.current || abort.signal.aborted) return;
       commandEvidence.publishFresh(pickupId, next, explicitRecovery);
+      if (explicitRecovery) setExplicitRecoveryGeneration((value) => value + 1);
       snapshotRef.current = next; setSnapshot(next); setViewStatus('fresh');
     }).catch((error: unknown) => {
       if (current !== generation.current || abort.signal.aborted) return;
@@ -104,17 +106,18 @@ export function CourierHandoffStatus({ pickupId, commandEvidence, startTravelCom
     </View> : null}
     {stale ? <Text accessibilityLiveRegion="assertive" style={styles.warning}>{copy.stale}</Text> : null}
     {errorMessage ? <Text accessibilityLiveRegion="assertive" style={styles.warning}>{errorMessage}</Text> : null}
-    <CourierStartTravelAction beginCommandInteraction={beginCommandInteraction} isUnexpectedStartFailureLatched={commandEvidence.isUnexpectedStartFailureLatched} key={pickupId} command={startTravelCommand} copy={copy} operationalReady={operational.status === 'ready'} refreshing={refreshing || commandPending} snapshot={snapshot} viewStatus={viewStatus} />
+    <CourierStartTravelAction beginCommandInteraction={beginCommandInteraction} explicitRecoveryGeneration={explicitRecoveryGeneration} isUnexpectedStartFailureLatched={commandEvidence.isUnexpectedStartFailureLatched} key={pickupId} command={startTravelCommand} copy={copy} operationalReady={operational.status === 'ready'} refreshing={refreshing || commandPending} snapshot={snapshot} viewStatus={viewStatus} />
     <Pressable accessibilityLabel={copy.refresh} accessibilityRole="button" accessibilityState={{ disabled: refreshing || commandPending }} disabled={refreshing || commandPending} onPress={() => void refresh()} style={styles.refreshButton}><Text style={styles.secondaryText}>{refreshing ? copy.refreshing : copy.refresh}</Text></Pressable>
     <Pressable accessibilityLabel={copy.returnAreas} accessibilityRole="button" onPress={operational.showChooser} style={styles.secondary}><Text style={styles.secondaryText}>{copy.returnAreas}</Text></Pressable>
     <Link href="/auth" asChild><Pressable accessibilityLabel={copy.account} accessibilityRole="button" style={styles.secondary}><Text style={styles.secondaryText}>{copy.account}</Text></Pressable></Link>
   </ScrollView></SafeAreaView>;
 }
 
-export function CourierStartTravelAction({ beginCommandInteraction, command, copy, isUnexpectedStartFailureLatched, operationalReady, refreshing, snapshot, viewStatus }: {
+export function CourierStartTravelAction({ beginCommandInteraction, command, copy, explicitRecoveryGeneration, isUnexpectedStartFailureLatched, operationalReady, refreshing, snapshot, viewStatus }: {
   beginCommandInteraction: () => (() => void) | undefined;
   command: StartTravelPresentationCommand;
   copy: CourierHandoffCopy;
+  explicitRecoveryGeneration: number;
   isUnexpectedStartFailureLatched: () => boolean;
   operationalReady: boolean;
   refreshing: boolean;
@@ -123,8 +126,9 @@ export function CourierStartTravelAction({ beginCommandInteraction, command, cop
 }) {
   const [pending, setPending] = useState<CommandPending>();
   const [result, setResult] = useState<StartTravelResult>();
-  const [localFailure, setLocalFailure] = useState(false);
+  const [localFailure, setLocalFailure] = useState<CommandPending>();
   const busy = useRef(false);
+  const unexpectedStartFailureGeneration = useRef(0);
   const freshActionEvidence = operationalReady && viewStatus === 'fresh' && !refreshing && snapshot?.presentationAction === 'start_travel';
   const actionable = freshActionEvidence && !pending && command.canStartTravel();
   const ambiguous = result?.outcome === 'outcome_unknown';
@@ -142,18 +146,20 @@ export function CourierStartTravelAction({ beginCommandInteraction, command, cop
     if (busy.current) return;
     const endCommandInteraction = beginCommandInteraction();
     if (!endCommandInteraction) return;
-    busy.current = true; setPending(kind); setLocalFailure(false);
+    busy.current = true; setPending(kind); setLocalFailure(undefined);
     try {
       const next = kind === 'start' ? await command.startTravel() : await command.reconcileStartTravel();
       setResult(next);
     } catch {
-      setLocalFailure(true);
+      if (kind === 'start') unexpectedStartFailureGeneration.current = explicitRecoveryGeneration;
+      setLocalFailure(kind);
     } finally {
       busy.current = false; setPending(undefined); endCommandInteraction();
     }
-  }, [beginCommandInteraction, command]);
+  }, [beginCommandInteraction, command, explicitRecoveryGeneration]);
 
-  const message = localFailure || malformed ? copy.genericCommandFailure
+  const unexpectedStartFailureVisible = localFailure === 'start' && unexpectedStartFailureGeneration.current === explicitRecoveryGeneration;
+  const message = unexpectedStartFailureVisible || localFailure === 'reconcile' || malformed ? copy.genericCommandFailure
     : unavailable ? copy.currentWorkChanged
     : rejected ? copy.refreshRequired
     : retryReady && !showRetry ? copy.currentWorkChanged
