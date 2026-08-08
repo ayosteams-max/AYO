@@ -48,7 +48,17 @@ class CourierPickupCourierCommandResult(BaseModel):
 
 class CourierPickupPresentationAction(StrEnum):
     START_TRAVEL = "start_travel"
+    MARK_ARRIVED = "mark_arrived"
     NONE = "none"
+
+
+PRESENTATION_ACTION_BY_STATE = {
+    CourierPickupState.ASSIGNED: CourierPickupPresentationAction.START_TRAVEL,
+    CourierPickupState.TRAVELLING: CourierPickupPresentationAction.MARK_ARRIVED,
+    CourierPickupState.ARRIVED: CourierPickupPresentationAction.NONE,
+    CourierPickupState.WAITING: CourierPickupPresentationAction.NONE,
+    CourierPickupState.ENDED_BEFORE_CUSTODY: CourierPickupPresentationAction.NONE,
+}
 
 
 class CourierPickupCourierStatus(BaseModel):
@@ -121,11 +131,7 @@ def _courier_status(view: CourierPickupView) -> CourierPickupCourierStatus:
         waiting_duration_seconds=pickup.waiting_duration_seconds,
         terminal_reason=pickup.terminal_reason,
         updated_at=pickup.updated_at,
-        presentation_action=(
-            CourierPickupPresentationAction.START_TRAVEL
-            if pickup.state is CourierPickupState.ASSIGNED
-            else CourierPickupPresentationAction.NONE
-        ),
+        presentation_action=PRESENTATION_ACTION_BY_STATE[pickup.state],
     )
 
 

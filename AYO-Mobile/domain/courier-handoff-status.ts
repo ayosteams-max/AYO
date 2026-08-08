@@ -1,5 +1,5 @@
 export type CourierPickupState = 'courier_assigned' | 'travelling_to_merchant' | 'arrived_at_merchant' | 'waiting_for_pickup' | 'pickup_attempt_ended_before_custody';
-export type CourierPickupPresentationAction = 'start_travel' | 'none';
+export type CourierPickupPresentationAction = 'start_travel' | 'mark_arrived' | 'none';
 export type CustodyState = 'waiting_for_pickup' | 'order_sealed' | 'pickup_verified' | 'merchant_released' | 'courier_custody_accepted';
 export type HandoffStatusCategory = 'pickup_current' | 'travelling' | 'at_merchant' | 'waiting_for_merchant' | 'ready_for_handoff' | 'handoff_in_progress' | 'pickup_confirmed' | 'pickup_ended';
 
@@ -33,8 +33,12 @@ export function parseCourierPickup(value: unknown): CourierPickupSnapshot {
   if (item.waiting_duration_seconds !== null && (!Number.isSafeInteger(item.waiting_duration_seconds) || (item.waiting_duration_seconds as number) < 0)) throw new CourierHandoffContractError();
   if (item.terminal_reason !== null && typeof item.terminal_reason !== 'string') throw new CourierHandoffContractError();
   const state = item.state as CourierPickupState;
-  if (item.presentation_action !== 'start_travel' && item.presentation_action !== 'none') throw new CourierHandoffContractError();
-  if ((state === 'courier_assigned') !== (item.presentation_action === 'start_travel')) throw new CourierHandoffContractError();
+  const expectedPresentationAction: CourierPickupPresentationAction = state === 'courier_assigned'
+    ? 'start_travel'
+    : state === 'travelling_to_merchant'
+      ? 'mark_arrived'
+      : 'none';
+  if (item.presentation_action !== expectedPresentationAction) throw new CourierHandoffContractError();
   if (
     (state === 'courier_assigned' && (travellingAt || arrivedAt || acknowledgedAt)) ||
     (state === 'travelling_to_merchant' && (!travellingAt || arrivedAt || acknowledgedAt)) ||
@@ -42,7 +46,7 @@ export function parseCourierPickup(value: unknown): CourierPickupSnapshot {
     (state === 'waiting_for_pickup' && (!travellingAt || !arrivedAt || !acknowledgedAt)) ||
     (state === 'pickup_attempt_ended_before_custody' && item.terminal_reason === null)
   ) throw new CourierHandoffContractError();
-  return Object.freeze({ pickupId: identifier(item.pickup_id), state, version: version(item.version), updatedAt, presentationAction: item.presentation_action });
+  return Object.freeze({ pickupId: identifier(item.pickup_id), state, version: version(item.version), updatedAt, presentationAction: expectedPresentationAction });
 }
 
 const custodyStates = new Set<CustodyState>(['waiting_for_pickup', 'order_sealed', 'pickup_verified', 'merchant_released', 'courier_custody_accepted']);

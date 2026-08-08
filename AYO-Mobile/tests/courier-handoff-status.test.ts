@@ -7,7 +7,7 @@ import { CourierHandoffStatusService } from '../services/courier-handoff-status.
 
 const pickupId = '11111111-1111-4111-8111-111111111111';
 const pickup = (state = 'waiting_for_pickup') => ({
-  pickup_id: pickupId, state, version: 4, assigned_at: '2026-08-07T01:00:00Z', travelling_at: '2026-08-07T01:05:00Z', arrived_at: '2026-08-07T01:15:00Z', merchant_acknowledged_at: state === 'waiting_for_pickup' ? '2026-08-07T01:16:00Z' : null, waiting_duration_seconds: state === 'waiting_for_pickup' ? 60 : null, terminal_reason: null, updated_at: '2026-08-07T01:16:00Z', presentation_action: state === 'courier_assigned' ? 'start_travel' : 'none',
+  pickup_id: pickupId, state, version: 4, assigned_at: '2026-08-07T01:00:00Z', travelling_at: '2026-08-07T01:05:00Z', arrived_at: '2026-08-07T01:15:00Z', merchant_acknowledged_at: state === 'waiting_for_pickup' ? '2026-08-07T01:16:00Z' : null, waiting_duration_seconds: state === 'waiting_for_pickup' ? 60 : null, terminal_reason: null, updated_at: '2026-08-07T01:16:00Z', presentation_action: state === 'courier_assigned' ? 'start_travel' : state === 'travelling_to_merchant' ? 'mark_arrived' : 'none',
 });
 const custody = (state = 'waiting_for_pickup') => ({
   state, version: 1,
@@ -18,12 +18,17 @@ const custody = (state = 'waiting_for_pickup') => ({
 test('strictly parses exact public pickup and Custody responses', () => {
   assert.equal(parseCourierPickup(pickup()).state, 'waiting_for_pickup');
   assert.equal(parseCourierPickup({ ...pickup('courier_assigned'), travelling_at: null, arrived_at: null, updated_at: '2026-08-07T01:00:00Z' }).presentationAction, 'start_travel');
+  assert.equal(parseCourierPickup({ ...pickup('travelling_to_merchant'), arrived_at: null }).presentationAction, 'mark_arrived');
   assert.equal(parseCourierCustody(custody('order_sealed')).requiredAction, 'verify_pickup');
   assert.throws(() => parseCourierPickup({ ...pickup(), courier_id: pickupId }), CourierHandoffContractError);
   assert.throws(() => parseCourierCustody({ ...custody(), state: 'invented' }), CourierHandoffContractError);
   assert.throws(() => parseCourierPickup({ ...pickup(), pickup_id: 'not-an-id' }), CourierHandoffContractError);
   assert.throws(() => parseCourierPickup({ ...pickup(), presentation_action: 'invented' }), CourierHandoffContractError);
   assert.throws(() => parseCourierPickup({ ...pickup(), presentation_action: 'start_travel' }), CourierHandoffContractError);
+  assert.throws(() => parseCourierPickup({ ...pickup('courier_assigned'), travelling_at: null, arrived_at: null, presentation_action: 'mark_arrived' }), CourierHandoffContractError);
+  assert.throws(() => parseCourierPickup({ ...pickup('travelling_to_merchant'), arrived_at: null, presentation_action: 'start_travel' }), CourierHandoffContractError);
+  assert.throws(() => parseCourierPickup({ ...pickup('arrived_at_merchant'), merchant_acknowledged_at: null, presentation_action: 'mark_arrived' }), CourierHandoffContractError);
+  assert.throws(() => parseCourierPickup({ ...pickup(), presentation_action: 'mark_arrived' }), CourierHandoffContractError);
   const { presentation_action: _omitted, ...missingAction } = pickup();
   assert.throws(() => parseCourierPickup(missingAction), CourierHandoffContractError);
   assert.equal(parseCourierCustodyRead({ availability: 'not_started' }), undefined);
@@ -34,6 +39,9 @@ test('projects only truthful lifecycle combinations', () => {
   const current = projectCourierHandoff(parseCourierPickup({ ...pickup('courier_assigned'), travelling_at: null, arrived_at: null, updated_at: '2026-08-07T01:00:00Z' }));
   assert.equal(current.status, 'pickup_current');
   assert.equal(current.presentationAction, 'start_travel');
+  const travelling = projectCourierHandoff(parseCourierPickup({ ...pickup('travelling_to_merchant'), arrived_at: null }));
+  assert.equal(travelling.status, 'travelling');
+  assert.equal(travelling.presentationAction, 'mark_arrived');
   assert.equal(projectCourierHandoff(parseCourierPickup(pickup()), parseCourierCustody(custody())).status, 'waiting_for_merchant');
   assert.equal(projectCourierHandoff(parseCourierPickup(pickup()), parseCourierCustody(custody('order_sealed'))).status, 'ready_for_handoff');
   assert.equal(projectCourierHandoff(parseCourierPickup(pickup()), parseCourierCustody(custody('courier_custody_accepted'))).status, 'pickup_confirmed');
