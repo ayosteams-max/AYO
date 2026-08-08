@@ -33,12 +33,12 @@ export class CourierMarkArrivedController {
   submit(handle: MarkArrivedAttemptHandle, signal?: AbortSignal): Promise<MarkArrivedControllerResult> {
     const operation = this.operation;
     if (!operation || operation.handle !== handle) return Promise.resolve(Object.freeze({ outcome: 'invalidated', reason: 'non_current_operation' }));
+    if (operation.inFlight) return operation.inFlight;
     if (!this.scope.resolveForOperation(handle)) {
       const invalid = Object.freeze({ outcome: 'invalidated', reason: 'invalid_handle' } as const);
-      if (!operation.inFlight) operation.settled = invalid;
+      operation.settled = invalid;
       return Promise.resolve(invalid);
     }
-    if (operation.inFlight) return operation.inFlight;
     if (operation.settled?.outcome === 'outcome_unknown') return Promise.resolve(operation.settled);
     if (operation.settled && operation.settled.outcome !== 'retry_same_attempt') return Promise.resolve(operation.settled);
     if (!this.scope.resolveForSubmit(handle)) return Promise.resolve(operation.settled = Object.freeze({ outcome: 'invalidated', reason: 'scope_changed' }));
@@ -48,12 +48,12 @@ export class CourierMarkArrivedController {
   reconcile(handle: MarkArrivedAttemptHandle, signal?: AbortSignal): Promise<MarkArrivedControllerResult> {
     const operation = this.operation;
     if (!operation || operation.handle !== handle) return Promise.resolve(Object.freeze({ outcome: 'invalidated', reason: 'invalid_handle' }));
+    if (operation.inFlight) return operation.inFlight;
     if (!this.scope.resolveForOperation(handle)) {
       const invalid = Object.freeze({ outcome: 'invalidated', reason: 'invalid_handle' } as const);
-      if (!operation.inFlight) operation.settled = invalid;
+      operation.settled = invalid;
       return Promise.resolve(invalid);
     }
-    if (operation.inFlight) return operation.inFlight;
     if (operation.settled?.outcome !== 'outcome_unknown') return Promise.resolve(operation.settled ?? Object.freeze({ outcome: 'rejected', reason: 'reconciliation_not_available' }));
     return this.flight(operation, this.executeReconcile(operation, signal));
   }

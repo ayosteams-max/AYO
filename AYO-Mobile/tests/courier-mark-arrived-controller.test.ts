@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { createMarkArrivedAttempt, MarkArrivedOutcomeUnknownError, type MarkArrivedAttempt } from '../domain/courier-mark-arrived-command.ts';
+import { createMarkArrivedAttempt, MarkArrivedAttemptInvalidError, MarkArrivedOutcomeUnknownError, type MarkArrivedAttempt } from '../domain/courier-mark-arrived-command.ts';
 import type { CourierHandoffSnapshot } from '../domain/courier-handoff-status.ts';
 import { CourierMarkArrivedCommandScope } from '../services/courier-mark-arrived-command-scope.ts';
 import { CourierMarkArrivedCommandService } from '../services/courier-mark-arrived-command.ts';
@@ -90,6 +90,42 @@ test('concurrent submission and reconciliation are each single-flight and preser
   assert.deepEqual(await value.controller.submit(handle), { outcome: 'applied' });
   assert.equal(value.submissions(), 2); assert.equal(value.submitted()?.idempotencyKey, key);
   assert.equal(value.scope.resolveForOperation(handle)?.idempotencyKey, key); assert.equal(value.creations(), 1);
+});
+
+test('same-handle submit callers share the exact flight across mid-flight authority loss', async () => {
+  const gate = deferred<unknown>(); const value = fixture(); value.onSubmit(async () => gate.promise);
+  const handle = value.controller.createAttempt(); assert.ok(handle); const attempt = value.scope.resolveForSubmit(handle); assert.ok(attempt);
+  const first = value.controller.submit(handle); await Promise.resolve(); assert.equal(value.submissions(), 1);
+  value.revoke(); const second = value.controller.submit(handle);
+  assert.equal(second, first); assert.equal(value.submissions(), 1); assert.equal(value.creations(), 1);
+  gate.resolve(Promise.reject(new MarkArrivedAttemptInvalidError()));
+  const expected = { outcome: 'invalidated', reason: 'scope_changed' };
+  assert.deepEqual(await first, expected); assert.deepEqual(await second, expected);
+  assert.equal(value.submissions(), 1); assert.equal(value.creations(), 1); assert.equal(value.submitted()?.idempotencyKey, attempt.idempotencyKey);
+});
+
+test('same-handle reconcile callers share the exact flight across mid-flight authority loss', async () => {
+  const value = fixture(); value.onSubmit(async () => { throw new MarkArrivedOutcomeUnknownError(); });
+  const handle = value.controller.createAttempt(); assert.ok(handle); const attempt = value.scope.resolveForSubmit(handle); assert.ok(attempt);
+  await value.controller.submit(handle);
+  const gate = deferred<any>(); value.onReconcile(async () => gate.promise);
+  const first = value.controller.reconcile(handle); await Promise.resolve(); assert.equal(value.reconciliations(), 1);
+  value.revoke(); const second = value.controller.reconcile(handle);
+  assert.equal(second, first); assert.equal(value.reconciliations(), 1); assert.equal(value.creations(), 1);
+  gate.resolve({ outcome: 'invalidated', reason: 'authority_lost' });
+  const expected = { outcome: 'invalidated', reason: 'authority_lost' };
+  assert.deepEqual(await first, expected); assert.deepEqual(await second, expected);
+  assert.equal(value.reconciliations(), 1); assert.equal(value.creations(), 1); assert.equal(attempt.idempotencyKey, key);
+});
+
+test('different handle never joins the active controller-owned flight', async () => {
+  const gate = deferred<unknown>(); const value = fixture(); value.onSubmit(async () => gate.promise);
+  const handle = value.controller.createAttempt(); assert.ok(handle); const active = value.controller.submit(handle); await Promise.resolve();
+  const unrelated = Object.freeze({ isCurrent: () => true });
+  const rejected = value.controller.submit(unrelated);
+  assert.notEqual(rejected, active); assert.deepEqual(await rejected, { outcome: 'invalidated', reason: 'non_current_operation' });
+  assert.equal(value.submissions(), 1); assert.equal(value.creations(), 1);
+  gate.resolve(Promise.reject(new MarkArrivedOutcomeUnknownError())); await active;
 });
 
 test('identity, session, generation, context, Pickup, continuity, release and retirement revoke operation custody', () => {
