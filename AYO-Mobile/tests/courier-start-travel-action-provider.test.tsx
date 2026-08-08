@@ -1,14 +1,28 @@
-import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
-import { CourierStartTravelAction } from '@/components/courier-handoff-status';
+import { CourierHandoffStatus, CourierStartTravelAction } from '@/components/courier-handoff-status';
 import type { StartTravelPresentationCommand } from '@/contexts/courier-start-travel-command-scope';
+import { LanguageProvider } from '@/contexts/language';
 import type { CourierHandoffSnapshot } from '@/domain/courier-handoff-status';
 import { courierHandoffCopy } from '@/localization/courier-handoff-status';
+
+const mockUseAuthenticatedRead = jest.fn();
+const mockUseOperationalContext = jest.fn();
+jest.mock('@/contexts/identity-session', () => ({
+  ...jest.requireActual('@/contexts/identity-session'),
+  useAuthenticatedRead: (...args: unknown[]) => mockUseAuthenticatedRead(...args),
+}));
+jest.mock('@/contexts/operational-context', () => ({
+  ...jest.requireActual('@/contexts/operational-context'),
+  useOperationalContext: (...args: unknown[]) => mockUseOperationalContext(...args),
+}));
 
 const snapshot = Object.freeze({
   status: 'pickup_current', pickupVersion: 4, updatedAt: '2026-08-08T01:00:00Z', presentationAction: 'start_travel',
 }) satisfies CourierHandoffSnapshot;
 const noAction = Object.freeze({ ...snapshot, status: 'travelling' as const, presentationAction: 'none' as const });
+const pickupId = '33333333-3333-4333-8333-333333333333';
+const pickupResponse = Object.freeze({ pickup_id: pickupId, state: 'courier_assigned', version: 4, assigned_at: '2026-08-08T01:00:00Z', travelling_at: null, arrived_at: null, merchant_acknowledged_at: null, waiting_duration_seconds: null, terminal_reason: null, updated_at: '2026-08-08T01:00:00Z', presentation_action: 'start_travel' });
 
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
@@ -29,7 +43,7 @@ function command({ actionable = true, start = async () => ({ outcome: 'applied' 
 }
 
 async function show(value: StartTravelPresentationCommand, options: Partial<React.ComponentProps<typeof CourierStartTravelAction>> = {}) {
-  return render(<CourierStartTravelAction command={value} copy={courierHandoffCopy.en} operationalReady refreshing={false} snapshot={snapshot} viewStatus="fresh" {...options} />);
+  return render(<CourierStartTravelAction beginCommandInteraction={() => () => undefined} command={value} copy={courierHandoffCopy.en} operationalReady refreshing={false} snapshot={snapshot} viewStatus="fresh" {...options} />);
 }
 
 test('START is visible only for fresh server action evidence plus bounded actionability', async () => {
@@ -145,5 +159,94 @@ test('English and Amharic command keys are aligned and no technical reason is us
   const rendered = Object.values(courierHandoffCopy).flatMap(Object.values).join(' ');
   for (const reason of ['outcome_unknown', 'retry_same_attempt', 'scope_changed', 'authority_lost', 'state_changed', 'refresh_required', 'malformed_response', 'reconciliation_not_available']) {
     expect(rendered).not.toContain(reason);
+  }
+});
+
+test('reconciliation enters the same command boundary before dispatch and remains single-flight', async () => {
+  const reconcileGate = deferred<{ outcome: 'outcome_unknown' }>();
+  const lateRead = deferred<void>();
+  const publishFresh = jest.fn();
+  let readGeneration = 0;
+  const oldReadGeneration = readGeneration;
+  void lateRead.promise.then(() => {
+    if (oldReadGeneration === readGeneration) publishFresh();
+  });
+  let actionable = true;
+  const commandValue = Object.freeze({
+    canStartTravel: jest.fn(() => actionable),
+    startTravel: jest.fn(async () => { actionable = false; return { outcome: 'outcome_unknown' as const }; }),
+    reconcileStartTravel: jest.fn(() => reconcileGate.promise),
+  }) satisfies StartTravelPresentationCommand;
+  const endBoundary = jest.fn();
+  const beginBoundary = jest.fn(() => {
+    readGeneration += 1;
+    return endBoundary;
+  });
+  const mounted = await show(commandValue, { beginCommandInteraction: beginBoundary });
+  await act(async () => { fireEvent.press(screen.getByLabelText(courierHandoffCopy.en.startTravel)); });
+  expect(beginBoundary).toHaveBeenCalledTimes(1);
+  expect(endBoundary).toHaveBeenCalledTimes(1);
+
+  await act(async () => { fireEvent.press(screen.getByLabelText(courierHandoffCopy.en.checkStatus)); });
+  expect(beginBoundary).toHaveBeenCalledTimes(2);
+  expect(commandValue.reconcileStartTravel).toHaveBeenCalledTimes(1);
+  expect(beginBoundary.mock.invocationCallOrder[1]).toBeLessThan(commandValue.reconcileStartTravel.mock.invocationCallOrder[0]);
+  fireEvent.press(screen.getByLabelText(courierHandoffCopy.en.checkingStatus));
+  expect(commandValue.reconcileStartTravel).toHaveBeenCalledTimes(1);
+  await act(async () => { lateRead.resolve(); });
+  expect(publishFresh).not.toHaveBeenCalled();
+  await act(async () => { reconcileGate.resolve({ outcome: 'outcome_unknown' }); });
+  expect(endBoundary).toHaveBeenCalledTimes(2);
+  await mounted.unmount();
+});
+
+test('START boundary blocks Refresh and invalidates an older Handoff read before it can republish evidence', async () => {
+  const lateRead = deferred<unknown>();
+  const startGate = deferred<{ outcome: 'applied' }>();
+  let pickupReads = 0;
+  let actionable = true;
+  const read = jest.fn(async (path: string) => {
+    if (path.endsWith('/custody')) return { availability: 'not_started' };
+    pickupReads += 1;
+    return pickupReads === 1 ? pickupResponse : lateRead.promise;
+  });
+  const publishFresh = jest.fn();
+  const commandValue = Object.freeze({
+    canStartTravel: jest.fn(() => actionable),
+    startTravel: jest.fn(() => { actionable = false; return startGate.promise; }),
+    reconcileStartTravel: jest.fn(async () => ({ outcome: 'outcome_unknown' as const })),
+  }) satisfies StartTravelPresentationCommand;
+  mockUseAuthenticatedRead.mockReturnValue(read);
+  mockUseOperationalContext.mockReturnValue({
+    status: 'ready', areas: [], selected: undefined, chooserVisible: false, refreshing: false,
+    refresh: async () => undefined, selectArea: () => undefined, showChooser: () => undefined, invalidateCourier: () => undefined,
+  });
+  let mounted: Awaited<ReturnType<typeof render>> | undefined;
+  try {
+    mounted = await render(<LanguageProvider><CourierHandoffStatus pickupId={pickupId} commandEvidence={{ publishFresh, clearFresh: jest.fn() }} startTravelCommand={commandValue} /></LanguageProvider>);
+    await screen.findByLabelText(courierHandoffCopy.en.startTravel);
+    const oldStartControl = screen.getByLabelText(courierHandoffCopy.en.startTravel);
+    expect(publishFresh).toHaveBeenCalledTimes(1);
+
+    fireEvent.press(screen.getByLabelText(courierHandoffCopy.en.refresh));
+    expect(pickupReads).toBe(2);
+    await act(async () => { fireEvent.press(oldStartControl); });
+    expect(commandValue.startTravel).toHaveBeenCalledTimes(1);
+    expect(screen.getByLabelText(courierHandoffCopy.en.refresh).props.accessibilityState).toMatchObject({ disabled: true });
+    fireEvent.press(screen.getByLabelText(courierHandoffCopy.en.refresh));
+    expect(pickupReads).toBe(2);
+
+    await act(async () => { startGate.resolve({ outcome: 'applied' }); });
+    await act(async () => { lateRead.resolve(pickupResponse); });
+    expect(publishFresh).toHaveBeenCalledTimes(1);
+    expect(screen.queryByLabelText(courierHandoffCopy.en.startTravel)).toBeNull();
+
+    await waitFor(() => expect(screen.getByLabelText(courierHandoffCopy.en.refresh).props.accessibilityState).toMatchObject({ disabled: false }));
+    fireEvent.press(screen.getByLabelText(courierHandoffCopy.en.refresh));
+    await waitFor(() => expect(pickupReads).toBe(3));
+    await waitFor(() => expect(publishFresh).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.getByLabelText(courierHandoffCopy.en.refresh).props.accessibilityState).toMatchObject({ disabled: false }));
+  } finally {
+    await act(async () => { mounted?.unmount(); });
   }
 });

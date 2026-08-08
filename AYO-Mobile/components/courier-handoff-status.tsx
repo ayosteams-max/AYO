@@ -28,13 +28,16 @@ export function CourierHandoffStatus({ pickupId, commandEvidence, startTravelCom
   const [viewStatus, setViewStatus] = useState<ViewStatus>('loading');
   const [snapshot, setSnapshot] = useState<CourierHandoffSnapshot>();
   const [refreshing, setRefreshing] = useState(false);
+  const [commandPending, setCommandPending] = useState(false);
   const generation = useRef(0);
   const request = useRef<Promise<void> | undefined>(undefined);
   const controller = useRef<AbortController | undefined>(undefined);
   const snapshotRef = useRef<CourierHandoffSnapshot | undefined>(undefined);
+  const commandPendingRef = useRef(false);
 
   useEffect(() => { snapshotRef.current = snapshot; }, [snapshot]);
   const refresh = useCallback(() => {
+    if (commandPendingRef.current) return Promise.resolve();
     if (request.current) return request.current;
     const current = generation.current;
     const abort = new AbortController(); controller.current = abort;
@@ -61,6 +64,24 @@ export function CourierHandoffStatus({ pickupId, commandEvidence, startTravelCom
     request.current = operation; return operation;
   }, [commandEvidence, invalidateCourier, pickupId, service]);
 
+  const beginCommandInteraction = useCallback(() => {
+    if (commandPendingRef.current) return undefined;
+    commandPendingRef.current = true;
+    generation.current += 1;
+    controller.current?.abort();
+    controller.current = undefined;
+    request.current = undefined;
+    setRefreshing(false);
+    setCommandPending(true);
+    let ended = false;
+    return () => {
+      if (ended) return;
+      ended = true;
+      commandPendingRef.current = false;
+      setCommandPending(false);
+    };
+  }, []);
+
   useEffect(() => {
     generation.current += 1; controller.current?.abort(); request.current = undefined; commandEvidence.clearFresh(pickupId); snapshotRef.current = undefined; setSnapshot(undefined); setViewStatus('loading'); setRefreshing(false); void refresh();
     return () => { generation.current += 1; controller.current?.abort(); commandEvidence.clearFresh(pickupId); };
@@ -82,14 +103,15 @@ export function CourierHandoffStatus({ pickupId, commandEvidence, startTravelCom
     </View> : null}
     {stale ? <Text accessibilityLiveRegion="assertive" style={styles.warning}>{copy.stale}</Text> : null}
     {errorMessage ? <Text accessibilityLiveRegion="assertive" style={styles.warning}>{errorMessage}</Text> : null}
-    <CourierStartTravelAction key={pickupId} command={startTravelCommand} copy={copy} operationalReady={operational.status === 'ready'} refreshing={refreshing} snapshot={snapshot} viewStatus={viewStatus} />
-    <Pressable accessibilityLabel={copy.refresh} accessibilityRole="button" accessibilityState={{ disabled: refreshing }} disabled={refreshing} onPress={() => void refresh()} style={styles.refreshButton}><Text style={styles.secondaryText}>{refreshing ? copy.refreshing : copy.refresh}</Text></Pressable>
+    <CourierStartTravelAction beginCommandInteraction={beginCommandInteraction} key={pickupId} command={startTravelCommand} copy={copy} operationalReady={operational.status === 'ready'} refreshing={refreshing || commandPending} snapshot={snapshot} viewStatus={viewStatus} />
+    <Pressable accessibilityLabel={copy.refresh} accessibilityRole="button" accessibilityState={{ disabled: refreshing || commandPending }} disabled={refreshing || commandPending} onPress={() => void refresh()} style={styles.refreshButton}><Text style={styles.secondaryText}>{refreshing ? copy.refreshing : copy.refresh}</Text></Pressable>
     <Pressable accessibilityLabel={copy.returnAreas} accessibilityRole="button" onPress={operational.showChooser} style={styles.secondary}><Text style={styles.secondaryText}>{copy.returnAreas}</Text></Pressable>
     <Link href="/auth" asChild><Pressable accessibilityLabel={copy.account} accessibilityRole="button" style={styles.secondary}><Text style={styles.secondaryText}>{copy.account}</Text></Pressable></Link>
   </ScrollView></SafeAreaView>;
 }
 
-export function CourierStartTravelAction({ command, copy, operationalReady, refreshing, snapshot, viewStatus }: {
+export function CourierStartTravelAction({ beginCommandInteraction, command, copy, operationalReady, refreshing, snapshot, viewStatus }: {
+  beginCommandInteraction: () => (() => void) | undefined;
   command: StartTravelPresentationCommand;
   copy: CourierHandoffCopy;
   operationalReady: boolean;
@@ -116,6 +138,8 @@ export function CourierStartTravelAction({ command, copy, operationalReady, refr
 
   const invoke = useCallback(async (kind: CommandPending) => {
     if (busy.current) return;
+    const endCommandInteraction = beginCommandInteraction();
+    if (!endCommandInteraction) return;
     busy.current = true; setPending(kind); setLocalFailure(false);
     try {
       const next = kind === 'start' ? await command.startTravel() : await command.reconcileStartTravel();
@@ -123,9 +147,9 @@ export function CourierStartTravelAction({ command, copy, operationalReady, refr
     } catch {
       setLocalFailure(true);
     } finally {
-      busy.current = false; setPending(undefined);
+      busy.current = false; setPending(undefined); endCommandInteraction();
     }
-  }, [command]);
+  }, [beginCommandInteraction, command]);
 
   const message = localFailure || malformed ? copy.genericCommandFailure
     : unavailable ? copy.currentWorkChanged
