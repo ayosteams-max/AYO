@@ -202,7 +202,7 @@ def test_distinct_pure_mappers_emit_only_exact_caller_fields() -> None:
     ("state", "expected"),
     [
         ("courier_assigned", "start_travel"),
-        ("travelling_to_merchant", "none"),
+        ("travelling_to_merchant", "mark_arrived"),
         ("arrived_at_merchant", "none"),
         ("waiting_for_pickup", "none"),
         ("pickup_attempt_ended_before_custody", "none"),

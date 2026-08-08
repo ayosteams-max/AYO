@@ -22,7 +22,7 @@ jest.mock('@/contexts/operational-context', () => ({
 
 const pickupId = '33333333-3333-4333-8333-333333333333';
 const pickupResponse = Object.freeze({ pickup_id: pickupId, state: 'courier_assigned', version: 4, assigned_at: '2026-08-08T01:00:00Z', travelling_at: null, arrived_at: null, merchant_acknowledged_at: null, waiting_duration_seconds: null, terminal_reason: null, updated_at: '2026-08-08T01:00:00Z', presentation_action: 'start_travel' });
-const noActionResponse = Object.freeze({ ...pickupResponse, state: 'travelling_to_merchant', version: 5, travelling_at: '2026-08-08T01:01:00Z', updated_at: '2026-08-08T01:01:00Z', presentation_action: 'none' });
+const noActionResponse = Object.freeze({ ...pickupResponse, state: 'travelling_to_merchant', version: 5, travelling_at: '2026-08-08T01:01:00Z', updated_at: '2026-08-08T01:01:00Z', presentation_action: 'mark_arrived' });
 
 test('unexpected START failure survives remount and failed Refresh until a successful explicit Refresh', async () => {
   let pickupReads = 0;

@@ -406,6 +406,10 @@ def test_postgres_composed_http_exposes_exact_caller_contracts(
         headers={"Idempotency-Key": KEY},
         json={"expected_version": 1, "action": "start_travel"},
     )
+    travelling_status = courier.get(f"/api/mobile/courier-pickups/{PICKUP}")
+    assert travelling_status.status_code == 200
+    assert travelling_status.json()["state"] == "travelling_to_merchant"
+    assert travelling_status.json()["presentation_action"] == "mark_arrived"
     courier_arrive = courier.post(
         f"/api/mobile/courier-pickups/{PICKUP}/actions",
         headers={"Idempotency-Key": "postgres-arrival-contract-0001"},
@@ -423,6 +427,7 @@ def test_postgres_composed_http_exposes_exact_caller_contracts(
     _assert_public(courier_status, COURIER_STATUS_FIELDS)
     for response in (courier_start, courier_arrive):
         _assert_public(response, COURIER_FIELDS)
+    _assert_public(travelling_status, COURIER_STATUS_FIELDS)
     for response in (merchant_status, merchant_command):
         _assert_public(response, MERCHANT_FIELDS)
     replay = merchant.post(

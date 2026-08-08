@@ -21,6 +21,7 @@ const snapshot = Object.freeze({
   status: 'pickup_current', pickupVersion: 4, updatedAt: '2026-08-08T01:00:00Z', presentationAction: 'start_travel',
 }) satisfies CourierHandoffSnapshot;
 const noAction = Object.freeze({ ...snapshot, status: 'travelling' as const, presentationAction: 'none' as const });
+const markArrived = Object.freeze({ ...snapshot, status: 'travelling' as const, presentationAction: 'mark_arrived' as const });
 const pickupId = '33333333-3333-4333-8333-333333333333';
 const pickupResponse = Object.freeze({ pickup_id: pickupId, state: 'courier_assigned', version: 4, assigned_at: '2026-08-08T01:00:00Z', travelling_at: null, arrived_at: null, merchant_acknowledged_at: null, waiting_duration_seconds: null, terminal_reason: null, updated_at: '2026-08-08T01:00:00Z', presentation_action: 'start_travel' });
 
@@ -49,7 +50,7 @@ async function show(value: StartTravelPresentationCommand, options: Partial<Reac
 test('START is visible only for fresh server action evidence plus bounded actionability', async () => {
   const cases: Array<Partial<React.ComponentProps<typeof CourierStartTravelAction>>> = [
     { snapshot: undefined }, { viewStatus: 'loading' }, { viewStatus: 'stale' }, { viewStatus: 'unavailable' },
-    { viewStatus: 'malformed' }, { viewStatus: 'conflicting' }, { snapshot: noAction }, { refreshing: true }, { operationalReady: false },
+    { viewStatus: 'malformed' }, { viewStatus: 'conflicting' }, { snapshot: noAction }, { snapshot: markArrived }, { refreshing: true }, { operationalReady: false },
   ];
   for (const props of cases) {
     const mounted = await show(command(), props);
