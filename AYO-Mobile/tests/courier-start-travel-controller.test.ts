@@ -435,3 +435,84 @@ test('unexpected reconciliation bugs remain visible without fabricating domain t
   assert.equal(value.submissions(), 1);
   assert.equal(value.creations(), 1);
 });
+
+test('bounded start action creates one operation and joins rapid repeated intent', async () => {
+  const gate = deferred<typeof applied>();
+  const value = fixture({ submit: async () => gate.promise });
+  const first = value.controller.startTravel();
+  const second = value.controller.startTravel();
+  assert.equal(first, second);
+  await Promise.resolve();
+  assert.equal(value.creations(), 1);
+  assert.equal(value.submissions(), 1);
+  assert.equal(value.reconciliations(), 0);
+  gate.resolve(applied);
+  assert.deepEqual(await first, { outcome: 'applied' });
+});
+
+test('bounded reconciliation never creates an operation and rejects a never-submitted operation without GET', async () => {
+  const empty = fixture();
+  assert.deepEqual(await empty.controller.reconcileCurrentOperation(), { outcome: 'rejected', reason: 'reconciliation_not_available' });
+  assert.equal(empty.creations(), 0);
+  assert.equal(empty.reconciliations(), 0);
+
+  const created = fixture();
+  assert.ok(created.controller.createAttempt());
+  assert.deepEqual(await created.controller.reconcileCurrentOperation(), { outcome: 'rejected', reason: 'reconciliation_not_available' });
+  assert.equal(created.creations(), 1);
+  assert.equal(created.reconciliations(), 0);
+  assert.equal(created.submissions(), 0);
+});
+
+test('bounded ambiguity preserves one key across transient reconciliation and deliberate recovery', async () => {
+  let reconcileCalls = 0;
+  const value = fixture({
+    submit: async () => { throw new StartTravelOutcomeUnknownError(); },
+    reconcile: async () => {
+      if (++reconcileCalls === 1) throw new PublicApiError('temporarily_unavailable', 503);
+      return Object.freeze({ outcome: 'retry_same_attempt' as const, pickup: Object.freeze({ pickupId, state: 'courier_assigned' as const, version: 4, updatedAt: handoff.updatedAt, presentationAction: 'start_travel' as const }) });
+    },
+  });
+  assert.deepEqual(await value.controller.startTravel(), { outcome: 'outcome_unknown' });
+  const handle = value.controller.createAttempt(); assert.ok(handle);
+  const attempt = value.scope.resolveForTrustedUse(handle); assert.ok(attempt);
+  assert.deepEqual(await value.controller.startTravel(), { outcome: 'outcome_unknown' });
+  assert.equal(value.submissions(), 1);
+  assert.equal(value.creations(), 1);
+  assert.deepEqual(await value.controller.reconcileCurrentOperation(), { outcome: 'outcome_unknown' });
+  assert.deepEqual(await value.controller.startTravel(), { outcome: 'outcome_unknown' });
+  assert.equal(value.submissions(), 1);
+  assert.deepEqual(await value.controller.reconcileCurrentOperation(), { outcome: 'retry_same_attempt' });
+  assert.equal(value.reconciliations(), 2);
+  assert.equal(value.scope.resolveForTrustedUse(handle), attempt);
+  assert.equal(attempt.idempotencyKey, keys[0]);
+});
+
+test('retry permission uses the same attempt and stale scope blocks the bounded retry', async () => {
+  let calls = 0;
+  const value = fixture({ submit: async () => { calls += 1; throw new StartTravelOutcomeUnknownError(); } });
+  assert.deepEqual(await value.controller.startTravel(), { outcome: 'outcome_unknown' });
+  const handle = value.controller.createAttempt(); assert.ok(handle);
+  const attempt = value.scope.resolveForTrustedUse(handle); assert.ok(attempt);
+  assert.deepEqual(await value.controller.reconcileCurrentOperation(), { outcome: 'retry_same_attempt' });
+  value.scope.releaseProviderLifetime();
+  assert.deepEqual(await value.controller.startTravel(), { outcome: 'invalidated', reason: 'scope_changed' });
+  assert.equal(calls, 1);
+  assert.equal(value.creations(), 1);
+  assert.equal(value.scope.resolveForTrustedUse(handle), undefined);
+  assert.equal(attempt.idempotencyKey, keys[0]);
+});
+
+test('terminal action does not replay and fresh authenticated evidence permits one explicit new intent', async () => {
+  const value = fixture();
+  assert.deepEqual(await value.controller.startTravel(), { outcome: 'applied' });
+  assert.deepEqual(await value.controller.startTravel(), { outcome: 'applied' });
+  assert.equal(value.submissions(), 1);
+  assert.equal(value.creations(), 1);
+
+  value.scope.publishFresh(pickupId, Object.freeze({ ...handoff, pickupVersion: 5 }));
+  assert.deepEqual(await value.controller.startTravel(), { outcome: 'applied' });
+  assert.equal(value.submissions(), 2);
+  assert.equal(value.creations(), 2);
+  assert.equal(value.submittedAttempt()?.idempotencyKey, keys[1]);
+});

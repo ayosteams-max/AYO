@@ -64,6 +64,26 @@ export class CourierStartTravelController {
     return this.scope.currentScope() !== undefined;
   }
 
+  /** Bounded current-intent action. The handle and attempt never cross this boundary. */
+  startTravel(signal?: AbortSignal): Promise<StartTravelControllerResult> {
+    const handle = this.createAttempt();
+    if (!handle) {
+      const settled = this.operation?.settled;
+      if (settled && settled.outcome !== 'retry_same_attempt') return Promise.resolve(settled);
+      return Promise.resolve(Object.freeze({ outcome: 'invalidated', reason: 'scope_changed' }));
+    }
+    return this.submit(handle, signal);
+  }
+
+  /** Reconciles only the controller-owned operation and never creates an attempt. */
+  reconcileCurrentOperation(signal?: AbortSignal): Promise<StartTravelControllerResult> {
+    const operation = this.operation;
+    if (!operation) {
+      return Promise.resolve(Object.freeze({ outcome: 'rejected', reason: 'reconciliation_not_available' }));
+    }
+    return this.reconcile(operation.handle, signal);
+  }
+
   submit(handle: StartTravelAttemptHandle, signal?: AbortSignal): Promise<StartTravelControllerResult> {
     const attempt = this.scope.resolveForTrustedUse(handle);
     if (!attempt) return Promise.resolve(Object.freeze({ outcome: 'invalidated', reason: 'invalid_handle' }));
