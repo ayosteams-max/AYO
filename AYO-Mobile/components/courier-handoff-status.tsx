@@ -14,6 +14,7 @@ type ViewStatus = 'loading' | 'fresh' | 'stale' | 'unavailable' | 'malformed' | 
 type StartTravelEvidenceIntegration = Readonly<{
   publishFresh(pickupId: string, snapshot: CourierHandoffSnapshot, explicitRecovery: boolean): void;
   clearFresh(pickupId: string): void;
+  isUnexpectedStartFailureLatched(): boolean;
 }>;
 type StartTravelResult = Awaited<ReturnType<StartTravelPresentationCommand['startTravel']>>;
 type CommandPending = 'start' | 'reconcile';
@@ -103,17 +104,18 @@ export function CourierHandoffStatus({ pickupId, commandEvidence, startTravelCom
     </View> : null}
     {stale ? <Text accessibilityLiveRegion="assertive" style={styles.warning}>{copy.stale}</Text> : null}
     {errorMessage ? <Text accessibilityLiveRegion="assertive" style={styles.warning}>{errorMessage}</Text> : null}
-    <CourierStartTravelAction beginCommandInteraction={beginCommandInteraction} key={pickupId} command={startTravelCommand} copy={copy} operationalReady={operational.status === 'ready'} refreshing={refreshing || commandPending} snapshot={snapshot} viewStatus={viewStatus} />
+    <CourierStartTravelAction beginCommandInteraction={beginCommandInteraction} isUnexpectedStartFailureLatched={commandEvidence.isUnexpectedStartFailureLatched} key={pickupId} command={startTravelCommand} copy={copy} operationalReady={operational.status === 'ready'} refreshing={refreshing || commandPending} snapshot={snapshot} viewStatus={viewStatus} />
     <Pressable accessibilityLabel={copy.refresh} accessibilityRole="button" accessibilityState={{ disabled: refreshing || commandPending }} disabled={refreshing || commandPending} onPress={() => void refresh()} style={styles.refreshButton}><Text style={styles.secondaryText}>{refreshing ? copy.refreshing : copy.refresh}</Text></Pressable>
     <Pressable accessibilityLabel={copy.returnAreas} accessibilityRole="button" onPress={operational.showChooser} style={styles.secondary}><Text style={styles.secondaryText}>{copy.returnAreas}</Text></Pressable>
     <Link href="/auth" asChild><Pressable accessibilityLabel={copy.account} accessibilityRole="button" style={styles.secondary}><Text style={styles.secondaryText}>{copy.account}</Text></Pressable></Link>
   </ScrollView></SafeAreaView>;
 }
 
-export function CourierStartTravelAction({ beginCommandInteraction, command, copy, operationalReady, refreshing, snapshot, viewStatus }: {
+export function CourierStartTravelAction({ beginCommandInteraction, command, copy, isUnexpectedStartFailureLatched, operationalReady, refreshing, snapshot, viewStatus }: {
   beginCommandInteraction: () => (() => void) | undefined;
   command: StartTravelPresentationCommand;
   copy: CourierHandoffCopy;
+  isUnexpectedStartFailureLatched: () => boolean;
   operationalReady: boolean;
   refreshing: boolean;
   snapshot?: CourierHandoffSnapshot;
@@ -131,7 +133,7 @@ export function CourierStartTravelAction({ beginCommandInteraction, command, cop
   const unavailable = result?.outcome === 'invalidated';
   const rejected = result?.outcome === 'rejected';
   const malformed = rejected && result.reason === 'malformed_response';
-  const remountRecovery = freshActionEvidence && !pending && result === undefined && !command.canStartTravel();
+  const remountRecovery = freshActionEvidence && !pending && result === undefined && !command.canStartTravel() && !isUnexpectedStartFailureLatched();
   const showCheckStatus = !pending && (ambiguous || remountRecovery);
   const showRetry = retryReady && actionable;
   const showStart = actionable && !retryReady;

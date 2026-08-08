@@ -19,6 +19,7 @@ export type StartTravelPresentationCommand = Readonly<{
 type StartTravelEvidenceIntegration = Readonly<{
   publishFresh(pickupId: string, snapshot: CourierHandoffSnapshot, explicitRecovery: boolean): void;
   clearFresh(pickupId: string): void;
+  isUnexpectedStartFailureLatched(): boolean;
 }>;
 
 const CapabilityContext = createContext<StartTravelPresentationCommand | undefined>(undefined);
@@ -51,6 +52,7 @@ export function CourierStartTravelCommandInfrastructureProvider({ children, iden
       if (explicitRecovery) unexpectedStartFailure.current = false;
     },
     clearFresh: (pickupId) => scope.clearFresh(pickupId),
+    isUnexpectedStartFailureLatched: () => unexpectedStartFailure.current,
   }), [scope]);
   return <CapabilityContext.Provider value={capability}><EvidenceContext.Provider value={evidence}>{children}</EvidenceContext.Provider></CapabilityContext.Provider>;
 }

@@ -4,6 +4,7 @@ import { Pressable, Text } from 'react-native';
 
 import { CourierStartTravelCommandInfrastructureProvider, TrustedCourierHandoffStatus } from '@/contexts/courier-start-travel-command-scope';
 import { LanguageProvider } from '@/contexts/language';
+import { StartTravelOutcomeUnknownError } from '@/domain/courier-start-travel-command';
 import { courierHandoffCopy } from '@/localization/courier-handoff-status';
 
 const mockUseAuthenticatedRead = jest.fn();
@@ -60,10 +61,13 @@ test('unexpected START failure survives remount and failed Refresh until a succe
   expect(screen.getByText(courierHandoffCopy.en.genericCommandFailure)).toBeTruthy();
   expect(screen.queryByLabelText(courierHandoffCopy.en.startTravel)).toBeNull();
   expect(screen.queryByLabelText(courierHandoffCopy.en.retryStartTravel)).toBeNull();
+  expect(screen.queryByLabelText(courierHandoffCopy.en.checkStatus)).toBeNull();
 
   await act(() => { fireEvent.press(screen.getByTestId('remount-handoff')); });
   await waitFor(() => expect(pickupReads).toBe(2));
   expect(screen.queryByLabelText(courierHandoffCopy.en.startTravel)).toBeNull();
+  expect(screen.queryByLabelText(courierHandoffCopy.en.retryStartTravel)).toBeNull();
+  expect(screen.queryByLabelText(courierHandoffCopy.en.checkStatus)).toBeNull();
   expect(identity.createStartTravelCommandService).toHaveBeenCalledTimes(1);
 
   fireEvent.press(screen.getByLabelText(courierHandoffCopy.en.refresh));
@@ -71,6 +75,7 @@ test('unexpected START failure survives remount and failed Refresh until a succe
   await waitFor(() => expect(screen.getByLabelText(courierHandoffCopy.en.refresh).props.accessibilityState).toMatchObject({ disabled: false }));
   expect(screen.queryByLabelText(courierHandoffCopy.en.startTravel)).toBeNull();
   expect(screen.queryByLabelText(courierHandoffCopy.en.retryStartTravel)).toBeNull();
+  expect(screen.queryByLabelText(courierHandoffCopy.en.checkStatus)).toBeNull();
 
   fireEvent.press(screen.getByLabelText(courierHandoffCopy.en.refresh));
   await waitFor(() => expect(pickupReads).toBe(4));
@@ -87,5 +92,48 @@ test('unexpected START failure survives remount and failed Refresh until a succe
   await waitFor(() => expect(screen.getByText(courierHandoffCopy.en.travelling)).toBeTruthy());
   expect(screen.queryByLabelText(courierHandoffCopy.en.startTravel)).toBeNull();
   expect(screen.queryByLabelText(courierHandoffCopy.en.retryStartTravel)).toBeNull();
+  expect(screen.queryByLabelText(courierHandoffCopy.en.checkStatus)).toBeNull();
+  await mounted.unmount();
+});
+
+test('remount preserves Check Status for controller-owned outcome unknown', async () => {
+  let pickupReads = 0;
+  const read = jest.fn(async (path: string) => {
+    if (path.endsWith('/custody')) return { availability: 'not_started' };
+    pickupReads += 1;
+    return pickupResponse;
+  });
+  const identity = Object.freeze({
+    readIdentity: () => Object.freeze({ identityId: '11111111-1111-4111-8111-111111111111', sessionId: '22222222-2222-4222-8222-222222222222', identityGeneration: 1 }),
+    createStartTravelCommandService: jest.fn(async () => Object.freeze({
+      submit: async () => { throw new StartTravelOutcomeUnknownError(); },
+      reconcile: async () => Object.freeze({ outcome: 'retry_same_attempt' as const, pickup: Object.freeze({ pickupId, state: 'courier_assigned' as const, version: 4, updatedAt: '2026-08-08T01:00:00Z', presentationAction: 'start_travel' as const }) }),
+    }) as never),
+  });
+  const courier = Object.freeze({ pickupId, contextGeneration: 1, identityContinuity: Object.freeze({ isCurrent: () => true }) });
+  mockUseAuthenticatedRead.mockReturnValue(read);
+  mockUseCourierCommandContext.mockReturnValue({ readCourierContext: () => courier });
+  mockUseOperationalContext.mockReturnValue({
+    status: 'ready', areas: [], selected: undefined, chooserVisible: false, refreshing: false,
+    refresh: async () => undefined, selectArea: () => undefined, showChooser: () => undefined, invalidateCourier: () => undefined,
+  });
+
+  function Harness() {
+    const [generation, setGeneration] = useState(0);
+    return <>
+      <TrustedCourierHandoffStatus key={generation} pickupId={pickupId} />
+      <Pressable testID="remount-handoff-unknown" onPress={() => setGeneration((value) => value + 1)}><Text>Remount Unknown Handoff</Text></Pressable>
+    </>;
+  }
+
+  const mounted = await render(<CourierStartTravelCommandInfrastructureProvider identity={identity}><LanguageProvider><Harness /></LanguageProvider></CourierStartTravelCommandInfrastructureProvider>);
+  await screen.findByLabelText(courierHandoffCopy.en.startTravel);
+  await act(async () => { fireEvent.press(screen.getByLabelText(courierHandoffCopy.en.startTravel)); });
+  expect(screen.getByLabelText(courierHandoffCopy.en.checkStatus)).toBeTruthy();
+  await act(() => { fireEvent.press(screen.getByTestId('remount-handoff-unknown')); });
+  await waitFor(() => expect(pickupReads).toBe(2));
+  expect(screen.queryByLabelText(courierHandoffCopy.en.startTravel)).toBeNull();
+  expect(screen.getByLabelText(courierHandoffCopy.en.checkStatus)).toBeTruthy();
+  expect(identity.createStartTravelCommandService).toHaveBeenCalledTimes(1);
   await mounted.unmount();
 });

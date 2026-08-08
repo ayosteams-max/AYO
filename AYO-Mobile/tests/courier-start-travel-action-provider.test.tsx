@@ -43,7 +43,7 @@ function command({ actionable = true, start = async () => ({ outcome: 'applied' 
 }
 
 async function show(value: StartTravelPresentationCommand, options: Partial<React.ComponentProps<typeof CourierStartTravelAction>> = {}) {
-  return render(<CourierStartTravelAction beginCommandInteraction={() => () => undefined} command={value} copy={courierHandoffCopy.en} operationalReady refreshing={false} snapshot={snapshot} viewStatus="fresh" {...options} />);
+  return render(<CourierStartTravelAction beginCommandInteraction={() => () => undefined} command={value} copy={courierHandoffCopy.en} isUnexpectedStartFailureLatched={() => false} operationalReady refreshing={false} snapshot={snapshot} viewStatus="fresh" {...options} />);
 }
 
 test('START is visible only for fresh server action evidence plus bounded actionability', async () => {
@@ -154,6 +154,16 @@ test('remount-like missing local result offers neutral reconciliation without fa
   expect(value.startTravel).not.toHaveBeenCalled();
 });
 
+test('provider-latched unexpected failure does not masquerade as remount reconciliation', async () => {
+  const value = command({ actionable: false });
+  await show(value, { isUnexpectedStartFailureLatched: () => true });
+  expect(screen.queryByLabelText(courierHandoffCopy.en.startTravel)).toBeNull();
+  expect(screen.queryByLabelText(courierHandoffCopy.en.retryStartTravel)).toBeNull();
+  expect(screen.queryByLabelText(courierHandoffCopy.en.checkStatus)).toBeNull();
+  expect(value.startTravel).not.toHaveBeenCalled();
+  expect(value.reconcileStartTravel).not.toHaveBeenCalled();
+});
+
 test('English and Amharic command keys are aligned and no technical reason is user copy', () => {
   expect(Object.keys(courierHandoffCopy.en)).toEqual(Object.keys(courierHandoffCopy.am));
   const rendered = Object.values(courierHandoffCopy).flatMap(Object.values).join(' ');
@@ -223,7 +233,7 @@ test('START boundary blocks Refresh and invalidates an older Handoff read before
   });
   let mounted: Awaited<ReturnType<typeof render>> | undefined;
   try {
-    mounted = await render(<LanguageProvider><CourierHandoffStatus pickupId={pickupId} commandEvidence={{ publishFresh, clearFresh: jest.fn() }} startTravelCommand={commandValue} /></LanguageProvider>);
+    mounted = await render(<LanguageProvider><CourierHandoffStatus pickupId={pickupId} commandEvidence={{ publishFresh, clearFresh: jest.fn(), isUnexpectedStartFailureLatched: () => false }} startTravelCommand={commandValue} /></LanguageProvider>);
     await screen.findByLabelText(courierHandoffCopy.en.startTravel);
     const oldStartControl = screen.getByLabelText(courierHandoffCopy.en.startTravel);
     expect(publishFresh).toHaveBeenCalledTimes(1);
