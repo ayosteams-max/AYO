@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-
 import { Pressable, Text, View } from 'react-native';
 import { useLayoutEffect, useState } from 'react';
 
-import { CourierStartTravelCommandInfrastructureProvider, TrustedCourierHandoffStatus, useStartTravelAttemptCapability } from '@/contexts/courier-start-travel-command-scope';
+import { CourierStartTravelCommandInfrastructureProvider, TrustedCourierHandoffStatus, useStartTravelCommand, type StartTravelPresentationCommand } from '@/contexts/courier-start-travel-command-scope';
 import * as identitySessionContext from '@/contexts/identity-session';
 import { IdentitySessionProvider, type IdentitySessionServices, TrustedCourierStartTravelCommandProvider, useIdentityContinuity, useIdentitySession } from '@/contexts/identity-session';
 import { LanguageProvider } from '@/contexts/language';
@@ -12,7 +12,6 @@ import type { AuthenticatedSession } from '@/domain/auth-session';
 import type { AuthenticationApi } from '@/services/authentication-api';
 import { type CredentialStore, SecureSessionVault } from '@/services/secure-session';
 import { SessionManager } from '@/services/session-manager';
-import type { StartTravelAttemptHandle } from '@/services/courier-start-travel-command-scope';
 
 const identityId = '11111111-1111-4111-8111-111111111111';
 const sessionId = '22222222-2222-4222-8222-222222222222';
@@ -36,21 +35,15 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-type RetainedCapability = Readonly<{
-  canCreateAttempt(): boolean;
-  createAttempt(): StartTravelAttemptHandle | undefined;
-}>;
-let retainedCapability: RetainedCapability | undefined;
-let retainedHandle: StartTravelAttemptHandle | undefined;
-const readRetainedCapability = (): RetainedCapability | undefined => retainedCapability;
-const readRetainedHandle = (): StartTravelAttemptHandle | undefined => retainedHandle;
+let retainedCapability: StartTravelPresentationCommand | undefined;
+const readRetainedCapability = (): StartTravelPresentationCommand | undefined => retainedCapability;
 
 function Consumer() {
   const publicIdentity = useIdentitySession();
   const identityContinuity = useIdentityContinuity();
   const operational = useOperationalContext();
   const commandContext = useCourierCommandContext();
-  const capability = useStartTravelAttemptCapability();
+  const capability = useStartTravelCommand();
   const [created, setCreated] = useState('none');
   return <View>
     {operational.status === 'ready' ? <TrustedCourierHandoffStatus pickupId={pickupId} /> : null}
@@ -62,63 +55,58 @@ function Consumer() {
     <Text testID="operational-internals">{String('contextGeneration' in operational)}</Text>
     <Text testID="command-context">{String(commandContext.readCourierContext()?.contextGeneration ?? 'none')}</Text>
     <Text testID="publisher-exposed">{String('publishFresh' in capability)}</Text>
+    <Text testID="capability-surface">{Object.keys(capability).sort().join(',')}</Text>
     <Text testID="created">{created}</Text>
-    <Pressable testID="create-current" onPress={() => { retainedCapability = capability; retainedHandle = capability.createAttempt(); setCreated(retainedHandle ? `${Object.keys(retainedHandle).join(',')}:${retainedHandle.isCurrent()}` : 'none'); }}><Text>Test creation</Text></Pressable>
+    <Pressable testID="create-current" onPress={() => { retainedCapability = capability; setCreated(String(capability.canStartTravel())); }}><Text>Test availability</Text></Pressable>
     <Pressable testID="select-personal" onPress={() => operational.selectArea('personal')}><Text>Test selection</Text></Pressable>
     <Pressable testID="invalidate-courier" onPress={() => operational.invalidateCourier(pickupId)}><Text>Test invalidation</Text></Pressable>
   </View>;
 }
 
 function MinimalConsumer() {
-  const capability = useStartTravelAttemptCapability();
+  const capability = useStartTravelCommand();
   return <View>
     <TrustedCourierHandoffStatus pickupId={pickupId} />
-    <Pressable testID="create-minimal" onPress={() => { retainedCapability = capability; retainedHandle = capability.createAttempt(); }}><Text>Test creation</Text></Pressable>
+    <Pressable testID="create-minimal" onPress={() => { retainedCapability = capability; }}><Text>Test capability</Text></Pressable>
   </View>;
 }
 
 type ReplacementObservation = Readonly<{
   distinctCapability: boolean;
-  oldHandleCurrent: boolean | undefined;
-  oldCanCreate: boolean | undefined;
-  oldCreate: StartTravelAttemptHandle | undefined;
+  oldCanStart: boolean;
+  oldStart: Awaited<ReturnType<StartTravelPresentationCommand['startTravel']>>;
 }>;
 
-function ReplacementObserver({ previousCapability, previousHandle, observe }: {
-  previousCapability: RetainedCapability;
-  previousHandle: StartTravelAttemptHandle;
+function ReplacementObserver({ previousCapability, observe }: {
+  previousCapability: StartTravelPresentationCommand;
   observe(value: ReplacementObservation): void;
 }) {
-  const capability = useStartTravelAttemptCapability();
+  const capability = useStartTravelCommand();
   useLayoutEffect(() => {
-    observe({
+    void previousCapability.startTravel().then((oldStart) => observe({
       distinctCapability: capability !== previousCapability,
-      oldHandleCurrent: previousHandle.isCurrent(),
-      oldCanCreate: previousCapability.canCreateAttempt(),
-      oldCreate: previousCapability.createAttempt(),
-    });
-  }, [capability, observe, previousCapability, previousHandle]);
+      oldCanStart: previousCapability.canStartTravel(),
+      oldStart,
+    }));
+  }, [capability, observe, previousCapability]);
   return null;
 }
 
-function RemovalObserver({ previousCapability, previousHandle, observe }: {
-  previousCapability: RetainedCapability;
-  previousHandle: StartTravelAttemptHandle;
+function RemovalObserver({ previousCapability, observe }: {
+  previousCapability: StartTravelPresentationCommand;
   observe(value: Omit<ReplacementObservation, 'distinctCapability'>): void;
 }) {
   useLayoutEffect(() => {
-    observe({
-      oldHandleCurrent: previousHandle.isCurrent(),
-      oldCanCreate: previousCapability.canCreateAttempt(),
-      oldCreate: previousCapability.createAttempt(),
-    });
-  }, [observe, previousCapability, previousHandle]);
+    void previousCapability.startTravel().then((oldStart) => observe({
+      oldCanStart: previousCapability.canStartTravel(),
+      oldStart,
+    }));
+  }, [observe, previousCapability]);
   return null;
 }
 
-test('mounted trusted provider derives an attempt without exposing raw scope or submitting', async () => {
+test('mounted trusted provider exposes only the bounded action facade without submitting', async () => {
   retainedCapability = undefined;
-  retainedHandle = undefined;
   const store = new MemoryStore();
   const vault = new SecureSessionVault(store);
   await vault.save(session);
@@ -142,24 +130,30 @@ test('mounted trusted provider derives an attempt without exposing raw scope or 
   expect(screen.getByTestId('identity-continuity-surface').props.children).toBe('isCurrent');
   expect(screen.getByTestId('operational-internals').props.children).toBe('false');
   expect(screen.getByTestId('publisher-exposed').props.children).toBe('false');
+  expect(screen.getByTestId('capability-surface').props.children).toBe('canStartTravel,reconcileStartTravel,startTravel');
   expect(screen.getByTestId('command-context').props.children).not.toBe('none');
   await waitFor(() => expect(screen.getByText('Pickup work is current')).toBeTruthy());
   await act(() => { fireEvent.press(screen.getByTestId('create-current')); });
-  await waitFor(() => expect(screen.getByTestId('created').props.children).toBe('isCurrent:true'));
+  await waitFor(() => expect(screen.getByTestId('created').props.children).toBe('true'));
+  expect(Object.isFrozen(readRetainedCapability())).toBe(true);
+  expect(readRetainedCapability()).not.toHaveProperty('controller');
+  expect(readRetainedCapability()).not.toHaveProperty('scope');
+  expect(readRetainedCapability()).not.toHaveProperty('service');
+  expect(readRetainedCapability()).not.toHaveProperty('attempt');
+  expect(readRetainedCapability()).not.toHaveProperty('idempotencyKey');
   const contextGeneration = screen.getByTestId('command-context').props.children;
   await act(() => { fireEvent.press(screen.getByTestId('select-personal')); });
   expect(screen.getByTestId('command-context').props.children).toBe(contextGeneration);
   await act(() => { fireEvent.press(screen.getByLabelText('Refresh')); });
   await waitFor(() => expect(screen.getByText('Information may be out of date')).toBeTruthy());
   await act(() => { fireEvent.press(screen.getByTestId('create-current')); });
-  await waitFor(() => expect(screen.getByTestId('created').props.children).toBe('none'));
+  await waitFor(() => expect(screen.getByTestId('created').props.children).toBe('false'));
   await act(() => { fireEvent.press(screen.getByTestId('invalidate-courier')); fireEvent.press(screen.getByTestId('create-current')); });
-  await waitFor(() => expect(screen.getByTestId('created').props.children).toBe('none'));
+  await waitFor(() => expect(screen.getByTestId('created').props.children).toBe('false'));
 });
 
-test('provider retirement invalidates retained capability and handle while identical replacement remains independent', async () => {
+test('provider retirement invalidates retained facade while identical replacement remains independent', async () => {
   retainedCapability = undefined;
-  retainedHandle = undefined;
 
   async function mountProvider() {
     const store = new MemoryStore();
@@ -176,32 +170,30 @@ test('provider retirement invalidates retained capability and handle while ident
     await waitFor(() => expect(screen.getByTestId('identity-status').props.children).toBe('authenticated'));
     await waitFor(() => expect(screen.getByText('Pickup work is current')).toBeTruthy());
     await act(() => { fireEvent.press(screen.getByTestId('create-current')); });
-    await waitFor(() => expect(screen.getByTestId('created').props.children).toBe('isCurrent:true'));
+    await waitFor(() => expect(screen.getByTestId('created').props.children).toBe('true'));
     return mounted;
   }
 
   const providerA = await mountProvider();
-  const capabilityA = readRetainedCapability(); const handleA = readRetainedHandle();
-  expect(capabilityA).toBeDefined(); expect(handleA).toBeDefined();
-  expect(handleA?.isCurrent()).toBe(true);
+  const capabilityA = readRetainedCapability();
+  expect(capabilityA).toBeDefined();
+  expect(capabilityA?.canStartTravel()).toBe(true);
   await act(() => providerA.unmount());
-  expect(handleA?.isCurrent()).toBe(false);
-  expect(capabilityA?.canCreateAttempt()).toBe(false);
-  expect(capabilityA?.createAttempt()).toBeUndefined();
+  expect(capabilityA?.canStartTravel()).toBe(false);
+  await expect(capabilityA?.startTravel()).resolves.toEqual({ outcome: 'invalidated', reason: 'scope_changed' });
 
   retainedCapability = undefined;
-  retainedHandle = undefined;
   const providerB = await mountProvider();
-  const handleB = readRetainedHandle();
-  expect(handleA?.isCurrent()).toBe(false);
-  expect(handleB).toBeDefined();
-  expect(handleB?.isCurrent()).toBe(true);
+  const capabilityB = readRetainedCapability();
+  expect(capabilityB).toBeDefined();
+  expect(capabilityB).not.toBe(capabilityA);
+  expect(capabilityB?.canStartTravel()).toBe(true);
+  expect(capabilityA?.canStartTravel()).toBe(false);
   await act(() => providerB.unmount());
 });
 
 test('committed replacement and removal close old capabilities before the new tree is observable', async () => {
   retainedCapability = undefined;
-  retainedHandle = undefined;
   const store = new MemoryStore();
   const vault = new SecureSessionVault(store);
   await vault.save(session);
@@ -220,35 +212,33 @@ test('committed replacement and removal close old capabilities before the new tr
   const mounted = await render(tree('A', <Consumer />));
   await waitFor(() => expect(screen.getByText('Pickup work is current')).toBeTruthy());
   await act(() => { fireEvent.press(screen.getByTestId('create-current')); });
-  const capabilityA = readRetainedCapability(); const handleA = readRetainedHandle();
-  expect(capabilityA).toBeDefined(); expect(handleA).toBeDefined(); expect(handleA?.isCurrent()).toBe(true);
+  const capabilityA = readRetainedCapability();
+  expect(capabilityA).toBeDefined(); expect(capabilityA?.canStartTravel()).toBe(true);
   await act(() => { fireEvent.press(screen.getByLabelText('Refresh')); });
   expect(pickupReads).toBe(2);
 
   let observation: ReplacementObservation | undefined;
-  await mounted.rerender(tree('B', <ReplacementObserver previousCapability={capabilityA!} previousHandle={handleA!} observe={(value) => { observation = value; }} />));
-  expect(observation).toEqual({ distinctCapability: true, oldHandleCurrent: false, oldCanCreate: false, oldCreate: undefined });
+  await mounted.rerender(tree('B', <ReplacementObserver previousCapability={capabilityA!} observe={(value) => { observation = value; }} />));
+  await waitFor(() => expect(observation).toEqual({ distinctCapability: true, oldCanStart: false, oldStart: { outcome: 'invalidated', reason: 'scope_changed' } }));
   await act(async () => { latePickup.resolve(pickupResponse); });
-  expect(handleA?.isCurrent()).toBe(false);
+  expect(capabilityA?.canStartTravel()).toBe(false);
 
   retainedCapability = undefined;
-  retainedHandle = undefined;
   await mounted.rerender(tree('B', <Consumer />));
   await waitFor(() => expect(screen.getByText('Pickup work is current')).toBeTruthy());
   await act(() => { fireEvent.press(screen.getByTestId('create-current')); });
-  const capabilityB = readRetainedCapability(); const handleB = readRetainedHandle();
-  expect(capabilityB).toBeDefined(); expect(handleB).toBeDefined(); expect(handleB?.isCurrent()).toBe(true);
-  expect(handleA?.isCurrent()).toBe(false);
+  const capabilityB = readRetainedCapability();
+  expect(capabilityB).toBeDefined(); expect(capabilityB?.canStartTravel()).toBe(true);
+  expect(capabilityA?.canStartTravel()).toBe(false);
 
   let removal: Omit<ReplacementObservation, 'distinctCapability'> | undefined;
-  await mounted.rerender(<RemovalObserver previousCapability={capabilityB!} previousHandle={handleB!} observe={(value) => { removal = value; }} />);
-  expect(removal).toEqual({ oldHandleCurrent: false, oldCanCreate: false, oldCreate: undefined });
+  await mounted.rerender(<RemovalObserver previousCapability={capabilityB!} observe={(value) => { removal = value; }} />);
+  await waitFor(() => expect(removal).toEqual({ oldCanStart: false, oldStart: { outcome: 'invalidated', reason: 'scope_changed' } }));
   await mounted.unmount();
 });
 
 test('reader dependency replacement closes scope A before scope B layout observation', async () => {
   retainedCapability = undefined;
-  retainedHandle = undefined;
   const identityValue = { identityId, sessionId, identityGeneration: 1 };
   const courierValue = { pickupId, contextGeneration: 1, identityContinuity: Object.freeze({ isCurrent: () => true }) };
   let readIdentity = () => identityValue;
@@ -268,16 +258,16 @@ test('reader dependency replacement closes scope A before scope B layout observa
     const mounted = await render(tree(<MinimalConsumer />));
     await waitFor(() => expect(screen.getByText('Pickup work is current')).toBeTruthy());
     await act(() => { fireEvent.press(screen.getByTestId('create-minimal')); });
-    const capabilityA = readRetainedCapability(); const handleA = readRetainedHandle();
-    expect(capabilityA).toBeDefined(); expect(handleA).toBeDefined(); expect(handleA?.isCurrent()).toBe(true);
+    const capabilityA = readRetainedCapability();
+    expect(capabilityA).toBeDefined(); expect(capabilityA?.canStartTravel()).toBe(true);
     expect(createCommandService).not.toHaveBeenCalled();
 
     readIdentity = () => identityValue;
     readCourierContext = () => courierValue;
     const replacementIdentity = { readIdentity, createStartTravelCommandService: createCommandService };
     let observation: ReplacementObservation | undefined;
-    await mounted.rerender(<CourierStartTravelCommandInfrastructureProvider identity={replacementIdentity}><LanguageProvider><ReplacementObserver previousCapability={capabilityA!} previousHandle={handleA!} observe={(value) => { observation = value; }} /></LanguageProvider></CourierStartTravelCommandInfrastructureProvider>);
-    expect(observation).toEqual({ distinctCapability: true, oldHandleCurrent: false, oldCanCreate: false, oldCreate: undefined });
+    await mounted.rerender(<CourierStartTravelCommandInfrastructureProvider identity={replacementIdentity}><LanguageProvider><ReplacementObserver previousCapability={capabilityA!} observe={(value) => { observation = value; }} /></LanguageProvider></CourierStartTravelCommandInfrastructureProvider>);
+    await waitFor(() => expect(observation).toEqual({ distinctCapability: true, oldCanStart: false, oldStart: { outcome: 'invalidated', reason: 'scope_changed' } }));
     expect(createCommandService).not.toHaveBeenCalled();
     await mounted.unmount();
   } finally {

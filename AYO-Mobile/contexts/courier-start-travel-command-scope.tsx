@@ -3,24 +3,25 @@ import { createContext, type PropsWithChildren, useContext, useLayoutEffect, use
 import { CourierHandoffStatus } from '@/components/courier-handoff-status';
 import { useCourierCommandContext } from '@/contexts/operational-context';
 import type { CourierHandoffSnapshot } from '@/domain/courier-handoff-status';
-import { CourierStartTravelController } from '@/services/courier-start-travel-controller';
-import { CourierStartTravelCommandScope, type StartTravelAttemptHandle } from '@/services/courier-start-travel-command-scope';
+import { CourierStartTravelController, type StartTravelControllerResult } from '@/services/courier-start-travel-controller';
+import { CourierStartTravelCommandScope } from '@/services/courier-start-travel-command-scope';
 
 type TrustedIdentityCommandRuntime = Readonly<{
   readIdentity(): Readonly<{ identityId: string; sessionId: string; identityGeneration: number }> | undefined;
   createStartTravelCommandService(scope: CourierStartTravelCommandScope): Promise<import('@/services/courier-start-travel-command').CourierStartTravelCommandService>;
 }>;
 
-type StartTravelAttemptCapability = Readonly<{
-  canCreateAttempt(): boolean;
-  createAttempt(): StartTravelAttemptHandle | undefined;
+export type StartTravelPresentationCommand = Readonly<{
+  canStartTravel(): boolean;
+  startTravel(signal?: AbortSignal): Promise<StartTravelControllerResult>;
+  reconcileStartTravel(signal?: AbortSignal): Promise<StartTravelControllerResult>;
 }>;
 type StartTravelEvidenceIntegration = Readonly<{
   publishFresh(pickupId: string, snapshot: CourierHandoffSnapshot): void;
   clearFresh(pickupId: string): void;
 }>;
 
-const CapabilityContext = createContext<StartTravelAttemptCapability | undefined>(undefined);
+const CapabilityContext = createContext<StartTravelPresentationCommand | undefined>(undefined);
 const EvidenceContext = createContext<StartTravelEvidenceIntegration | undefined>(undefined);
 
 export function CourierStartTravelCommandInfrastructureProvider({ children, identity }: PropsWithChildren<{ identity: TrustedIdentityCommandRuntime }>) {
@@ -31,9 +32,10 @@ export function CourierStartTravelCommandInfrastructureProvider({ children, iden
     scope.retainProviderLifetime();
     return () => scope.releaseProviderLifetime();
   }, [scope]);
-  const capability = useMemo<StartTravelAttemptCapability>(() => ({
-    canCreateAttempt: () => controller.canCreateAttempt(),
-    createAttempt: () => controller.createAttempt(),
+  const capability = useMemo<StartTravelPresentationCommand>(() => Object.freeze({
+    canStartTravel: () => controller.isStartTravelActionable(),
+    startTravel: (signal) => controller.startTravel(signal),
+    reconcileStartTravel: (signal) => controller.reconcileCurrentOperation(signal),
   }), [controller]);
   const evidence = useMemo<StartTravelEvidenceIntegration>(() => ({
     publishFresh: (pickupId, snapshot) => scope.publishFresh(pickupId, snapshot),
@@ -42,8 +44,8 @@ export function CourierStartTravelCommandInfrastructureProvider({ children, iden
   return <CapabilityContext.Provider value={capability}><EvidenceContext.Provider value={evidence}>{children}</EvidenceContext.Provider></CapabilityContext.Provider>;
 }
 
-/** Bounded future-facing capability: no session, generation, or raw scope is exposed. */
-export function useStartTravelAttemptCapability() {
+/** Bounded future-facing action request: command custody remains in trusted infrastructure. */
+export function useStartTravelCommand() {
   const value = useContext(CapabilityContext);
   if (!value) throw new Error('courier_start_travel_scope_provider_required');
   return value;
