@@ -11,6 +11,7 @@ const identityId = '11111111-1111-4111-8111-111111111111';
 const sessionId = '22222222-2222-4222-8222-222222222222';
 const pickupId = '33333333-3333-4333-8333-333333333333';
 const key = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const nextKey = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const travelling = (version = 5): CourierHandoffSnapshot => Object.freeze({ status: 'travelling', pickupVersion: version, updatedAt: '2026-08-08T01:00:00Z', presentationAction: 'mark_arrived' });
 const arrived: CourierHandoffSnapshot = Object.freeze({ status: 'at_merchant', pickupVersion: 6, updatedAt: '2026-08-08T01:01:00Z', presentationAction: 'none' });
 const waiting: CourierHandoffSnapshot = Object.freeze({ status: 'waiting_for_merchant', pickupVersion: 7, updatedAt: '2026-08-08T01:02:00Z', presentationAction: 'none' });
@@ -24,7 +25,9 @@ function fixture() {
   let creations = 0; let submissions = 0; let reconciliations = 0; let submitted: MarkArrivedAttempt | undefined;
   let submit: (attempt: MarkArrivedAttempt) => Promise<unknown> = async () => ({ pickupId, state: 'arrived_at_merchant', version: 6, travellingAt: '', arrivedAt: '', updatedAt: '' });
   let reconcile: () => Promise<any> = async () => ({ outcome: 'already_applied', pickup: {} });
-  const scope = new CourierMarkArrivedCommandScope(() => identity, () => courier, (value) => { creations += 1; return createMarkArrivedAttempt(value, () => key); });
+  const scope = new CourierMarkArrivedCommandScope(() => identity, () => courier, (value) => {
+    creations += 1; return createMarkArrivedAttempt(value, () => creations === 1 ? key : nextKey);
+  });
   scope.publishFresh(pickupId, travelling());
   const controller = new CourierMarkArrivedController(scope, () => ({
     submit: async (attempt) => { submissions += 1; submitted = attempt; return submit(attempt) as never; },
@@ -101,6 +104,44 @@ test('identity, session, generation, context, Pickup, continuity, release and re
     (v: ReturnType<typeof fixture>) => v.scope.retire(),
   ];
   for (const mutate of mutations) { const value = fixture(); const handle = value.controller.createAttempt(); assert.ok(handle); mutate(value); assert.equal(value.scope.resolveForOperation(handle), undefined); assert.equal(handle.isCurrent(), false); }
+});
+
+test('authority-revoked outcome-unknown operation cannot jam a later explicit identity intent', async () => {
+  const value = fixture(); value.onSubmit(async () => { throw new MarkArrivedOutcomeUnknownError(); });
+  const oldHandle = value.controller.createAttempt(); assert.ok(oldHandle); const oldAttempt = value.scope.resolveForSubmit(oldHandle); assert.ok(oldAttempt);
+  assert.deepEqual(await value.controller.submit(oldHandle), { outcome: 'outcome_unknown' });
+  value.setIdentity({ identityId: '44444444-4444-4444-8444-444444444444', sessionId: '55555555-5555-4555-8555-555555555555', identityGeneration: 2 });
+  value.setCourier({ pickupId, contextGeneration: 2, identityContinuity: { isCurrent: () => true } });
+  assert.deepEqual(await value.controller.reconcile(oldHandle), { outcome: 'invalidated', reason: 'invalid_handle' });
+  assert.equal(value.reconciliations(), 0); assert.equal(value.submissions(), 1);
+  value.scope.publishFresh(pickupId, travelling());
+  const newHandle = value.controller.createAttempt(); assert.ok(newHandle); assert.notEqual(newHandle, oldHandle);
+  const newAttempt = value.scope.resolveForSubmit(newHandle); assert.ok(newAttempt); assert.equal(newAttempt.idempotencyKey, nextKey);
+  assert.notEqual(newAttempt.idempotencyKey, oldAttempt.idempotencyKey); assert.equal(value.scope.resolveForOperation(oldHandle), undefined);
+});
+
+test('revoked Pickup operation cannot migrate and does not block a later explicit Pickup intent', async () => {
+  const value = fixture(); const oldHandle = value.controller.createAttempt(); assert.ok(oldHandle); const oldAttempt = value.scope.resolveForSubmit(oldHandle); assert.ok(oldAttempt);
+  const replacementPickupId = '44444444-4444-4444-8444-444444444444';
+  value.setCourier({ pickupId: replacementPickupId, contextGeneration: 2, identityContinuity: { isCurrent: () => true } });
+  assert.deepEqual(await value.controller.submit(oldHandle), { outcome: 'invalidated', reason: 'invalid_handle' }); assert.equal(value.submissions(), 0);
+  value.scope.publishFresh(replacementPickupId, travelling());
+  const newHandle = value.controller.createAttempt(); assert.ok(newHandle); const newAttempt = value.scope.resolveForSubmit(newHandle); assert.ok(newAttempt);
+  assert.notEqual(newHandle, oldHandle); assert.equal(newAttempt.pickupId, replacementPickupId); assert.equal(newAttempt.idempotencyKey, nextKey);
+  assert.notEqual(newAttempt.idempotencyKey, oldAttempt.idempotencyKey); assert.equal(value.scope.resolveForOperation(oldHandle), undefined);
+});
+
+test('revoked retry authorization cannot submit or block a later explicit intent', async () => {
+  const value = fixture(); value.onSubmit(async () => { throw new MarkArrivedOutcomeUnknownError(); });
+  value.onReconcile(async () => ({ outcome: 'retry_same_attempt', pickup: { pickupId, state: 'travelling_to_merchant', version: 5, updatedAt: travelling().updatedAt, presentationAction: 'mark_arrived' } }));
+  const oldHandle = value.controller.createAttempt(); assert.ok(oldHandle); const oldAttempt = value.scope.resolveForSubmit(oldHandle); assert.ok(oldAttempt);
+  await value.controller.submit(oldHandle); assert.deepEqual(await value.controller.reconcile(oldHandle), { outcome: 'retry_same_attempt' });
+  value.setCourier({ pickupId, contextGeneration: 2, identityContinuity: { isCurrent: () => true } });
+  assert.deepEqual(await value.controller.submit(oldHandle), { outcome: 'invalidated', reason: 'invalid_handle' }); assert.equal(value.submissions(), 1);
+  value.scope.publishFresh(pickupId, travelling(8));
+  const newHandle = value.controller.createAttempt(); assert.ok(newHandle); const newAttempt = value.scope.resolveForSubmit(newHandle); assert.ok(newAttempt);
+  assert.notEqual(newHandle, oldHandle); assert.equal(newAttempt.expectedVersion, 8); assert.equal(newAttempt.idempotencyKey, nextKey);
+  assert.notEqual(newAttempt.idempotencyKey, oldAttempt.idempotencyKey);
 });
 
 test('provider rehearsal can retain a released scope, but retired scope cannot revive', () => {
