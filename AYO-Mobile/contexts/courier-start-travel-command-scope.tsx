@@ -89,7 +89,7 @@ export function CourierStartTravelCommandInfrastructureProvider({ children, iden
   const markArrivedEvidence = useMemo<MarkArrivedEvidenceIntegration>(() => Object.freeze({
     publishFresh: (pickupId, snapshot, explicitRecovery) => {
       markArrivedScope.publishFresh(pickupId, snapshot);
-      if (explicitRecovery) markArrivedController.recoverUnexpectedSubmitFailure();
+      if (explicitRecovery) markArrivedController.recordExplicitRecovery();
     },
     clearFresh: (pickupId) => markArrivedScope.clearFresh(pickupId),
   }), [markArrivedController, markArrivedScope]);

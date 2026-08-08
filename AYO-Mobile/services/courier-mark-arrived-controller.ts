@@ -4,7 +4,7 @@ import type { CourierMarkArrivedCommandService } from './courier-mark-arrived-co
 import { CourierMarkArrivedCommandScope, type MarkArrivedAttemptHandle } from './courier-mark-arrived-command-scope.ts';
 
 type Service = Pick<CourierMarkArrivedCommandService, 'submit' | 'reconcile'>;
-type Operation = { readonly handle: MarkArrivedAttemptHandle; readonly attempt: MarkArrivedAttempt; inFlight?: Promise<MarkArrivedControllerResult>; settled?: MarkArrivedControllerResult };
+type Operation = { readonly handle: MarkArrivedAttemptHandle; readonly attempt: MarkArrivedAttempt; inFlight?: Promise<MarkArrivedControllerResult>; settled?: MarkArrivedControllerResult; submitRecoveryGeneration?: number };
 export type MarkArrivedControllerResult =
   | Readonly<{ outcome: 'applied' }> | Readonly<{ outcome: 'outcome_unknown' }> | Readonly<{ outcome: 'retry_same_attempt' }>
   | Readonly<{ outcome: 'rejected'; reason: MarkArrivedRejection | 'malformed_response' | 'refresh_required' | 'reconciliation_not_available' }>
@@ -18,6 +18,7 @@ export class CourierMarkArrivedController {
   private service?: Promise<Service>;
   private operation?: Operation;
   private unexpectedSubmitFailure = false;
+  private explicitRecoveryGeneration = 0;
   constructor(scope: CourierMarkArrivedCommandScope, createService: () => Service | Promise<Service>) { this.scope = scope; this.createService = createService; }
 
   createAttempt(): MarkArrivedAttemptHandle | undefined {
@@ -73,15 +74,12 @@ export class CourierMarkArrivedController {
     return this.reconcile(operation.handle, signal);
   }
 
-  /** Explicit trusted-refresh recovery for unexpected submit failures only. */
-  recoverUnexpectedSubmitFailure(): void {
-    if (!this.unexpectedSubmitFailure) return;
+  /** Records one successful explicit trusted refresh; ordinary publication never calls this. */
+  recordExplicitRecovery(): void {
+    this.explicitRecoveryGeneration += 1;
     const operation = this.operation;
-    if (operation?.inFlight || operation?.settled?.outcome === 'outcome_unknown') return;
-    if (operation && !this.scope.resolveForSubmit(operation.handle)) {
-      operation.settled = Object.freeze({ outcome: 'invalidated', reason: 'scope_changed' });
-    }
-    this.unexpectedSubmitFailure = false;
+    if (!this.unexpectedSubmitFailure || !operation || operation.inFlight || operation.settled?.outcome === 'outcome_unknown') return;
+    this.consumeExplicitRecovery(operation);
   }
 
   isUnexpectedSubmitFailureLatched(): boolean { return this.unexpectedSubmitFailure; }
@@ -98,6 +96,7 @@ export class CourierMarkArrivedController {
     if (operation.settled?.outcome === 'outcome_unknown') return Promise.resolve(operation.settled);
     if (operation.settled && operation.settled.outcome !== 'retry_same_attempt') return Promise.resolve(operation.settled);
     if (!this.scope.resolveForSubmit(handle)) return Promise.resolve(operation.settled = Object.freeze({ outcome: 'invalidated', reason: 'scope_changed' }));
+    operation.submitRecoveryGeneration = this.explicitRecoveryGeneration;
     return this.flight(operation, this.executeSubmit(operation, signal));
   }
 
@@ -116,7 +115,11 @@ export class CourierMarkArrivedController {
 
   private flight(operation: Operation, pending: Promise<MarkArrivedControllerResult>) {
     operation.inFlight = pending;
-    void pending.then(() => { if (operation.inFlight === pending) operation.inFlight = undefined; }, () => { if (operation.inFlight === pending) operation.inFlight = undefined; });
+    const clearFlight = () => {
+      if (operation.inFlight === pending) operation.inFlight = undefined;
+      if (this.unexpectedSubmitFailure) this.consumeExplicitRecovery(operation);
+    };
+    void pending.then(clearFlight, clearFlight);
     return pending;
   }
   private commandService() { return this.service ??= Promise.resolve(this.createService()); }
@@ -127,7 +130,10 @@ export class CourierMarkArrivedController {
       if (error instanceof MarkArrivedRejectedError) { this.scope.clearFreshForAttempt(operation.attempt); return operation.settled = Object.freeze({ outcome: 'rejected', reason: error.reason }); }
       if (error instanceof MarkArrivedContractError) { this.scope.clearFreshForAttempt(operation.attempt); return operation.settled = Object.freeze({ outcome: 'rejected', reason: 'malformed_response' }); }
       if (error instanceof MarkArrivedAttemptInvalidError) { this.scope.clearFreshForAttempt(operation.attempt); return operation.settled = Object.freeze({ outcome: 'invalidated', reason: 'scope_changed' }); }
-      if (!(error instanceof PublicApiError)) this.unexpectedSubmitFailure = true;
+      if (!(error instanceof PublicApiError)) {
+        this.unexpectedSubmitFailure = true;
+        this.consumeExplicitRecovery(operation);
+      }
       return this.boundPublicError(operation, error);
     }
   }
@@ -156,5 +162,14 @@ export class CourierMarkArrivedController {
     const authority = error.status === 401 || error.status === 403 || error.status === 404 || ['authentication_required', 'session_expired', 'access_denied', 'not_found'].includes(error.kind);
     if (authority) return operation.settled = Object.freeze({ outcome: 'invalidated', reason: 'authority_lost' });
     return operation.settled = Object.freeze({ outcome: 'rejected', reason: error.kind === 'malformed_response' ? 'malformed_response' : 'refresh_required' });
+  }
+
+  private consumeExplicitRecovery(operation: Operation): void {
+    if (this.operation !== operation || operation.settled?.outcome === 'outcome_unknown' ||
+      operation.submitRecoveryGeneration === undefined || this.explicitRecoveryGeneration <= operation.submitRecoveryGeneration) return;
+    if (!this.scope.resolveForSubmit(operation.handle)) {
+      operation.settled = Object.freeze({ outcome: 'invalidated', reason: 'scope_changed' });
+    }
+    this.unexpectedSubmitFailure = false;
   }
 }
