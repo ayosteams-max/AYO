@@ -10,7 +10,10 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from BACKEND.authorization.contracts import AuthorizationSubject
 from BACKEND.authorization.enforcement import AuthorizationRoute
-from BACKEND.courier_pickup.application import CourierPickupApplication
+from BACKEND.courier_pickup.application import (
+    CourierPickupApplication,
+    CourierPickupMerchantRead,
+)
 from BACKEND.courier_pickup.engine import CourierPickupConflict
 from BACKEND.courier_pickup.models import (
     CourierPickupAction,
@@ -52,6 +55,11 @@ class CourierPickupPresentationAction(StrEnum):
     NONE = "none"
 
 
+class CourierPickupMerchantPresentationAction(StrEnum):
+    ACKNOWLEDGE_ARRIVAL = "acknowledge_arrival"
+    NONE = "none"
+
+
 PRESENTATION_ACTION_BY_STATE = {
     CourierPickupState.ASSIGNED: CourierPickupPresentationAction.START_TRAVEL,
     CourierPickupState.TRAVELLING: CourierPickupPresentationAction.MARK_ARRIVED,
@@ -59,6 +67,21 @@ PRESENTATION_ACTION_BY_STATE = {
     CourierPickupState.WAITING: CourierPickupPresentationAction.NONE,
     CourierPickupState.ENDED_BEFORE_CUSTODY: CourierPickupPresentationAction.NONE,
 }
+
+MERCHANT_PRESENTATION_ACTION_BY_STATE = {
+    CourierPickupState.ASSIGNED: CourierPickupMerchantPresentationAction.NONE,
+    CourierPickupState.TRAVELLING: CourierPickupMerchantPresentationAction.NONE,
+    CourierPickupState.ARRIVED: (
+        CourierPickupMerchantPresentationAction.ACKNOWLEDGE_ARRIVAL
+    ),
+    CourierPickupState.WAITING: CourierPickupMerchantPresentationAction.NONE,
+    CourierPickupState.ENDED_BEFORE_CUSTODY: (
+        CourierPickupMerchantPresentationAction.NONE
+    ),
+}
+
+if set(MERCHANT_PRESENTATION_ACTION_BY_STATE) != set(CourierPickupState):
+    raise RuntimeError("merchant courier pickup presentation matrix is incomplete")
 
 
 class CourierPickupCourierStatus(BaseModel):
@@ -86,6 +109,7 @@ class CourierPickupMerchantStatus(BaseModel):
     waiting_duration_seconds: int | None
     terminal_reason: CourierPickupExceptionReason | None
     updated_at: datetime
+    presentation_action: CourierPickupMerchantPresentationAction
 
 
 class CourierPickupMerchantCommandResult(BaseModel):
@@ -135,8 +159,16 @@ def _courier_status(view: CourierPickupView) -> CourierPickupCourierStatus:
     )
 
 
-def _merchant_status(view: CourierPickupView) -> CourierPickupMerchantStatus:
+def _merchant_status(read: CourierPickupMerchantRead) -> CourierPickupMerchantStatus:
+    view = read.view
     pickup = view.pickup
+    presentation_action = MERCHANT_PRESENTATION_ACTION_BY_STATE[pickup.state]
+    if (
+        presentation_action
+        is CourierPickupMerchantPresentationAction.ACKNOWLEDGE_ARRIVAL
+        and not read.current_assignment
+    ):
+        presentation_action = CourierPickupMerchantPresentationAction.NONE
     return CourierPickupMerchantStatus(
         pickup_id=pickup.pickup_id,
         state=pickup.state,
@@ -146,6 +178,7 @@ def _merchant_status(view: CourierPickupView) -> CourierPickupMerchantStatus:
         waiting_duration_seconds=pickup.waiting_duration_seconds,
         terminal_reason=pickup.terminal_reason,
         updated_at=pickup.updated_at,
+        presentation_action=presentation_action,
     )
 
 

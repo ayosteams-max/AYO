@@ -97,6 +97,7 @@ COURIER_FIELDS = {
 }
 COURIER_STATUS_FIELDS = COURIER_FIELDS | {"presentation_action"}
 MERCHANT_FIELDS = COURIER_FIELDS - {"assigned_at", "travelling_at"}
+MERCHANT_STATUS_FIELDS = MERCHANT_FIELDS | {"presentation_action"}
 CUSTODY_COMMON_FIELDS = {
     "custody_id",
     "order_id",
@@ -416,9 +417,45 @@ def test_postgres_composed_http_exposes_exact_caller_contracts(
         json={"expected_version": 2, "action": "mark_arrived"},
     )
     merchant = _client(postgres_composition, _merchant_subject())
+    before_merchant_status = _effect_counts(postgres_engine)
+    with postgres_engine.connect() as connection:
+        before_custody_events = connection.execute(
+            select(func.count()).select_from(commerce_custody_events)
+        ).scalar_one()
+        before_order_outbox = connection.execute(
+            select(func.count())
+            .select_from(commerce_order_outbox)
+            .where(commerce_order_outbox.c.order_id == ORDER)
+        ).scalar_one()
     merchant_status = merchant.get(
         f"/api/mobile/merchants/{MERCHANT}/orders/{ORDER}/courier-pickup"
     )
+    assert merchant_status.status_code == 200
+    assert merchant_status.json()["presentation_action"] == "acknowledge_arrival"
+    assert _effect_counts(postgres_engine) == before_merchant_status
+    with postgres_engine.connect() as connection:
+        assert (
+            connection.execute(
+                select(func.count())
+                .select_from(commerce_custody_records)
+                .where(commerce_custody_records.c.pickup_id == PICKUP)
+            ).scalar_one()
+            == 0
+        )
+        assert (
+            connection.execute(
+                select(func.count()).select_from(commerce_custody_events)
+            ).scalar_one()
+            == before_custody_events
+        )
+        assert (
+            connection.execute(
+                select(func.count())
+                .select_from(commerce_order_outbox)
+                .where(commerce_order_outbox.c.order_id == ORDER)
+            ).scalar_one()
+            == before_order_outbox
+        )
     merchant_command = merchant.post(
         f"/api/mobile/merchants/{MERCHANT}/courier-pickups/{PICKUP}/acknowledge",
         headers={"Idempotency-Key": "postgres-merchant-contract-0001"},
@@ -428,8 +465,8 @@ def test_postgres_composed_http_exposes_exact_caller_contracts(
     for response in (courier_start, courier_arrive):
         _assert_public(response, COURIER_FIELDS)
     _assert_public(travelling_status, COURIER_STATUS_FIELDS)
-    for response in (merchant_status, merchant_command):
-        _assert_public(response, MERCHANT_FIELDS)
+    _assert_public(merchant_status, MERCHANT_STATUS_FIELDS)
+    _assert_public(merchant_command, MERCHANT_FIELDS)
     replay = merchant.post(
         f"/api/mobile/merchants/{MERCHANT}/courier-pickups/{PICKUP}/acknowledge",
         headers={"Idempotency-Key": "postgres-merchant-contract-0001"},
@@ -487,6 +524,66 @@ def test_postgres_composed_http_exposes_exact_caller_contracts(
             ).scalar_one()
             == 1
         )
+
+
+@pytest.mark.usefixtures("api_contract_state")
+def test_merchant_arrival_evidence_suppresses_released_assignment_without_side_effects(
+    postgres_engine,
+    postgres_composition,
+) -> None:
+    courier = _client(postgres_composition, _subject())
+    courier.post(
+        f"/api/mobile/courier-pickups/{PICKUP}/actions",
+        headers={"Idempotency-Key": KEY},
+        json={"expected_version": 1, "action": "start_travel"},
+    )
+    arrived = courier.post(
+        f"/api/mobile/courier-pickups/{PICKUP}/actions",
+        headers={"Idempotency-Key": "postgres-stale-arrival-0001"},
+        json={"expected_version": 2, "action": "mark_arrived"},
+    )
+    assert arrived.status_code == 200
+
+    with postgres_engine.begin() as connection:
+        connection.execute(
+            update(courier_dispatch_assignments)
+            .where(courier_dispatch_assignments.c.assignment_id == ASSIGNMENT)
+            .values(
+                state="released_before_pickup",
+                closed_at=NOW,
+                close_reason="replaced",
+                version=2,
+            )
+        )
+    before_read = _effect_counts(postgres_engine)
+    merchant = _client(postgres_composition, _merchant_subject())
+    status = merchant.get(
+        f"/api/mobile/merchants/{MERCHANT}/orders/{ORDER}/courier-pickup"
+    )
+
+    assert status.status_code == 200
+    assert status.json()["state"] == "arrived_at_merchant"
+    assert status.json()["presentation_action"] == "none"
+    assert _effect_counts(postgres_engine) == before_read
+    with postgres_engine.connect() as connection:
+        assert (
+            connection.execute(
+                select(func.count())
+                .select_from(commerce_custody_records)
+                .where(commerce_custody_records.c.pickup_id == PICKUP)
+            ).scalar_one()
+            == 0
+        )
+
+    acknowledge = merchant.post(
+        f"/api/mobile/merchants/{MERCHANT}/courier-pickups/{PICKUP}/acknowledge",
+        headers={"Idempotency-Key": "postgres-stale-merchant-0001"},
+        json={"expected_version": 3, "action": "acknowledge_arrival"},
+    )
+    assert acknowledge.status_code == 409
+    assert acknowledge.json() == {
+        "error": {"code": "courier_pickup_temporarily_unavailable"}
+    }
 
 
 @pytest.mark.usefixtures("api_contract_state")

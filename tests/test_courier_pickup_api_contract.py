@@ -11,7 +11,10 @@ from pydantic import ValidationError
 from BACKEND.authorization.contracts import AuthorizationSubject
 from BACKEND.authorization.enforcement import AuthorizationEnforcer
 from BACKEND.config.settings import Settings
-from BACKEND.courier_pickup.application import CourierPickupApplication
+from BACKEND.courier_pickup.application import (
+    CourierPickupApplication,
+    CourierPickupMerchantRead,
+)
 from BACKEND.courier_pickup.engine import CourierPickupConflict
 from BACKEND.courier_pickup.models import CourierPickupState, CourierPickupView
 from BACKEND.custody.application import CustodyApplication
@@ -22,9 +25,11 @@ from BACKEND.main import (
     create_app,
 )
 from BACKEND.routes.courier_pickup import (
+    MERCHANT_PRESENTATION_ACTION_BY_STATE,
     CourierPickupCourierCommandResult,
     CourierPickupCourierStatus,
     CourierPickupMerchantCommandResult,
+    CourierPickupMerchantPresentationAction,
     CourierPickupMerchantStatus,
     _call,
     _courier_command_result,
@@ -49,6 +54,7 @@ COURIER_FIELDS = {
 }
 COURIER_STATUS_FIELDS = COURIER_FIELDS | {"presentation_action"}
 MERCHANT_FIELDS = COURIER_FIELDS - {"assigned_at", "travelling_at"}
+MERCHANT_STATUS_FIELDS = MERCHANT_FIELDS | {"presentation_action"}
 PROHIBITED_FIELDS = {
     "merchant_id",
     "assigned_courier_identity_id",
@@ -106,8 +112,8 @@ class _RouteApplication:
         assert self.view is not None
         return self.view
 
-    def merchant_detail(self, *args, **kwargs) -> CourierPickupView:
-        return self._result()
+    def merchant_detail(self, *args, **kwargs) -> CourierPickupMerchantRead:
+        return CourierPickupMerchantRead(view=self._result(), current_assignment=True)
 
     def merchant_acknowledge(self, *args, **kwargs) -> CourierPickupView:
         return self._result()
@@ -161,7 +167,7 @@ def _client(
         (CourierPickupCourierCommandResult, COURIER_FIELDS),
         (CourierPickupCourierStatus, COURIER_STATUS_FIELDS),
         (CourierPickupMerchantCommandResult, MERCHANT_FIELDS),
-        (CourierPickupMerchantStatus, MERCHANT_FIELDS),
+        (CourierPickupMerchantStatus, MERCHANT_STATUS_FIELDS),
     ],
 )
 def test_public_models_are_frozen_closed_exact_allowlists(model, fields) -> None:
@@ -184,13 +190,13 @@ def test_distinct_pure_mappers_emit_only_exact_caller_fields() -> None:
         _courier_command_result(view),
         _courier_status(view),
         _merchant_command_result(view),
-        _merchant_status(view),
+        _merchant_status(CourierPickupMerchantRead(view, current_assignment=True)),
     )
     assert [set(result.model_dump()) for result in results] == [
         COURIER_FIELDS,
         COURIER_STATUS_FIELDS,
         MERCHANT_FIELDS,
-        MERCHANT_FIELDS,
+        MERCHANT_STATUS_FIELDS,
     ]
     assert len({type(result) for result in results}) == 4
     assert view.model_dump_json() == before
@@ -217,6 +223,58 @@ def test_courier_status_derives_only_bounded_presentation_action(
         _courier_status(view.model_copy(update={"pickup": pickup})).presentation_action
         == expected
     )
+
+
+@pytest.mark.parametrize(
+    ("state", "expected"),
+    [
+        (CourierPickupState.ASSIGNED, "none"),
+        (CourierPickupState.TRAVELLING, "none"),
+        (CourierPickupState.ARRIVED, "acknowledge_arrival"),
+        (CourierPickupState.WAITING, "none"),
+        (CourierPickupState.ENDED_BEFORE_CUSTODY, "none"),
+    ],
+)
+def test_merchant_status_derives_only_bounded_presentation_action(
+    state: CourierPickupState, expected: str
+) -> None:
+    view, _, _ = _view()
+    pickup = view.pickup.model_copy(update={"state": state})
+    assert (
+        _merchant_status(
+            CourierPickupMerchantRead(
+                view.model_copy(update={"pickup": pickup}), current_assignment=True
+            )
+        ).presentation_action
+        == expected
+    )
+
+
+def test_arrived_merchant_status_suppresses_action_for_stale_assignment() -> None:
+    view, _, _ = _view()
+    pickup = view.pickup.model_copy(update={"state": CourierPickupState.ARRIVED})
+    arrived = view.model_copy(update={"pickup": pickup})
+
+    assert (
+        _merchant_status(
+            CourierPickupMerchantRead(arrived, current_assignment=True)
+        ).presentation_action
+        == "acknowledge_arrival"
+    )
+    assert (
+        _merchant_status(
+            CourierPickupMerchantRead(arrived, current_assignment=False)
+        ).presentation_action
+        == "none"
+    )
+
+
+def test_merchant_presentation_matrix_is_exact_and_exhaustive() -> None:
+    assert set(MERCHANT_PRESENTATION_ACTION_BY_STATE) == set(CourierPickupState)
+    assert set(CourierPickupMerchantPresentationAction) == {
+        CourierPickupMerchantPresentationAction.ACKNOWLEDGE_ARRIVAL,
+        CourierPickupMerchantPresentationAction.NONE,
+    }
 
 
 def test_first_and_replayed_internal_views_map_to_identical_public_json() -> None:
@@ -252,7 +310,7 @@ def test_routes_and_openapi_bind_only_the_four_closed_response_models() -> None:
         "CourierPickupCourierCommandResult": COURIER_FIELDS,
         "CourierPickupCourierStatus": COURIER_STATUS_FIELDS,
         "CourierPickupMerchantCommandResult": MERCHANT_FIELDS,
-        "CourierPickupMerchantStatus": MERCHANT_FIELDS,
+        "CourierPickupMerchantStatus": MERCHANT_STATUS_FIELDS,
     }
     for name, fields in expected.items():
         assert set(schemas[name]["properties"]) == fields
@@ -289,7 +347,7 @@ def test_composed_http_returns_exact_public_models_and_error_envelopes() -> None
     )
     assert [response.status_code for response in responses] == [200, 200, 200, 200]
     assert [set(response.json()) for response in responses] == [
-        MERCHANT_FIELDS,
+        MERCHANT_STATUS_FIELDS,
         MERCHANT_FIELDS,
         COURIER_STATUS_FIELDS,
         COURIER_FIELDS,
