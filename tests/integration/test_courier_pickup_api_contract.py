@@ -418,6 +418,15 @@ def test_postgres_composed_http_exposes_exact_caller_contracts(
     )
     merchant = _client(postgres_composition, _merchant_subject())
     before_merchant_status = _effect_counts(postgres_engine)
+    with postgres_engine.connect() as connection:
+        before_custody_events = connection.execute(
+            select(func.count()).select_from(commerce_custody_events)
+        ).scalar_one()
+        before_order_outbox = connection.execute(
+            select(func.count())
+            .select_from(commerce_order_outbox)
+            .where(commerce_order_outbox.c.order_id == ORDER)
+        ).scalar_one()
     merchant_status = merchant.get(
         f"/api/mobile/merchants/{MERCHANT}/orders/{ORDER}/courier-pickup"
     )
@@ -432,6 +441,20 @@ def test_postgres_composed_http_exposes_exact_caller_contracts(
                 .where(commerce_custody_records.c.pickup_id == PICKUP)
             ).scalar_one()
             == 0
+        )
+        assert (
+            connection.execute(
+                select(func.count()).select_from(commerce_custody_events)
+            ).scalar_one()
+            == before_custody_events
+        )
+        assert (
+            connection.execute(
+                select(func.count())
+                .select_from(commerce_order_outbox)
+                .where(commerce_order_outbox.c.order_id == ORDER)
+            ).scalar_one()
+            == before_order_outbox
         )
     merchant_command = merchant.post(
         f"/api/mobile/merchants/{MERCHANT}/courier-pickups/{PICKUP}/acknowledge",
