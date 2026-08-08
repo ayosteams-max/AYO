@@ -516,3 +516,110 @@ test('terminal action does not replay and fresh authenticated evidence permits o
   assert.equal(value.creations(), 2);
   assert.equal(value.submittedAttempt()?.idempotencyKey, keys[1]);
 });
+
+test('presentation actionability is pure across no-evidence, fresh, created, and released states', () => {
+  const value = fixture();
+  value.scope.clearFresh(pickupId);
+  assert.equal(value.controller.isStartTravelActionable(), false);
+  assert.equal(value.creations(), 0);
+  assert.equal(value.submissions(), 0);
+  assert.equal(value.reconciliations(), 0);
+
+  value.scope.publishFresh(pickupId, handoff);
+  assert.equal(value.controller.isStartTravelActionable(), true);
+  assert.equal(value.controller.isStartTravelActionable(), true);
+  assert.equal(value.creations(), 0);
+  const handle = value.controller.createAttempt(); assert.ok(handle);
+  assert.equal(value.controller.isStartTravelActionable(), true);
+  assert.equal(value.creations(), 1);
+  assert.equal(value.submissions(), 0);
+  assert.equal(value.reconciliations(), 0);
+
+  value.scope.releaseProviderLifetime();
+  assert.equal(value.controller.isStartTravelActionable(), false);
+  assert.equal(value.creations(), 1);
+  assert.equal(value.submissions(), 0);
+  assert.equal(value.reconciliations(), 0);
+});
+
+test('presentation actionability is false in flight even if newer actionable evidence is published', async () => {
+  const gate = deferred<typeof applied>();
+  const value = fixture({ submit: async () => gate.promise });
+  const pending = value.controller.startTravel();
+  assert.equal(value.controller.isStartTravelActionable(), false);
+  value.scope.publishFresh(pickupId, Object.freeze({ ...handoff, pickupVersion: 5 }));
+  assert.equal(value.controller.isStartTravelActionable(), false);
+  await Promise.resolve();
+  assert.equal(value.creations(), 1);
+  assert.equal(value.submissions(), 1);
+  assert.equal(value.reconciliations(), 0);
+  gate.resolve(applied);
+  assert.deepEqual(await pending, { outcome: 'applied' });
+});
+
+test('presentation actionability requires reconciliation while unknown and permits only a current same-key retry', async () => {
+  const value = fixture({ submit: async () => { throw new StartTravelOutcomeUnknownError(); } });
+  assert.deepEqual(await value.controller.startTravel(), { outcome: 'outcome_unknown' });
+  assert.equal(value.controller.isStartTravelActionable(), false);
+  value.scope.publishFresh(pickupId, Object.freeze({ ...handoff, pickupVersion: 5 }));
+  assert.equal(value.controller.isStartTravelActionable(), false);
+  assert.equal(value.creations(), 1);
+  assert.equal(value.submissions(), 1);
+  assert.deepEqual(await value.controller.reconcileCurrentOperation(), { outcome: 'retry_same_attempt' });
+  assert.equal(value.controller.isStartTravelActionable(), false);
+  assert.equal(value.reconciliations(), 1);
+
+  const current = fixture({ submit: async () => { throw new StartTravelOutcomeUnknownError(); } });
+  assert.deepEqual(await current.controller.startTravel(), { outcome: 'outcome_unknown' });
+  assert.deepEqual(await current.controller.reconcileCurrentOperation(), { outcome: 'retry_same_attempt' });
+  assert.equal(current.controller.isStartTravelActionable(), true);
+  current.scope.releaseProviderLifetime();
+  assert.equal(current.controller.isStartTravelActionable(), false);
+  assert.equal(current.creations(), 1);
+  assert.equal(current.submissions(), 1);
+});
+
+test('terminal actionability is false until genuinely fresh actionable evidence permits a new intent', async () => {
+  const terminalCases = [
+    fixture(),
+    fixture({ submit: async () => { throw new StartTravelRejectedError('version_conflict'); } }),
+    fixture({ submit: async () => { throw new StartTravelAttemptInvalidError(); } }),
+  ];
+  for (const value of terminalCases) {
+    await value.controller.startTravel();
+    assert.equal(value.controller.isStartTravelActionable(), false);
+    assert.equal(value.creations(), 1);
+    assert.equal(value.submissions(), 1);
+    value.scope.publishFresh(pickupId, Object.freeze({ ...handoff, pickupVersion: 5 }));
+    assert.equal(value.controller.isStartTravelActionable(), true);
+    assert.equal(value.creations(), 1);
+    assert.equal(value.submissions(), 1);
+  }
+});
+
+test('identity generation and courier context changes make presentation actionability false', () => {
+  let identityGeneration = 1;
+  let contextGeneration = 1;
+  let currentPickupId = pickupId;
+  let creations = 0;
+  const scope = new CourierStartTravelCommandScope(
+    () => ({ identityId, sessionId, identityGeneration }),
+    () => ({ pickupId: currentPickupId, contextGeneration, identityContinuity: Object.freeze({ isCurrent: () => true }) }),
+    (command) => createStartTravelAttempt(command, () => keys[creations++] ?? keys[1]),
+  );
+  scope.publishFresh(pickupId, handoff);
+  const controller = new CourierStartTravelController(scope, () => ({
+    submit: async () => applied,
+    reconcile: async () => Object.freeze({ outcome: 'retry_same_attempt' as const, pickup: Object.freeze({ pickupId, state: 'courier_assigned' as const, version: 4, updatedAt: handoff.updatedAt, presentationAction: 'start_travel' as const }) }),
+  }));
+  assert.equal(controller.isStartTravelActionable(), true);
+  identityGeneration += 1;
+  assert.equal(controller.isStartTravelActionable(), false);
+  identityGeneration = 1;
+  contextGeneration += 1;
+  assert.equal(controller.isStartTravelActionable(), false);
+  contextGeneration = 1;
+  currentPickupId = '44444444-4444-4444-8444-444444444444';
+  assert.equal(controller.isStartTravelActionable(), false);
+  assert.equal(creations, 0);
+});

@@ -64,6 +64,18 @@ export class CourierStartTravelController {
     return this.scope.currentScope() !== undefined;
   }
 
+  /** Pure presentation actionability; actual submission still revalidates every trusted binding. */
+  isStartTravelActionable(): boolean {
+    const operation = this.operation;
+    if (operation) {
+      if (operation.inFlight) return false;
+      if (!operation.settled) return operation.handle.isCurrent();
+      if (operation.settled.outcome === 'outcome_unknown') return false;
+      if (operation.settled.outcome === 'retry_same_attempt') return operation.handle.isCurrent();
+    }
+    return this.scope.currentScope() !== undefined;
+  }
+
   /** Bounded current-intent action. The handle and attempt never cross this boundary. */
   startTravel(signal?: AbortSignal): Promise<StartTravelControllerResult> {
     const handle = this.createAttempt();

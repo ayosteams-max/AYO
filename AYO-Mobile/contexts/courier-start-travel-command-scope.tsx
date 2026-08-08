@@ -33,7 +33,7 @@ export function CourierStartTravelCommandInfrastructureProvider({ children, iden
     return () => scope.releaseProviderLifetime();
   }, [scope]);
   const capability = useMemo<StartTravelPresentationCommand>(() => Object.freeze({
-    canStartTravel: () => controller.canCreateAttempt(),
+    canStartTravel: () => controller.isStartTravelActionable(),
     startTravel: (signal) => controller.startTravel(signal),
     reconcileStartTravel: (signal) => controller.reconcileCurrentOperation(signal),
   }), [controller]);
