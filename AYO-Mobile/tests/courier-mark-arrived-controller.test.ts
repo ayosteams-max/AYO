@@ -44,6 +44,22 @@ test('live mark-arrived evidence creates one immutable operation and repeated cr
   assert.equal(Object.isFrozen(value.scope.resolveForSubmit(first)), true);
 });
 
+test('applied operation suppresses exact stale-condition replay but permits a genuinely newer explicit intent', async () => {
+  const value = fixture();
+  assert.deepEqual(await value.controller.markArrived(), { outcome: 'applied' });
+  assert.equal(value.creations(), 1); assert.equal(value.submissions(), 1); assert.equal(value.submitted()?.idempotencyKey, key);
+
+  value.scope.publishFresh(pickupId, travelling(5));
+  assert.equal(value.controller.isMarkArrivedActionable(), false);
+  assert.deepEqual(await value.controller.markArrived(), { outcome: 'applied' });
+  assert.equal(value.creations(), 1); assert.equal(value.submissions(), 1); assert.equal(value.submitted()?.idempotencyKey, key);
+
+  value.scope.publishFresh(pickupId, travelling(7));
+  assert.equal(value.controller.isMarkArrivedActionable(), true);
+  assert.deepEqual(await value.controller.markArrived(), { outcome: 'applied' });
+  assert.equal(value.creations(), 2); assert.equal(value.submissions(), 2); assert.equal(value.submitted()?.idempotencyKey, nextKey);
+});
+
 test('ARRIVED and WAITING publication remove new-submit eligibility but preserve original reconciliation custody', async () => {
   for (const snapshot of [arrived, waiting]) {
     const value = fixture(); value.onSubmit(async () => { throw new MarkArrivedOutcomeUnknownError(); });

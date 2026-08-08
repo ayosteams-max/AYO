@@ -1,12 +1,15 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
 import { CourierHandoffStatus, CourierMarkArrivedAction } from '@/components/courier-handoff-status';
-import type { MarkArrivedPresentationCommand, StartTravelPresentationCommand } from '@/contexts/courier-start-travel-command-scope';
+import { CourierStartTravelCommandInfrastructureProvider, TrustedCourierHandoffStatus, type MarkArrivedPresentationCommand, type StartTravelPresentationCommand } from '@/contexts/courier-start-travel-command-scope';
 import { LanguageProvider } from '@/contexts/language';
 import type { CourierHandoffSnapshot } from '@/domain/courier-handoff-status';
 import { courierHandoffCopy } from '@/localization/courier-handoff-status';
+import { CourierMarkArrivedCommandService } from '@/services/courier-mark-arrived-command';
+import type { CourierMarkArrivedCommandScope } from '@/services/courier-mark-arrived-command-scope';
 
 const mockUseAuthenticatedRead = jest.fn();
+const mockUseCourierCommandContext = jest.fn();
 const mockUseOperationalContext = jest.fn();
 jest.mock('@/contexts/identity-session', () => ({
   ...jest.requireActual('@/contexts/identity-session'),
@@ -14,6 +17,7 @@ jest.mock('@/contexts/identity-session', () => ({
 }));
 jest.mock('@/contexts/operational-context', () => ({
   ...jest.requireActual('@/contexts/operational-context'),
+  useCourierCommandContext: (...args: unknown[]) => mockUseCourierCommandContext(...args),
   useOperationalContext: (...args: unknown[]) => mockUseOperationalContext(...args),
 }));
 
@@ -204,6 +208,68 @@ test('MARK enters the shared screen command lock and blocks Refresh without expo
   expect(mark.markArrived).toHaveBeenCalledTimes(1);
   await act(async () => gate.resolve({ outcome: 'applied' }));
   await waitFor(() => expect(screen.getByLabelText(courierHandoffCopy.en.refresh).props.accessibilityState).toMatchObject({ disabled: false }));
+  await mounted.unmount();
+});
+
+test('mounted applied custody suppresses same-version Refresh and remount replay but permits newer explicit intent', async () => {
+  const identityId = '11111111-1111-4111-8111-111111111111';
+  const sessionId = '22222222-2222-4222-8222-222222222222';
+  let version = 5;
+  const submittedKeys: string[] = [];
+  const pickupResponse = () => ({
+    pickup_id: pickupId, state: 'travelling_to_merchant', version,
+    assigned_at: '2026-08-09T00:00:00Z', travelling_at: '2026-08-09T00:30:00Z', arrived_at: null,
+    merchant_acknowledged_at: null, waiting_duration_seconds: null, terminal_reason: null,
+    updated_at: `2026-08-09T01:0${version}:00Z`, presentation_action: 'mark_arrived',
+  });
+  const read = jest.fn(async (path: string) => path.endsWith('/custody') ? { availability: 'not_started' } : pickupResponse());
+  const readCourierContext = () => ({ pickupId, contextGeneration: 1, identityContinuity: { isCurrent: () => true } });
+  const runtime = {
+    readIdentity: () => ({ identityId, sessionId, identityGeneration: 1 }),
+    createStartTravelCommandService: jest.fn(async () => { throw new Error('start_not_used'); }),
+    createMarkArrivedCommandService: jest.fn(async (scope: CourierMarkArrivedCommandScope) => new CourierMarkArrivedCommandService(
+      { post: async (attempt, dispatchAllowed) => {
+        expect(dispatchAllowed()).toBe(true);
+        submittedKeys.push(attempt.idempotencyKey);
+        return {
+          pickup_id: pickupId, state: 'arrived_at_merchant', version: attempt.expectedVersion + 1,
+          assigned_at: '2026-08-09T00:00:00Z', travelling_at: '2026-08-09T00:30:00Z', arrived_at: '2026-08-09T01:10:00Z',
+          merchant_acknowledged_at: null, waiting_duration_seconds: null, terminal_reason: null, updated_at: '2026-08-09T01:10:00Z',
+        };
+      } },
+      read,
+      () => scope.currentScope(),
+      (attempt) => scope.operationIsCurrent(attempt),
+    )),
+  };
+  mockUseAuthenticatedRead.mockReturnValue(read);
+  mockUseCourierCommandContext.mockReturnValue({ readCourierContext });
+  mockUseOperationalContext.mockReturnValue({ status: 'ready', areas: [], selected: undefined, chooserVisible: false, refreshing: false, refresh: async () => undefined, selectArea: () => undefined, showChooser: () => undefined, invalidateCourier: () => undefined });
+  const tree = (show: boolean) => <LanguageProvider><CourierStartTravelCommandInfrastructureProvider identity={runtime}>{show ? <TrustedCourierHandoffStatus pickupId={pickupId} /> : null}</CourierStartTravelCommandInfrastructureProvider></LanguageProvider>;
+  const mounted = await render(tree(true));
+
+  await screen.findByLabelText(courierHandoffCopy.en.markArrived);
+  await act(async () => fireEvent.press(screen.getByLabelText(courierHandoffCopy.en.markArrived)));
+  expect(screen.getByText(courierHandoffCopy.en.arrivalConfirmed)).toBeTruthy();
+  expect(submittedKeys).toHaveLength(1);
+
+  await act(async () => fireEvent.press(screen.getByLabelText(courierHandoffCopy.en.refresh)));
+  await waitFor(() => expect(screen.queryByText(courierHandoffCopy.en.arrivalConfirmed)).toBeNull());
+  expect(screen.queryByLabelText(courierHandoffCopy.en.markArrived)).toBeNull();
+  expect(submittedKeys).toHaveLength(1);
+
+  await mounted.rerender(tree(false));
+  await mounted.rerender(tree(true));
+  await waitFor(() => expect(read).toHaveBeenCalled());
+  expect(screen.queryByLabelText(courierHandoffCopy.en.markArrived)).toBeNull();
+  expect(submittedKeys).toHaveLength(1);
+
+  version = 7;
+  await act(async () => fireEvent.press(screen.getByLabelText(courierHandoffCopy.en.refresh)));
+  await screen.findByLabelText(courierHandoffCopy.en.markArrived);
+  await act(async () => fireEvent.press(screen.getByLabelText(courierHandoffCopy.en.markArrived)));
+  expect(submittedKeys).toHaveLength(2);
+  expect(submittedKeys[1]).not.toBe(submittedKeys[0]);
   await mounted.unmount();
 });
 
