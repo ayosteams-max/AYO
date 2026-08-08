@@ -12,7 +12,6 @@ import { AuthenticatedReadTransport } from '@/services/authenticated-read-transp
 import { CourierStartTravelCommandService, CourierStartTravelTransport } from '@/services/courier-start-travel-command';
 import type { CourierStartTravelCommandScope } from '@/services/courier-start-travel-command-scope';
 import { CourierStartTravelCommandInfrastructureProvider } from '@/contexts/courier-start-travel-command-scope';
-import { CourierMarkArrivedCommandInfrastructureProvider } from '@/contexts/courier-mark-arrived-command-scope';
 import { CourierMarkArrivedCommandService, CourierMarkArrivedTransport } from '@/services/courier-mark-arrived-command';
 import type { CourierMarkArrivedCommandScope } from '@/services/courier-mark-arrived-command-scope';
 
@@ -138,5 +137,5 @@ export function useIdentityContinuity() { const value = useContext(IdentityConti
 export function TrustedCourierStartTravelCommandProvider({ children }: PropsWithChildren) {
   const identity = useContext(IdentityCommandRuntimeContext);
   if (!identity) throw new Error('identity_session_provider_required');
-  return <CourierMarkArrivedCommandInfrastructureProvider identity={identity}><CourierStartTravelCommandInfrastructureProvider identity={identity}>{children}</CourierStartTravelCommandInfrastructureProvider></CourierMarkArrivedCommandInfrastructureProvider>;
+  return <CourierStartTravelCommandInfrastructureProvider identity={identity}>{children}</CourierStartTravelCommandInfrastructureProvider>;
 }
