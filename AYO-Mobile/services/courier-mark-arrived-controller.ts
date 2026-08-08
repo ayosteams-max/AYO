@@ -1,4 +1,4 @@
-import { MarkArrivedAttemptInvalidError, MarkArrivedContractError, MarkArrivedOutcomeUnknownError, MarkArrivedRejectedError, type MarkArrivedAttempt, type MarkArrivedRejection } from '../domain/courier-mark-arrived-command.ts';
+import { markArrivedAttemptMatchesScope, MarkArrivedAttemptInvalidError, MarkArrivedContractError, MarkArrivedOutcomeUnknownError, MarkArrivedRejectedError, type MarkArrivedAttempt, type MarkArrivedRejection } from '../domain/courier-mark-arrived-command.ts';
 import { PublicApiError } from './api-foundation.ts';
 import type { CourierMarkArrivedCommandService } from './courier-mark-arrived-command.ts';
 import { CourierMarkArrivedCommandScope, type MarkArrivedAttemptHandle } from './courier-mark-arrived-command-scope.ts';
@@ -22,6 +22,7 @@ export class CourierMarkArrivedController {
   constructor(scope: CourierMarkArrivedCommandScope, createService: () => Service | Promise<Service>) { this.scope = scope; this.createService = createService; }
 
   createAttempt(): MarkArrivedAttemptHandle | undefined {
+    if (this.operation?.settled?.outcome === 'applied' && this.appliedConditionIsCurrent(this.operation)) return this.operation.handle;
     if (this.operation && unresolved(this.operation)) {
       if (this.scope.resolveForOperation(this.operation.handle)) return this.operation.handle;
       if (this.operation.inFlight) return undefined;
@@ -41,6 +42,7 @@ export class CourierMarkArrivedController {
       if (!operation.settled) return this.scope.resolveForSubmit(operation.handle) !== undefined;
       if (operation.settled.outcome === 'outcome_unknown') return false;
       if (operation.settled.outcome === 'retry_same_attempt') return this.scope.resolveForSubmit(operation.handle) !== undefined;
+      if (operation.settled.outcome === 'applied' && this.appliedConditionIsCurrent(operation)) return false;
     }
     return this.scope.currentScope() !== undefined;
   }
@@ -123,6 +125,9 @@ export class CourierMarkArrivedController {
     return pending;
   }
   private commandService() { return this.service ??= Promise.resolve(this.createService()); }
+  private appliedConditionIsCurrent(operation: Operation): boolean {
+    return markArrivedAttemptMatchesScope(operation.attempt, this.scope.currentScope());
+  }
   private async executeSubmit(operation: Operation, signal?: AbortSignal): Promise<MarkArrivedControllerResult> {
     try { await (await this.commandService()).submit(operation.attempt, signal); this.scope.clearFreshForAttempt(operation.attempt); return operation.settled = Object.freeze({ outcome: 'applied' }); }
     catch (error) {

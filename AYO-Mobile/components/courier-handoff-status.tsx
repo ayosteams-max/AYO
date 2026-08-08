@@ -8,7 +8,7 @@ import { useOperationalContext } from '@/contexts/operational-context';
 import { CourierHandoffConflictError, CourierHandoffContractError, CourierHandoffNoLongerCurrentError, type CourierHandoffSnapshot } from '@/domain/courier-handoff-status';
 import { courierHandoffCopy, guidanceKey, type CourierHandoffCopy } from '@/localization/courier-handoff-status';
 import { CourierHandoffStatusService } from '@/services/courier-handoff-status';
-import type { StartTravelPresentationCommand } from '@/contexts/courier-start-travel-command-scope';
+import type { MarkArrivedPresentationCommand, StartTravelPresentationCommand } from '@/contexts/courier-start-travel-command-scope';
 
 type ViewStatus = 'loading' | 'fresh' | 'stale' | 'unavailable' | 'malformed' | 'conflicting';
 type StartTravelEvidenceIntegration = Readonly<{
@@ -17,9 +17,11 @@ type StartTravelEvidenceIntegration = Readonly<{
   isUnexpectedStartFailureLatched(): boolean;
 }>;
 type StartTravelResult = Awaited<ReturnType<StartTravelPresentationCommand['startTravel']>>;
-type CommandPending = 'start' | 'reconcile';
+type StartCommandPending = 'start' | 'reconcile';
+type MarkArrivedResult = Awaited<ReturnType<MarkArrivedPresentationCommand['markArrived']>>;
+type MarkCommandPending = 'mark' | 'reconcile';
 
-export function CourierHandoffStatus({ pickupId, commandEvidence, startTravelCommand }: { pickupId: string; commandEvidence: StartTravelEvidenceIntegration; startTravelCommand: StartTravelPresentationCommand }) {
+export function CourierHandoffStatus({ pickupId, commandEvidence, markArrivedCommand, startTravelCommand }: { pickupId: string; commandEvidence: StartTravelEvidenceIntegration; markArrivedCommand: MarkArrivedPresentationCommand; startTravelCommand: StartTravelPresentationCommand }) {
   const read = useAuthenticatedRead();
   const operational = useOperationalContext();
   const invalidateCourier = operational.invalidateCourier;
@@ -107,6 +109,7 @@ export function CourierHandoffStatus({ pickupId, commandEvidence, startTravelCom
     {stale ? <Text accessibilityLiveRegion="assertive" style={styles.warning}>{copy.stale}</Text> : null}
     {errorMessage ? <Text accessibilityLiveRegion="assertive" style={styles.warning}>{errorMessage}</Text> : null}
     <CourierStartTravelAction beginCommandInteraction={beginCommandInteraction} explicitRecoveryGeneration={explicitRecoveryGeneration} isUnexpectedStartFailureLatched={commandEvidence.isUnexpectedStartFailureLatched} key={pickupId} command={startTravelCommand} copy={copy} operationalReady={operational.status === 'ready'} refreshing={refreshing || commandPending} snapshot={snapshot} viewStatus={viewStatus} />
+    <CourierMarkArrivedAction beginCommandInteraction={beginCommandInteraction} command={markArrivedCommand} copy={copy} explicitRecoveryGeneration={explicitRecoveryGeneration} interactionActive={commandPending} key={`${pickupId}:mark-arrived`} operationalReady={operational.status === 'ready'} refreshing={refreshing} snapshot={snapshot} viewStatus={viewStatus} />
     <Pressable accessibilityLabel={copy.refresh} accessibilityRole="button" accessibilityState={{ disabled: refreshing || commandPending }} disabled={refreshing || commandPending} onPress={() => void refresh()} style={styles.refreshButton}><Text style={styles.secondaryText}>{refreshing ? copy.refreshing : copy.refresh}</Text></Pressable>
     <Pressable accessibilityLabel={copy.returnAreas} accessibilityRole="button" onPress={operational.showChooser} style={styles.secondary}><Text style={styles.secondaryText}>{copy.returnAreas}</Text></Pressable>
     <Link href="/auth" asChild><Pressable accessibilityLabel={copy.account} accessibilityRole="button" style={styles.secondary}><Text style={styles.secondaryText}>{copy.account}</Text></Pressable></Link>
@@ -124,9 +127,9 @@ export function CourierStartTravelAction({ beginCommandInteraction, command, cop
   snapshot?: CourierHandoffSnapshot;
   viewStatus: ViewStatus;
 }) {
-  const [pending, setPending] = useState<CommandPending>();
+  const [pending, setPending] = useState<StartCommandPending>();
   const [result, setResult] = useState<StartTravelResult>();
-  const [localFailure, setLocalFailure] = useState<CommandPending>();
+  const [localFailure, setLocalFailure] = useState<StartCommandPending>();
   const busy = useRef(false);
   const unexpectedStartFailureGeneration = useRef(0);
   const freshActionEvidence = operationalReady && viewStatus === 'fresh' && !refreshing && snapshot?.presentationAction === 'start_travel';
@@ -142,7 +145,7 @@ export function CourierStartTravelAction({ beginCommandInteraction, command, cop
   const showRetry = retryReady && actionable;
   const showStart = actionable && !retryReady;
 
-  const invoke = useCallback(async (kind: CommandPending) => {
+  const invoke = useCallback(async (kind: StartCommandPending) => {
     if (busy.current) return;
     const endCommandInteraction = beginCommandInteraction();
     if (!endCommandInteraction) return;
@@ -173,6 +176,83 @@ export function CourierStartTravelAction({ beginCommandInteraction, command, cop
     {showStart ? <Pressable accessibilityLabel={copy.startTravel} accessibilityRole="button" accessibilityState={{ disabled: false }} onPress={() => void invoke('start')} style={styles.commandButton}><Text style={styles.buttonText}>{copy.startTravel}</Text></Pressable> : null}
     {pending === 'start' ? <Pressable accessibilityLabel={copy.startingTravel} accessibilityRole="button" accessibilityState={{ disabled: true }} disabled style={styles.commandButtonDisabled}><Text style={styles.buttonText}>{copy.startingTravel}</Text></Pressable> : null}
     {showRetry ? <Pressable accessibilityLabel={copy.retryStartTravel} accessibilityRole="button" accessibilityState={{ disabled: false }} onPress={() => void invoke('start')} style={styles.commandButton}><Text style={styles.buttonText}>{copy.retryStartTravel}</Text></Pressable> : null}
+    {showCheckStatus ? <Pressable accessibilityLabel={copy.checkStatus} accessibilityRole="button" accessibilityState={{ disabled: false }} onPress={() => void invoke('reconcile')} style={styles.recoveryButton}><Text style={styles.secondaryText}>{copy.checkStatus}</Text></Pressable> : null}
+    {pending === 'reconcile' ? <Pressable accessibilityLabel={copy.checkingStatus} accessibilityRole="button" accessibilityState={{ disabled: true }} disabled style={styles.recoveryButtonDisabled}><Text style={styles.secondaryText}>{copy.checkingStatus}</Text></Pressable> : null}
+  </View>;
+}
+
+export function CourierMarkArrivedAction({ beginCommandInteraction, command, copy, explicitRecoveryGeneration, interactionActive, operationalReady, refreshing, snapshot, viewStatus }: {
+  beginCommandInteraction: () => (() => void) | undefined;
+  command: MarkArrivedPresentationCommand;
+  copy: CourierHandoffCopy;
+  explicitRecoveryGeneration: number;
+  interactionActive: boolean;
+  operationalReady: boolean;
+  refreshing: boolean;
+  snapshot?: CourierHandoffSnapshot;
+  viewStatus: ViewStatus;
+}) {
+  const [pending, setPending] = useState<MarkCommandPending>();
+  const [result, setResult] = useState<MarkArrivedResult>();
+  const [localFailure, setLocalFailure] = useState<MarkCommandPending>();
+  const busy = useRef(false);
+  const lastRecoveryGeneration = useRef(explicitRecoveryGeneration);
+
+  useEffect(() => {
+    if (lastRecoveryGeneration.current === explicitRecoveryGeneration) return;
+    lastRecoveryGeneration.current = explicitRecoveryGeneration;
+    setResult(undefined);
+    setLocalFailure(undefined);
+  }, [explicitRecoveryGeneration]);
+
+  const freshPresentation = operationalReady && viewStatus === 'fresh' && !refreshing && snapshot?.presentationAction === 'mark_arrived';
+  const initialActionEvidence = freshPresentation;
+  const actionable = initialActionEvidence && !pending && !interactionActive && command.canMarkArrived();
+  const reconciliationAvailable = freshPresentation && !pending && !interactionActive && command.canReconcileMarkArrived();
+  const applied = result?.outcome === 'applied';
+  const outcomeUnknown = result?.outcome === 'outcome_unknown';
+  const retryReady = result?.outcome === 'retry_same_attempt';
+  const invalidated = result?.outcome === 'invalidated';
+  const rejected = result?.outcome === 'rejected';
+  const malformed = rejected && result.reason === 'malformed_response';
+  const showInitialAction = actionable && result === undefined && !localFailure && !reconciliationAvailable;
+  const showRetry = retryReady && actionable;
+  const showCheckStatus = reconciliationAvailable;
+
+  const invoke = useCallback(async (kind: MarkCommandPending) => {
+    if (busy.current) return;
+    const endCommandInteraction = beginCommandInteraction();
+    if (!endCommandInteraction) return;
+    busy.current = true;
+    setPending(kind);
+    setLocalFailure(undefined);
+    try {
+      const next = kind === 'mark' ? await command.markArrived() : await command.reconcileMarkArrived();
+      setResult(next);
+    } catch {
+      setLocalFailure(kind);
+    } finally {
+      busy.current = false;
+      setPending(undefined);
+      endCommandInteraction();
+    }
+  }, [beginCommandInteraction, command]);
+
+  if (!freshPresentation && !pending) return null;
+  const message = localFailure || malformed ? copy.genericCommandFailure
+    : invalidated ? copy.currentWorkChanged
+    : rejected ? copy.refreshRequired
+    : retryReady && !showRetry ? copy.currentWorkChanged
+    : undefined;
+  return <View style={styles.commandArea}>
+    {pending ? <View accessibilityLiveRegion="polite" style={styles.commandProgress}><ActivityIndicator color="#A78BFA"/><Text style={styles.help}>{pending === 'mark' ? copy.markingArrival : copy.checkingStatus}</Text></View> : null}
+    {applied ? <View accessibilityLiveRegion="polite" style={styles.success}><Text style={styles.commandTitle}>{copy.arrivalConfirmed}</Text><Text style={styles.help}>{copy.arrivalConfirmedHelp}</Text></View> : null}
+    {outcomeUnknown || (result === undefined && reconciliationAvailable) ? <View accessibilityLiveRegion="assertive" style={styles.ambiguity}><Text style={styles.commandTitle}>{copy.arrivalOutcomeUnknown}</Text><Text style={styles.help}>{copy.arrivalOutcomeUnknownHelp}</Text></View> : null}
+    {retryReady && showRetry ? <Text accessibilityLiveRegion="polite" style={styles.recoveryText}>{copy.arrivalRetryReady}</Text> : null}
+    {message && !outcomeUnknown ? <Text accessibilityLiveRegion="polite" style={styles.recoveryText}>{message}</Text> : null}
+    {showInitialAction ? <Pressable accessibilityLabel={copy.markArrived} accessibilityRole="button" accessibilityState={{ disabled: false }} onPress={() => void invoke('mark')} style={styles.commandButton}><Text style={styles.buttonText}>{copy.markArrived}</Text></Pressable> : null}
+    {pending === 'mark' ? <Pressable accessibilityLabel={copy.markingArrival} accessibilityRole="button" accessibilityState={{ disabled: true }} disabled style={styles.commandButtonDisabled}><Text style={styles.buttonText}>{copy.markingArrival}</Text></Pressable> : null}
+    {showRetry ? <Pressable accessibilityLabel={copy.retryMarkArrived} accessibilityRole="button" accessibilityState={{ disabled: false }} onPress={() => void invoke('mark')} style={styles.commandButton}><Text style={styles.buttonText}>{copy.retryMarkArrived}</Text></Pressable> : null}
     {showCheckStatus ? <Pressable accessibilityLabel={copy.checkStatus} accessibilityRole="button" accessibilityState={{ disabled: false }} onPress={() => void invoke('reconcile')} style={styles.recoveryButton}><Text style={styles.secondaryText}>{copy.checkStatus}</Text></Pressable> : null}
     {pending === 'reconcile' ? <Pressable accessibilityLabel={copy.checkingStatus} accessibilityRole="button" accessibilityState={{ disabled: true }} disabled style={styles.recoveryButtonDisabled}><Text style={styles.secondaryText}>{copy.checkingStatus}</Text></Pressable> : null}
   </View>;
