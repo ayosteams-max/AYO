@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { createMarkArrivedAttempt, MarkArrivedAttemptInvalidError, MarkArrivedOutcomeUnknownError, type MarkArrivedAttempt } from '../domain/courier-mark-arrived-command.ts';
+import { createMarkArrivedAttempt, MarkArrivedAttemptInvalidError, MarkArrivedContractError, MarkArrivedOutcomeUnknownError, MarkArrivedRejectedError, type MarkArrivedAttempt } from '../domain/courier-mark-arrived-command.ts';
 import type { CourierHandoffSnapshot } from '../domain/courier-handoff-status.ts';
 import { CourierMarkArrivedCommandScope } from '../services/courier-mark-arrived-command-scope.ts';
 import { CourierMarkArrivedCommandService } from '../services/courier-mark-arrived-command.ts';
@@ -67,6 +67,58 @@ test('newer corrected travelling evidence cannot mutate or retry the original op
   assert.deepEqual(await value.controller.reconcile(handle), { outcome: 'invalidated', reason: 'state_changed' });
   assert.equal(value.submissions(), 1); assert.equal(value.creations(), 1);
   const next = value.controller.createAttempt(); assert.ok(next); assert.notEqual(next, handle); assert.equal(value.scope.resolveForSubmit(next)?.expectedVersion, 7); assert.equal(value.creations(), 2);
+});
+
+test('newer corrected travelling evidence published during submit survives late outcome unknown', async () => {
+  const gate = deferred<unknown>(); const value = fixture(); value.onSubmit(async () => gate.promise);
+  value.onReconcile(async () => ({ outcome: 'invalidated', reason: 'state_changed' }));
+  const oldHandle = value.controller.createAttempt(); assert.ok(oldHandle); const oldAttempt = value.scope.resolveForSubmit(oldHandle); assert.ok(oldAttempt);
+  const pending = value.controller.submit(oldHandle); await Promise.resolve(); value.scope.publishFresh(pickupId, travelling(7));
+  gate.resolve(Promise.reject(new MarkArrivedOutcomeUnknownError())); assert.deepEqual(await pending, { outcome: 'outcome_unknown' });
+  assert.equal(value.scope.currentScope()?.pickupVersion, 7);
+  assert.deepEqual(await value.controller.reconcile(oldHandle), { outcome: 'invalidated', reason: 'state_changed' });
+  const nextHandle = value.controller.createAttempt(); assert.ok(nextHandle); const nextAttempt = value.scope.resolveForSubmit(nextHandle); assert.ok(nextAttempt);
+  assert.notEqual(nextHandle, oldHandle); assert.equal(nextAttempt.expectedVersion, 7); assert.notEqual(nextAttempt.idempotencyKey, oldAttempt.idempotencyKey);
+  assert.equal(value.submissions(), 1); assert.equal(value.creations(), 2);
+});
+
+test('newer ARRIVED and WAITING evidence survive every stale submit settlement class', async () => {
+  const cases = [
+    { snapshot: arrived, settle: () => undefined, expected: { outcome: 'applied' } },
+    { snapshot: arrived, settle: () => Promise.reject(new MarkArrivedOutcomeUnknownError()), expected: { outcome: 'outcome_unknown' } },
+    { snapshot: waiting, settle: () => Promise.reject(new MarkArrivedRejectedError('version_conflict')), expected: { outcome: 'rejected', reason: 'version_conflict' } },
+    { snapshot: waiting, settle: () => Promise.reject(new MarkArrivedContractError()), expected: { outcome: 'rejected', reason: 'malformed_response' } },
+  ] as const;
+  for (const entry of cases) {
+    const gate = deferred<unknown>(); const value = fixture(); value.onSubmit(async () => gate.promise);
+    const handle = value.controller.createAttempt(); assert.ok(handle); const attempt = value.scope.resolveForSubmit(handle); assert.ok(attempt);
+    const pending = value.controller.submit(handle); await Promise.resolve(); value.scope.publishFresh(pickupId, entry.snapshot); gate.resolve(entry.settle());
+    assert.deepEqual(await pending, entry.expected);
+    assert.equal(value.scope.publishRetryEvidence(attempt, { pickupId, state: 'travelling_to_merchant', version: 5, updatedAt: travelling().updatedAt, presentationAction: 'mark_arrived' }), false);
+    assert.equal(value.submissions(), 1); assert.equal(value.creations(), 1);
+  }
+});
+
+test('old rejection cannot erase newer actionable evidence', async () => {
+  const gate = deferred<unknown>(); const value = fixture(); value.onSubmit(async () => gate.promise);
+  const oldHandle = value.controller.createAttempt(); assert.ok(oldHandle); const oldAttempt = value.scope.resolveForSubmit(oldHandle); assert.ok(oldAttempt);
+  const pending = value.controller.submit(oldHandle); await Promise.resolve(); value.scope.publishFresh(pickupId, travelling(7));
+  gate.resolve(Promise.reject(new MarkArrivedRejectedError('transition_not_allowed')));
+  assert.deepEqual(await pending, { outcome: 'rejected', reason: 'transition_not_allowed' });
+  const nextHandle = value.controller.createAttempt(); assert.ok(nextHandle); const nextAttempt = value.scope.resolveForSubmit(nextHandle); assert.ok(nextAttempt);
+  assert.equal(nextAttempt.expectedVersion, 7); assert.notEqual(nextAttempt.idempotencyKey, oldAttempt.idempotencyKey); assert.equal(value.submissions(), 1);
+});
+
+test('stale retry proof cannot overwrite newer evidence published during reconciliation', async () => {
+  const value = fixture(); value.onSubmit(async () => { throw new MarkArrivedOutcomeUnknownError(); });
+  const oldHandle = value.controller.createAttempt(); assert.ok(oldHandle); const oldAttempt = value.scope.resolveForSubmit(oldHandle); assert.ok(oldAttempt); await value.controller.submit(oldHandle);
+  const gate = deferred<any>(); value.onReconcile(async () => gate.promise); const pending = value.controller.reconcile(oldHandle); await Promise.resolve();
+  value.scope.publishFresh(pickupId, travelling(7));
+  gate.resolve({ outcome: 'retry_same_attempt', pickup: { pickupId, state: 'travelling_to_merchant', version: 5, updatedAt: travelling().updatedAt, presentationAction: 'mark_arrived' } });
+  assert.deepEqual(await pending, { outcome: 'invalidated', reason: 'scope_changed' }); assert.equal(value.scope.currentScope()?.pickupVersion, 7);
+  assert.deepEqual(await value.controller.submit(oldHandle), { outcome: 'invalidated', reason: 'scope_changed' }); assert.equal(value.submissions(), 1);
+  const nextHandle = value.controller.createAttempt(); assert.ok(nextHandle); const nextAttempt = value.scope.resolveForSubmit(nextHandle); assert.ok(nextAttempt);
+  assert.equal(nextAttempt.expectedVersion, 7); assert.notEqual(nextAttempt.idempotencyKey, oldAttempt.idempotencyKey); assert.equal(value.reconciliations(), 1);
 });
 
 test('submit is exact-live guarded while reconciliation uses operation continuity', async () => {

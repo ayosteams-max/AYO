@@ -42,10 +42,16 @@ export class CourierMarkArrivedCommandScope {
 
   clearFresh(pickupId: string): void { if (this.freshEvidence?.pickupId === pickupId.toLowerCase()) this.freshEvidence = undefined; }
 
+  /** Clears only the original live condition from which this immutable attempt was created. */
+  clearFreshForAttempt(attempt: MarkArrivedAttempt): void {
+    if (this.freshEvidenceMatchesAttempt(attempt)) this.freshEvidence = undefined;
+  }
+
   /** Re-authorizes only the exact original condition proven by strict reconciliation. */
   publishRetryEvidence(attempt: MarkArrivedAttempt, pickup: CourierPickupSnapshot): boolean {
     if (!this.operationIsCurrent(attempt) || pickup.pickupId !== attempt.pickupId || pickup.state !== 'travelling_to_merchant' ||
       pickup.version !== attempt.expectedVersion || pickup.presentationAction !== 'mark_arrived') return false;
+    if (this.freshEvidence && !this.freshEvidenceMatchesAttempt(attempt)) return false;
     this.publishFresh(attempt.pickupId, Object.freeze({ status: 'travelling', pickupVersion: pickup.version, updatedAt: pickup.updatedAt, presentationAction: 'mark_arrived' }));
     return markArrivedAttemptMatchesScope(attempt, this.currentScope());
   }
@@ -87,6 +93,13 @@ export class CourierMarkArrivedCommandScope {
       evidence.contextGeneration !== courier.contextGeneration || evidence.snapshot.presentationAction !== 'mark_arrived') return undefined;
     return Object.freeze({ identityId: identity.identityId, sessionId: identity.sessionId, identityGeneration: identity.identityGeneration,
       contextGeneration: courier.contextGeneration, pickupId: courier.pickupId, pickupVersion: evidence.snapshot.pickupVersion, presentationAction: 'mark_arrived' });
+  }
+
+  private freshEvidenceMatchesAttempt(attempt: MarkArrivedAttempt): boolean {
+    const evidence = this.freshEvidence;
+    return !!evidence && evidence.pickupId === attempt.pickupId && evidence.identityGeneration === attempt.identityGeneration &&
+      evidence.contextGeneration === attempt.contextGeneration && evidence.snapshot.pickupVersion === attempt.expectedVersion &&
+      evidence.snapshot.presentationAction === 'mark_arrived';
   }
 
   private lifetimeCurrent(): boolean { return !this.retired && this.providerLifetimeActive; }

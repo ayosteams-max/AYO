@@ -65,12 +65,12 @@ export class CourierMarkArrivedController {
   }
   private commandService() { return this.service ??= Promise.resolve(this.createService()); }
   private async executeSubmit(operation: Operation, signal?: AbortSignal): Promise<MarkArrivedControllerResult> {
-    try { await (await this.commandService()).submit(operation.attempt, signal); this.scope.clearFresh(operation.attempt.pickupId); return operation.settled = Object.freeze({ outcome: 'applied' }); }
+    try { await (await this.commandService()).submit(operation.attempt, signal); this.scope.clearFreshForAttempt(operation.attempt); return operation.settled = Object.freeze({ outcome: 'applied' }); }
     catch (error) {
-      if (error instanceof MarkArrivedOutcomeUnknownError) { this.scope.clearFresh(operation.attempt.pickupId); return operation.settled = Object.freeze({ outcome: 'outcome_unknown' }); }
-      if (error instanceof MarkArrivedRejectedError) { this.scope.clearFresh(operation.attempt.pickupId); return operation.settled = Object.freeze({ outcome: 'rejected', reason: error.reason }); }
-      if (error instanceof MarkArrivedContractError) { this.scope.clearFresh(operation.attempt.pickupId); return operation.settled = Object.freeze({ outcome: 'rejected', reason: 'malformed_response' }); }
-      if (error instanceof MarkArrivedAttemptInvalidError) { this.scope.clearFresh(operation.attempt.pickupId); return operation.settled = Object.freeze({ outcome: 'invalidated', reason: 'scope_changed' }); }
+      if (error instanceof MarkArrivedOutcomeUnknownError) { this.scope.clearFreshForAttempt(operation.attempt); return operation.settled = Object.freeze({ outcome: 'outcome_unknown' }); }
+      if (error instanceof MarkArrivedRejectedError) { this.scope.clearFreshForAttempt(operation.attempt); return operation.settled = Object.freeze({ outcome: 'rejected', reason: error.reason }); }
+      if (error instanceof MarkArrivedContractError) { this.scope.clearFreshForAttempt(operation.attempt); return operation.settled = Object.freeze({ outcome: 'rejected', reason: 'malformed_response' }); }
+      if (error instanceof MarkArrivedAttemptInvalidError) { this.scope.clearFreshForAttempt(operation.attempt); return operation.settled = Object.freeze({ outcome: 'invalidated', reason: 'scope_changed' }); }
       return this.boundPublicError(operation, error);
     }
   }
@@ -82,20 +82,20 @@ export class CourierMarkArrivedController {
         return operation.settled = Object.freeze({ outcome: 'retry_same_attempt' });
       }
       if (value.outcome === 'already_applied') {
-        this.scope.clearFresh(operation.attempt.pickupId);
+        this.scope.clearFreshForAttempt(operation.attempt);
         return operation.settled = Object.freeze({ outcome: 'applied' });
       }
       return operation.settled = Object.freeze({ outcome: 'invalidated', reason: value.reason });
     } catch (error) {
-      if (error instanceof MarkArrivedContractError) { this.scope.clearFresh(operation.attempt.pickupId); return operation.settled = Object.freeze({ outcome: 'rejected', reason: 'malformed_response' }); }
-      if (error instanceof MarkArrivedAttemptInvalidError) { this.scope.clearFresh(operation.attempt.pickupId); return operation.settled = Object.freeze({ outcome: 'invalidated', reason: 'scope_changed' }); }
+      if (error instanceof MarkArrivedContractError) { this.scope.clearFreshForAttempt(operation.attempt); return operation.settled = Object.freeze({ outcome: 'rejected', reason: 'malformed_response' }); }
+      if (error instanceof MarkArrivedAttemptInvalidError) { this.scope.clearFreshForAttempt(operation.attempt); return operation.settled = Object.freeze({ outcome: 'invalidated', reason: 'scope_changed' }); }
       if (error instanceof PublicApiError && (error.kind === 'request_cancelled' || error.status === undefined || error.status >= 500)) return operation.settled!;
       return this.boundPublicError(operation, error);
     }
   }
   private boundPublicError(operation: Operation, error: unknown): MarkArrivedControllerResult {
     if (!(error instanceof PublicApiError)) throw error;
-    this.scope.clearFresh(operation.attempt.pickupId);
+    this.scope.clearFreshForAttempt(operation.attempt);
     const authority = error.status === 401 || error.status === 403 || error.status === 404 || ['authentication_required', 'session_expired', 'access_denied', 'not_found'].includes(error.kind);
     if (authority) return operation.settled = Object.freeze({ outcome: 'invalidated', reason: 'authority_lost' });
     return operation.settled = Object.freeze({ outcome: 'rejected', reason: error.kind === 'malformed_response' ? 'malformed_response' : 'refresh_required' });
