@@ -582,7 +582,7 @@ def test_merchant_arrival_evidence_suppresses_released_assignment_without_side_e
     )
     assert acknowledge.status_code == 409
     assert acknowledge.json() == {
-        "detail": {"code": "courier_pickup_temporarily_unavailable"}
+        "error": {"code": "courier_pickup_temporarily_unavailable"}
     }
 
 
