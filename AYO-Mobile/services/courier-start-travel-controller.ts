@@ -149,7 +149,40 @@ export class CourierStartTravelController {
   }
 
   private async executeReconcile(operation: Operation, signal?: AbortSignal): Promise<StartTravelControllerResult> {
-    const reconciled = await (await this.commandService()).reconcile(operation.attempt, signal);
+    let reconciled: Awaited<ReturnType<CommandService['reconcile']>>;
+    try {
+      reconciled = await (await this.commandService()).reconcile(operation.attempt, signal);
+    } catch (error) {
+      if (error instanceof StartTravelContractError) {
+        this.scope.clearFresh(operation.attempt.pickupId);
+        return operation.settled = Object.freeze({ outcome: 'rejected', reason: 'malformed_response' });
+      }
+      if (error instanceof StartTravelAttemptInvalidError) {
+        this.scope.clearFresh(operation.attempt.pickupId);
+        return operation.settled = Object.freeze({ outcome: 'invalidated', reason: 'scope_changed' });
+      }
+      if (error instanceof PublicApiError) {
+        const authorityLost = error.status === 401 || error.status === 403 || error.status === 404 ||
+          error.kind === 'authentication_required' || error.kind === 'session_expired' ||
+          error.kind === 'access_denied' || error.kind === 'not_found';
+        if (authorityLost) {
+          this.scope.clearFresh(operation.attempt.pickupId);
+          return operation.settled = Object.freeze({ outcome: 'invalidated', reason: 'authority_lost' });
+        }
+        if (error.kind === 'malformed_response') {
+          this.scope.clearFresh(operation.attempt.pickupId);
+          return operation.settled = Object.freeze({ outcome: 'rejected', reason: 'malformed_response' });
+        }
+        if (error.status !== undefined && error.status >= 400 && error.status < 500) {
+          this.scope.clearFresh(operation.attempt.pickupId);
+          return operation.settled = Object.freeze({ outcome: 'rejected', reason: 'refresh_required' });
+        }
+        if (error.kind === 'request_cancelled' || error.status === undefined || error.status >= 500) {
+          if (operation.settled?.outcome === 'outcome_unknown') return operation.settled;
+        }
+      }
+      throw error;
+    }
     if (reconciled.outcome === 'retry_same_attempt') {
       return operation.settled = Object.freeze({ outcome: 'retry_same_attempt' });
     }

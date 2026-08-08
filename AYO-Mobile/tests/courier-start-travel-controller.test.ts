@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   createStartTravelAttempt,
   StartTravelAttemptInvalidError,
+  StartTravelContractError,
   StartTravelOutcomeUnknownError,
   StartTravelRejectedError,
   type CourierCommandScope,
@@ -367,4 +368,70 @@ test('only explicit createAttempt may replace terminal operation ownership', asy
   assert.deepEqual(await value.controller.submit(handleB), { outcome: 'applied' });
   assert.equal(value.submissions(), 2);
   assert.equal(value.creations(), 2);
+});
+
+test('definitive reconciliation errors settle once and withdraw stale evidence', async () => {
+  const cases = [
+    [new PublicApiError('session_expired', 401), { outcome: 'invalidated', reason: 'authority_lost' }],
+    [new StartTravelContractError(), { outcome: 'rejected', reason: 'malformed_response' }],
+    [new PublicApiError('malformed_response', 200), { outcome: 'rejected', reason: 'malformed_response' }],
+    [new PublicApiError('temporarily_unavailable', 409), { outcome: 'rejected', reason: 'refresh_required' }],
+    [new StartTravelAttemptInvalidError(), { outcome: 'invalidated', reason: 'scope_changed' }],
+  ] as const;
+  for (const [error, expected] of cases) {
+    const value = fixture({
+      submit: async () => { throw new StartTravelOutcomeUnknownError(); },
+      reconcile: async () => { throw error; },
+    });
+    const handle = value.controller.createAttempt(); assert.ok(handle);
+    assert.deepEqual(await value.controller.submit(handle), { outcome: 'outcome_unknown' });
+    assert.deepEqual(await value.controller.reconcile(handle), expected);
+    assert.equal(handle.isCurrent(), false);
+    assert.deepEqual(await value.controller.reconcile(handle), expected);
+    assert.equal(value.reconciliations(), 1);
+    assert.equal(value.creations(), 1);
+  }
+});
+
+test('transient reconciliation failures preserve ambiguity and permit a later deliberate GET', async () => {
+  for (const transient of [
+    new PublicApiError('temporarily_unavailable'),
+    new PublicApiError('request_cancelled'),
+    new PublicApiError('temporarily_unavailable', 503),
+  ]) {
+    let calls = 0;
+    const value = fixture({
+      submit: async () => { throw new StartTravelOutcomeUnknownError(); },
+      reconcile: async () => {
+        if (++calls === 1) throw transient;
+        return Object.freeze({ outcome: 'already_applied' as const, pickup: Object.freeze({ pickupId, state: 'travelling_to_merchant' as const, version: 5, updatedAt: applied.updatedAt, presentationAction: 'none' as const }) });
+      },
+    });
+    const handle = value.controller.createAttempt(); assert.ok(handle);
+    const attempt = value.scope.resolveForTrustedUse(handle); assert.ok(attempt);
+    assert.deepEqual(await value.controller.submit(handle), { outcome: 'outcome_unknown' });
+    assert.deepEqual(await value.controller.reconcile(handle), { outcome: 'outcome_unknown' });
+    assert.equal(handle.isCurrent(), true);
+    assert.equal(value.reconciliations(), 1);
+    assert.equal(value.scope.resolveForTrustedUse(handle), attempt);
+    assert.equal(value.creations(), 1);
+    assert.deepEqual(await value.controller.reconcile(handle), { outcome: 'applied' });
+    assert.equal(value.reconciliations(), 2);
+    assert.equal(value.submissions(), 1);
+    assert.equal(value.creations(), 1);
+  }
+});
+
+test('unexpected reconciliation bugs remain visible without fabricating domain truth', async () => {
+  const value = fixture({
+    submit: async () => { throw new StartTravelOutcomeUnknownError(); },
+    reconcile: async () => { throw new Error('reconciliation_programmer_fault'); },
+  });
+  const handle = value.controller.createAttempt(); assert.ok(handle);
+  assert.deepEqual(await value.controller.submit(handle), { outcome: 'outcome_unknown' });
+  await assert.rejects(value.controller.reconcile(handle), /reconciliation_programmer_fault/);
+  assert.equal(value.reconciliations(), 1);
+  assert.deepEqual(await value.controller.submit(handle), { outcome: 'outcome_unknown' });
+  assert.equal(value.submissions(), 1);
+  assert.equal(value.creations(), 1);
 });
