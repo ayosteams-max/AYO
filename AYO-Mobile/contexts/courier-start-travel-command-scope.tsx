@@ -54,6 +54,7 @@ export function useStartTravelCommand() {
 /** Authenticated Handoff integration owns evidence publication; ordinary descendants receive no writer. */
 export function TrustedCourierHandoffStatus({ pickupId }: { pickupId: string }) {
   const evidence = useContext(EvidenceContext);
-  if (!evidence) throw new Error('courier_start_travel_scope_provider_required');
-  return <CourierHandoffStatus pickupId={pickupId} commandEvidence={evidence} />;
+  const command = useContext(CapabilityContext);
+  if (!evidence || !command) throw new Error('courier_start_travel_scope_provider_required');
+  return <CourierHandoffStatus pickupId={pickupId} commandEvidence={evidence} startTravelCommand={command} />;
 }
