@@ -255,3 +255,185 @@ test('service reconciliation accepts lifecycle advancement only through operatio
   value.revoke();
   assert.deepEqual(await service.reconcile(attempt), { outcome: 'invalidated', reason: 'authority_lost' });
 });
+
+test('bounded actionability is pure and markArrived owns one attempt, key, and single flight', async () => {
+  const gate = deferred<unknown>(); const value = fixture(); value.onSubmit(async () => gate.promise);
+  assert.equal(value.controller.isMarkArrivedActionable(), true);
+  assert.equal(value.controller.isReconciliationAvailable(), false);
+  assert.equal(value.creations(), 0); assert.equal(value.submissions(), 0); assert.equal(value.reconciliations(), 0);
+  const first = value.controller.markArrived(); const second = value.controller.markArrived();
+  assert.equal(first, second); assert.equal(value.controller.isMarkArrivedActionable(), false);
+  await Promise.resolve(); assert.equal(value.creations(), 1); assert.equal(value.submissions(), 1);
+  gate.resolve(undefined); assert.deepEqual(await first, { outcome: 'applied' }); assert.deepEqual(await second, { outcome: 'applied' });
+  assert.equal(value.controller.isMarkArrivedActionable(), false); assert.equal(value.submitted()?.idempotencyKey, key);
+});
+
+test('bounded outcome unknown cannot resend and exposes pure reconciliation availability', async () => {
+  const value = fixture(); value.onSubmit(async () => { throw new MarkArrivedOutcomeUnknownError(); });
+  assert.deepEqual(await value.controller.markArrived(), { outcome: 'outcome_unknown' });
+  assert.equal(value.controller.isMarkArrivedActionable(), false); assert.equal(value.controller.isReconciliationAvailable(), true);
+  assert.equal(value.reconciliations(), 0); assert.equal(value.creations(), 1);
+  assert.deepEqual(await value.controller.markArrived(), { outcome: 'outcome_unknown' });
+  assert.equal(value.submissions(), 1); assert.equal(value.creations(), 1); assert.equal(value.reconciliations(), 0);
+});
+
+test('bounded reconciliation creates no attempt without ambiguity and shares one current GET', async () => {
+  const empty = fixture();
+  assert.deepEqual(await empty.controller.reconcileCurrentOperation(), { outcome: 'rejected', reason: 'reconciliation_not_available' });
+  assert.equal(empty.creations(), 0); assert.equal(empty.reconciliations(), 0);
+
+  const gate = deferred<any>(); const value = fixture(); value.onSubmit(async () => { throw new MarkArrivedOutcomeUnknownError(); });
+  await value.controller.markArrived(); value.onReconcile(async () => gate.promise);
+  const first = value.controller.reconcileCurrentOperation(); const second = value.controller.reconcileCurrentOperation();
+  assert.equal(first, second); assert.equal(value.controller.isReconciliationAvailable(), false);
+  await Promise.resolve(); assert.equal(value.reconciliations(), 1); assert.equal(value.creations(), 1);
+  gate.resolve({ outcome: 'already_applied', pickup: {} });
+  assert.deepEqual(await first, { outcome: 'applied' }); assert.deepEqual(await second, { outcome: 'applied' });
+  assert.equal(value.controller.isReconciliationAvailable(), false); assert.equal(value.submissions(), 1);
+  assert.deepEqual(await value.controller.reconcileCurrentOperation(), { outcome: 'rejected', reason: 'reconciliation_not_available' });
+  assert.equal(value.reconciliations(), 1);
+});
+
+test('bounded retry resubmits only the exact original attempt and key', async () => {
+  const value = fixture(); value.onSubmit(async () => { throw new MarkArrivedOutcomeUnknownError(); });
+  value.onReconcile(async () => ({ outcome: 'retry_same_attempt', pickup: { pickupId, state: 'travelling_to_merchant', version: 5, updatedAt: travelling().updatedAt, presentationAction: 'mark_arrived' } }));
+  await value.controller.markArrived(); assert.deepEqual(await value.controller.reconcileCurrentOperation(), { outcome: 'retry_same_attempt' });
+  assert.equal(value.controller.isReconciliationAvailable(), false); assert.equal(value.controller.isMarkArrivedActionable(), true);
+  value.onSubmit(async () => undefined); assert.deepEqual(await value.controller.markArrived(), { outcome: 'applied' });
+  assert.equal(value.creations(), 1); assert.equal(value.submissions(), 2); assert.equal(value.submitted()?.idempotencyKey, key);
+});
+
+test('unexpected submit failure latches until explicit exact-condition recovery and reuses one key', async () => {
+  const value = fixture(); value.onSubmit(async () => { throw new Error('unexpected'); });
+  await assert.rejects(value.controller.markArrived(), /unexpected/);
+  assert.equal(value.controller.isUnexpectedSubmitFailureLatched(), true); assert.equal(value.controller.isMarkArrivedActionable(), false);
+  assert.deepEqual(await value.controller.markArrived(), { outcome: 'invalidated', reason: 'scope_changed' });
+  assert.equal(value.creations(), 1); assert.equal(value.submissions(), 1);
+  value.scope.publishFresh(pickupId, travelling());
+  value.controller.recordExplicitRecovery();
+  assert.equal(value.controller.isUnexpectedSubmitFailureLatched(), false); assert.equal(value.controller.isMarkArrivedActionable(), true);
+  value.onSubmit(async () => undefined); assert.deepEqual(await value.controller.markArrived(), { outcome: 'applied' });
+  assert.equal(value.creations(), 1); assert.equal(value.submissions(), 2); assert.equal(value.submitted()?.idempotencyKey, key);
+});
+
+test('explicit newer recovery retires unexpected old custody and requires a new intent and key', async () => {
+  const value = fixture(); value.onSubmit(async () => { throw new Error('unexpected'); });
+  await assert.rejects(value.controller.markArrived(), /unexpected/);
+  value.scope.publishFresh(pickupId, travelling(7));
+  value.controller.recordExplicitRecovery();
+  assert.equal(value.controller.isMarkArrivedActionable(), true);
+  value.onSubmit(async () => undefined); assert.deepEqual(await value.controller.markArrived(), { outcome: 'applied' });
+  assert.equal(value.creations(), 2); assert.equal(value.submissions(), 2); assert.equal(value.submitted()?.expectedVersion, 7);
+  assert.equal(value.submitted()?.idempotencyKey, nextKey);
+});
+
+test('ARRIVED and WAITING explicit recovery never resend an unexpected old operation', async () => {
+  for (const snapshot of [arrived, waiting]) {
+    const value = fixture(); value.onSubmit(async () => { throw new Error('unexpected'); });
+    await assert.rejects(value.controller.markArrived(), /unexpected/);
+    value.scope.publishFresh(pickupId, snapshot); value.controller.recordExplicitRecovery();
+    assert.equal(value.controller.isMarkArrivedActionable(), false);
+    assert.deepEqual(await value.controller.markArrived(), { outcome: 'invalidated', reason: 'scope_changed' });
+    assert.equal(value.creations(), 1); assert.equal(value.submissions(), 1);
+  }
+});
+
+test('outcome unknown is never retired by unexpected-failure recovery', async () => {
+  const value = fixture(); value.onSubmit(async () => { throw new MarkArrivedOutcomeUnknownError(); });
+  await value.controller.markArrived(); value.scope.publishFresh(pickupId, travelling(7));
+  value.controller.recordExplicitRecovery();
+  assert.equal(value.controller.isMarkArrivedActionable(), false); assert.equal(value.controller.isReconciliationAvailable(), true);
+  assert.deepEqual(await value.controller.markArrived(), { outcome: 'outcome_unknown' });
+  assert.equal(value.creations(), 1); assert.equal(value.submissions(), 1);
+});
+
+test('one explicit same-version recovery during submit is consumed after a later unexpected rejection', async () => {
+  const gate = deferred<unknown>(); const value = fixture(); value.onSubmit(async () => gate.promise);
+  const first = value.controller.markArrived(); await Promise.resolve();
+  assert.equal(value.creations(), 1); assert.equal(value.submissions(), 1);
+  const original = value.submitted(); assert.ok(original);
+  value.scope.publishFresh(pickupId, travelling()); value.controller.recordExplicitRecovery();
+  assert.equal(value.controller.isMarkArrivedActionable(), false);
+  gate.resolve(Promise.reject(new Error('unexpected_after_refresh')));
+  await assert.rejects(first, /unexpected_after_refresh/);
+  assert.equal(value.controller.isUnexpectedSubmitFailureLatched(), false);
+  assert.equal(value.controller.isMarkArrivedActionable(), true);
+  assert.equal(value.creations(), 1); assert.equal(value.submissions(), 1);
+  value.onSubmit(async () => undefined);
+  assert.deepEqual(await value.controller.markArrived(), { outcome: 'applied' });
+  assert.equal(value.creations(), 1); assert.equal(value.submissions(), 2);
+  assert.equal(value.submitted()?.idempotencyKey, original.idempotencyKey);
+});
+
+test('newer explicit recovery during submit retires the old key only after unexpected settlement', async () => {
+  const gate = deferred<unknown>(); const value = fixture(); value.onSubmit(async () => gate.promise);
+  const first = value.controller.markArrived(); await Promise.resolve(); const original = value.submitted(); assert.ok(original);
+  value.scope.publishFresh(pickupId, travelling(7)); value.controller.recordExplicitRecovery();
+  assert.equal(value.creations(), 1); assert.equal(value.submissions(), 1);
+  gate.resolve(Promise.reject(new Error('unexpected_after_newer_refresh'))); await assert.rejects(first, /unexpected_after_newer_refresh/);
+  assert.equal(value.controller.isUnexpectedSubmitFailureLatched(), false); assert.equal(value.controller.isMarkArrivedActionable(), true);
+  assert.equal(value.scope.currentScope()?.pickupVersion, 7); assert.equal(value.creations(), 1); assert.equal(value.submissions(), 1);
+  value.onSubmit(async () => undefined); assert.deepEqual(await value.controller.markArrived(), { outcome: 'applied' });
+  assert.equal(value.creations(), 2); assert.equal(value.submitted()?.expectedVersion, 7);
+  assert.equal(value.submitted()?.idempotencyKey, nextKey); assert.notEqual(value.submitted()?.idempotencyKey, original.idempotencyKey);
+});
+
+test('ARRIVED and WAITING explicit recovery during submit clear the later latch without fabricating applied', async () => {
+  for (const snapshot of [arrived, waiting]) {
+    const gate = deferred<unknown>(); const value = fixture(); value.onSubmit(async () => gate.promise);
+    const first = value.controller.markArrived(); await Promise.resolve();
+    value.scope.publishFresh(pickupId, snapshot); value.controller.recordExplicitRecovery();
+    gate.resolve(Promise.reject(new Error('unexpected_after_terminal_refresh')));
+    await assert.rejects(first, /unexpected_after_terminal_refresh/);
+    assert.equal(value.controller.isUnexpectedSubmitFailureLatched(), false); assert.equal(value.controller.isMarkArrivedActionable(), false);
+    assert.deepEqual(await value.controller.markArrived(), { outcome: 'invalidated', reason: 'scope_changed' });
+    assert.equal(value.creations(), 1); assert.equal(value.submissions(), 1); assert.equal(value.reconciliations(), 0);
+  }
+});
+
+test('explicit recovery before submit cannot recover a later unrelated unexpected failure', async () => {
+  const value = fixture(); value.scope.publishFresh(pickupId, travelling()); value.controller.recordExplicitRecovery();
+  value.onSubmit(async () => { throw new Error('later_unexpected'); });
+  await assert.rejects(value.controller.markArrived(), /later_unexpected/);
+  assert.equal(value.controller.isUnexpectedSubmitFailureLatched(), true); assert.equal(value.controller.isMarkArrivedActionable(), false);
+  assert.equal(value.creations(), 1); assert.equal(value.submissions(), 1);
+});
+
+test('multiple in-flight recoveries consume once using the newest trusted evidence', async () => {
+  const gate = deferred<unknown>(); const value = fixture(); value.onSubmit(async () => gate.promise);
+  const first = value.controller.markArrived(); await Promise.resolve(); const original = value.submitted(); assert.ok(original);
+  value.scope.publishFresh(pickupId, travelling()); value.controller.recordExplicitRecovery();
+  value.scope.publishFresh(pickupId, travelling(7)); value.controller.recordExplicitRecovery();
+  gate.resolve(Promise.reject(new Error('unexpected_after_two_refreshes'))); await assert.rejects(first, /unexpected_after_two_refreshes/);
+  assert.equal(value.controller.isUnexpectedSubmitFailureLatched(), false); assert.equal(value.scope.currentScope()?.pickupVersion, 7);
+  assert.equal(value.creations(), 1); assert.equal(value.submissions(), 1);
+  value.onSubmit(async () => undefined); await value.controller.markArrived();
+  assert.equal(value.creations(), 2); assert.equal(value.submitted()?.expectedVersion, 7);
+  assert.notEqual(value.submitted()?.idempotencyKey, original.idempotencyKey);
+});
+
+test('in-flight recovery under replacement authority cannot revive or migrate the old operation', async () => {
+  const gate = deferred<unknown>(); const value = fixture(); value.onSubmit(async () => gate.promise);
+  const first = value.controller.markArrived(); await Promise.resolve(); const original = value.submitted(); assert.ok(original);
+  value.setIdentity({ identityId: '44444444-4444-4444-8444-444444444444', sessionId: '55555555-5555-4555-8555-555555555555', identityGeneration: 2 });
+  value.setCourier({ pickupId, contextGeneration: 2, identityContinuity: { isCurrent: () => true } });
+  value.scope.publishFresh(pickupId, travelling(7)); value.controller.recordExplicitRecovery();
+  gate.resolve(Promise.reject(new Error('old_authority_unexpected'))); await assert.rejects(first, /old_authority_unexpected/);
+  assert.equal(value.controller.isUnexpectedSubmitFailureLatched(), false); assert.equal(value.controller.isMarkArrivedActionable(), true);
+  assert.equal(value.creations(), 1); assert.equal(value.submissions(), 1);
+  value.onSubmit(async () => undefined); await value.controller.markArrived();
+  assert.equal(value.creations(), 2); assert.notEqual(value.submitted()?.idempotencyKey, original.idempotencyKey);
+  assert.equal(value.submitted()?.identityId, '44444444-4444-4444-8444-444444444444');
+});
+
+test('explicit recovery generation activity cannot retire outcome unknown', async () => {
+  const gate = deferred<unknown>(); const value = fixture(); value.onSubmit(async () => gate.promise);
+  const first = value.controller.markArrived(); await Promise.resolve();
+  value.scope.publishFresh(pickupId, travelling()); value.controller.recordExplicitRecovery();
+  gate.resolve(Promise.reject(new MarkArrivedOutcomeUnknownError()));
+  assert.deepEqual(await first, { outcome: 'outcome_unknown' });
+  assert.equal(value.controller.isUnexpectedSubmitFailureLatched(), false);
+  assert.equal(value.controller.isMarkArrivedActionable(), false); assert.equal(value.controller.isReconciliationAvailable(), true);
+  assert.deepEqual(await value.controller.markArrived(), { outcome: 'outcome_unknown' });
+  assert.equal(value.creations(), 1); assert.equal(value.submissions(), 1);
+});
