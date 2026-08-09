@@ -399,6 +399,63 @@ def test_merchant_commands_select_permission_after_locked_ownership(
     assert permissions == [expected_permission]
 
 
+@pytest.mark.parametrize(
+    "merchant_state",
+    [
+        MerchantState.DRAFT,
+        MerchantState.VERIFICATION_PENDING,
+        MerchantState.SUSPENDED,
+    ],
+)
+@pytest.mark.parametrize(
+    "action",
+    [
+        CourierPickupAction.ACKNOWLEDGE_ARRIVAL,
+        CourierPickupAction.CORRECT_WAITING,
+        CourierPickupAction.END_ATTEMPT,
+    ],
+)
+def test_non_approved_merchant_commands_fail_before_permission_or_side_effects(
+    merchant_state: MerchantState, action: CourierPickupAction
+) -> None:
+    app_value, value, _, merchant_owner = application(
+        permissions={
+            "courier_pickup.acknowledge_own_merchant",
+            "courier_pickup.correct_own_merchant",
+            "courier_pickup.close_own_merchant",
+        }
+    )
+    unit = app_value._composition.unit
+    unit.merchants.get_profile = lambda merchant_id, lock=False: SimpleNamespace(
+        merchant_id=merchant_id,
+        owner_identity_id=merchant_owner,
+        state=merchant_state,
+    )
+    permissions = _record_permissions(app_value)
+    original_pickup = unit.courier_pickup.value
+    kwargs: dict[str, Any] = {}
+    if action is CourierPickupAction.END_ATTEMPT:
+        kwargs["reason"] = CourierPickupExceptionReason.ORDER_NOT_READY
+
+    with pytest.raises(CourierPickupConflict, match="^merchant_unavailable$"):
+        app_value.merchant_acknowledge(
+            subject(merchant_owner, IdentityType.MERCHANT),
+            merchant_id=value.merchant_id,
+            pickup_id=value.pickup_id,
+            expected_version=value.version,
+            action=action,
+            idempotency_key=f"non-approved-{merchant_state.value}-{action.value}",
+            at=NOW,
+            **kwargs,
+        )
+
+    assert permissions == []
+    assert unit.courier_pickup.value == original_pickup
+    assert unit.courier_pickup.replays == {}
+    assert unit.audit_events == []
+    assert unit.custody.value is None
+
+
 def test_wrong_owner_is_unavailable_even_when_baseline_permission_is_held() -> None:
     app_value, value, _, _ = application(
         permissions={

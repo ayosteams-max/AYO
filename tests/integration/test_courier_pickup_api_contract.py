@@ -38,6 +38,7 @@ from BACKEND.persistence.tables import (
     commerce_courier_dispatch_idempotency,
     commerce_courier_dispatch_requests,
     commerce_courier_pickup_events,
+    commerce_courier_pickup_evidence,
     commerce_courier_pickup_idempotency,
     commerce_courier_pickups,
     commerce_custody_challenges,
@@ -584,6 +585,248 @@ def test_merchant_arrival_evidence_suppresses_released_assignment_without_side_e
     assert acknowledge.json() == {
         "error": {"code": "courier_pickup_temporarily_unavailable"}
     }
+
+
+@pytest.mark.usefixtures("api_contract_state")
+def test_approval_loss_after_positive_read_denies_acknowledgement_without_effects(
+    postgres_engine,
+    postgres_composition,
+) -> None:
+    courier = _client(postgres_composition, _subject())
+    assert (
+        courier.post(
+            f"/api/mobile/courier-pickups/{PICKUP}/actions",
+            headers={"Idempotency-Key": "approval-loss-travel-0001"},
+            json={"expected_version": 1, "action": "start_travel"},
+        ).status_code
+        == 200
+    )
+    assert (
+        courier.post(
+            f"/api/mobile/courier-pickups/{PICKUP}/actions",
+            headers={"Idempotency-Key": "approval-loss-arrival-0001"},
+            json={"expected_version": 2, "action": "mark_arrived"},
+        ).status_code
+        == 200
+    )
+    merchant = _client(postgres_composition, _merchant_subject())
+    status = merchant.get(
+        f"/api/mobile/merchants/{MERCHANT}/orders/{ORDER}/courier-pickup"
+    )
+    assert status.status_code == 200
+    assert status.json()["presentation_action"] == "acknowledge_arrival"
+
+    key = "approval-loss-merchant-ack-0001"
+    with postgres_engine.begin() as connection:
+        connection.execute(
+            update(merchant_profiles)
+            .where(merchant_profiles.c.merchant_id == MERCHANT)
+            .values(state="suspended")
+        )
+        before_pickup = (
+            connection.execute(
+                select(commerce_courier_pickups).where(
+                    commerce_courier_pickups.c.pickup_id == PICKUP
+                )
+            )
+            .mappings()
+            .one()
+        )
+        before_counts = (
+            connection.execute(
+                select(func.count()).select_from(commerce_courier_pickup_events)
+            ).scalar_one(),
+            connection.execute(
+                select(func.count()).select_from(commerce_courier_pickup_evidence)
+            ).scalar_one(),
+            connection.execute(
+                select(func.count())
+                .select_from(audit_events)
+                .where(
+                    audit_events.c.resource_type == "courier_pickup",
+                    audit_events.c.resource_id == str(PICKUP),
+                )
+            ).scalar_one(),
+            connection.execute(
+                select(func.count())
+                .select_from(commerce_order_outbox)
+                .where(commerce_order_outbox.c.order_id == ORDER)
+            ).scalar_one(),
+        )
+
+    denied = merchant.post(
+        f"/api/mobile/merchants/{MERCHANT}/courier-pickups/{PICKUP}/acknowledge",
+        headers={"Idempotency-Key": key},
+        json={"expected_version": 3, "action": "acknowledge_arrival"},
+    )
+    assert denied.status_code == 409
+    assert denied.json() == {
+        "error": {"code": "courier_pickup_temporarily_unavailable"}
+    }
+
+    with postgres_engine.connect() as connection:
+        assert (
+            connection.execute(
+                select(commerce_courier_pickups).where(
+                    commerce_courier_pickups.c.pickup_id == PICKUP
+                )
+            )
+            .mappings()
+            .one()
+            == before_pickup
+        )
+        assert (
+            connection.execute(
+                select(func.count())
+                .select_from(commerce_courier_pickup_idempotency)
+                .where(
+                    commerce_courier_pickup_idempotency.c.pickup_id == PICKUP,
+                    commerce_courier_pickup_idempotency.c.idempotency_key == key,
+                )
+            ).scalar_one()
+            == 0
+        )
+        assert (
+            connection.execute(
+                select(func.count()).select_from(commerce_courier_pickup_events)
+            ).scalar_one(),
+            connection.execute(
+                select(func.count()).select_from(commerce_courier_pickup_evidence)
+            ).scalar_one(),
+            connection.execute(
+                select(func.count())
+                .select_from(audit_events)
+                .where(
+                    audit_events.c.resource_type == "courier_pickup",
+                    audit_events.c.resource_id == str(PICKUP),
+                )
+            ).scalar_one(),
+            connection.execute(
+                select(func.count())
+                .select_from(commerce_order_outbox)
+                .where(commerce_order_outbox.c.order_id == ORDER)
+            ).scalar_one(),
+        ) == before_counts
+        assert (
+            connection.execute(
+                select(func.count())
+                .select_from(commerce_custody_records)
+                .where(commerce_custody_records.c.pickup_id == PICKUP)
+            ).scalar_one()
+            == 0
+        )
+        assert (
+            connection.execute(
+                select(func.count()).select_from(commerce_custody_events)
+            ).scalar_one()
+            == 0
+        )
+
+
+@pytest.mark.usefixtures("api_contract_state")
+def test_completed_acknowledgement_replay_requires_current_merchant_approval(
+    postgres_engine,
+    postgres_composition,
+) -> None:
+    application = CourierPickupApplication(postgres_composition)
+    travelling = application.courier_command(
+        _subject(),
+        pickup_id=PICKUP,
+        expected_version=1,
+        action=CourierPickupAction.START_TRAVEL,
+        idempotency_key="suspended-replay-travel-0001",
+        at=NOW,
+    )
+    arrived = application.courier_command(
+        _subject(),
+        pickup_id=PICKUP,
+        expected_version=travelling.pickup.version,
+        action=CourierPickupAction.MARK_ARRIVED,
+        idempotency_key="suspended-replay-arrival-0001",
+        at=NOW,
+    )
+    merchant = _client(postgres_composition, _merchant_subject())
+    path = f"/api/mobile/merchants/{MERCHANT}/courier-pickups/{PICKUP}/acknowledge"
+    headers = {"Idempotency-Key": "suspended-replay-merchant-0001"}
+    body = {
+        "expected_version": arrived.pickup.version,
+        "action": "acknowledge_arrival",
+    }
+    assert merchant.post(path, headers=headers, json=body).status_code == 200
+
+    with postgres_engine.begin() as connection:
+        connection.execute(
+            update(merchant_profiles)
+            .where(merchant_profiles.c.merchant_id == MERCHANT)
+            .values(state="suspended")
+        )
+        before_pickup = (
+            connection.execute(
+                select(commerce_courier_pickups).where(
+                    commerce_courier_pickups.c.pickup_id == PICKUP
+                )
+            )
+            .mappings()
+            .one()
+        )
+        before_idempotency = tuple(
+            connection.execute(
+                select(commerce_courier_pickup_idempotency).where(
+                    commerce_courier_pickup_idempotency.c.pickup_id == PICKUP
+                )
+            ).mappings()
+        )
+        before_custody = tuple(
+            connection.execute(
+                select(commerce_custody_records).where(
+                    commerce_custody_records.c.pickup_id == PICKUP
+                )
+            ).mappings()
+        )
+        before_custody_events = tuple(
+            connection.execute(select(commerce_custody_events)).mappings()
+        )
+
+    replay = merchant.post(path, headers=headers, json=body)
+    assert replay.status_code == 409
+    assert replay.json() == {
+        "error": {"code": "courier_pickup_temporarily_unavailable"}
+    }
+    with postgres_engine.connect() as connection:
+        assert (
+            connection.execute(
+                select(commerce_courier_pickups).where(
+                    commerce_courier_pickups.c.pickup_id == PICKUP
+                )
+            )
+            .mappings()
+            .one()
+            == before_pickup
+        )
+        assert (
+            tuple(
+                connection.execute(
+                    select(commerce_courier_pickup_idempotency).where(
+                        commerce_courier_pickup_idempotency.c.pickup_id == PICKUP
+                    )
+                ).mappings()
+            )
+            == before_idempotency
+        )
+        assert (
+            tuple(
+                connection.execute(
+                    select(commerce_custody_records).where(
+                        commerce_custody_records.c.pickup_id == PICKUP
+                    )
+                ).mappings()
+            )
+            == before_custody
+        )
+        assert (
+            tuple(connection.execute(select(commerce_custody_events)).mappings())
+            == before_custody_events
+        )
 
 
 @pytest.mark.usefixtures("api_contract_state")

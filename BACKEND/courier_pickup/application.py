@@ -218,6 +218,8 @@ class CourierPickupApplication:
                     or current.merchant_id != merchant_id
                 ):
                     raise CourierPickupConflict("courier_pickup_unavailable")
+                if merchant.state is not MerchantState.APPROVED:
+                    raise CourierPickupConflict("merchant_unavailable")
                 permission = {
                     CourierPickupAction.CORRECT_WAITING: "courier_pickup.correct_own_merchant",
                     CourierPickupAction.END_ATTEMPT: "courier_pickup.close_own_merchant",
