@@ -25,6 +25,7 @@ export type MerchantAcknowledgeArrivalPresentationCapability = Readonly<{
 }>;
 
 const CapabilityContext = createContext<MerchantAcknowledgeArrivalPresentationCapability | undefined>(undefined);
+const idleState = Object.freeze({ status: 'idle' as const });
 type Publication = Readonly<{
   merchantId: string;
   orderId: string;
@@ -72,6 +73,7 @@ export function MerchantAcknowledgeArrivalInfrastructureProvider({
   );
   const [state, setState] = useState<MerchantAcknowledgeArrivalControllerState>(() => controller.state());
   const publicationRef = useRef<Publication | undefined>(undefined);
+  const statePublicationRef = useRef<Publication | undefined>(undefined);
   const [publicationGeneration, setPublicationGeneration] = useState(0);
 
   useLayoutEffect(() => {
@@ -108,9 +110,11 @@ export function MerchantAcknowledgeArrivalInfrastructureProvider({
     const publicationIsCurrent = () => publicationRef.current === publication && !!publication?.identityContinuity.isCurrent();
     const invoke = (
       operation: (signal?: AbortSignal) => Promise<MerchantAcknowledgeArrivalControllerResult>,
+      operationIsAvailable: () => boolean,
       signal?: AbortSignal,
     ) => {
       if (!publicationIsCurrent()) return Promise.resolve(Object.freeze({ outcome: 'invalidated' as const, reason: 'scope_changed' as const }));
+      if (operationIsAvailable()) statePublicationRef.current = publication;
       const pending = operation(signal);
       setState(controller.state());
       const synchronize = () => setState(controller.state());
@@ -118,11 +122,19 @@ export function MerchantAcknowledgeArrivalInfrastructureProvider({
       return pending;
     };
     return Object.freeze({
-      state,
+      state: samePublication(statePublicationRef.current, publication) ? state : idleState,
       canAcknowledgeArrival: () => publicationIsCurrent() && controller.isAcknowledgeArrivalActionable(),
       canReconcileAcknowledgeArrival: () => publicationIsCurrent() && controller.isReconciliationAvailable(),
-      acknowledgeArrival: (signal) => invoke((currentSignal) => controller.acknowledgeArrival(currentSignal), signal),
-      reconcileAcknowledgeArrival: (signal) => invoke((currentSignal) => controller.reconcileAcknowledgeArrival(currentSignal), signal),
+      acknowledgeArrival: (signal) => invoke(
+        (currentSignal) => controller.acknowledgeArrival(currentSignal),
+        () => controller.isAcknowledgeArrivalActionable() || samePublication(statePublicationRef.current, publication),
+        signal,
+      ),
+      reconcileAcknowledgeArrival: (signal) => invoke(
+        (currentSignal) => controller.reconcileAcknowledgeArrival(currentSignal),
+        () => controller.isReconciliationAvailable() || samePublication(statePublicationRef.current, publication),
+        signal,
+      ),
     });
   }, [controller, publicationGeneration, state]);
 

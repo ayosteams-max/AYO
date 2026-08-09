@@ -15,6 +15,7 @@ import {
 } from '@/domain/merchant-acknowledge-arrival-command';
 import type { MerchantCourierPickupSnapshot } from '@/domain/merchant-courier-pickup-status';
 import type { MerchantAcknowledgeArrivalCommandService } from '@/services/merchant-acknowledge-arrival-command';
+import { PublicApiError } from '@/services/api-foundation';
 
 const identityId = '11111111-1111-4111-8111-111111111111';
 const sessionId = '22222222-2222-4222-8222-222222222222';
@@ -154,6 +155,100 @@ test('one explicit ACK is single-flight, creates one attempt/key, and publishes 
   await mounted.unmount(); value.cleanup();
 });
 
+test('submitting and applied state from Order A are neutral for Order B', async () => {
+  const gate = deferred<MerchantAcknowledgeArrivalResult>();
+  const service = { submit: jest.fn(async () => gate.promise), reconcile: jest.fn() } as unknown as FakeService;
+  const value = setup(service);
+  const mounted = await render(value.tree());
+  value.publish(pickup()); await mounted.rerender(value.tree());
+  let pending!: Promise<unknown>;
+  await act(async () => { pending = capability.acknowledgeArrival(); await Promise.resolve(); });
+  expect(capability.state).toEqual({ status: 'submitting' });
+
+  value.publish(pickup(), { orderId: '77777777-7777-4777-8777-777777777777' });
+  await mounted.rerender(value.tree());
+  expect(capability.state).toEqual({ status: 'idle' });
+  await act(async () => { gate.resolve(applied); await pending; });
+  expect(capability.state).toEqual({ status: 'idle' });
+  await mounted.unmount(); value.cleanup();
+});
+
+test.each([
+  {
+    status: 'applied',
+    service: () => ({ submit: jest.fn(async () => applied), reconcile: jest.fn() } as unknown as FakeService),
+    settle: async () => { await capability.acknowledgeArrival(); },
+  },
+  {
+    status: 'outcome_unknown',
+    service: () => ({ submit: jest.fn(async () => { throw new MerchantAcknowledgeArrivalOutcomeUnknownError(); }), reconcile: jest.fn() } as unknown as FakeService),
+    settle: async () => { await capability.acknowledgeArrival(); },
+  },
+  {
+    status: 'retry_same_attempt',
+    service: () => ({
+      submit: jest.fn(async () => { throw new MerchantAcknowledgeArrivalOutcomeUnknownError(); }),
+      reconcile: jest.fn(async () => Object.freeze({ outcome: 'retry_same_attempt' as const, pickup: pickup() })),
+    } as unknown as FakeService),
+    settle: async () => { await capability.acknowledgeArrival(); await capability.reconcileAcknowledgeArrival(); },
+  },
+  {
+    status: 'rejected',
+    service: () => ({ submit: jest.fn(async () => { throw new PublicApiError('temporarily_unavailable', 409); }), reconcile: jest.fn() } as unknown as FakeService),
+    settle: async () => { await capability.acknowledgeArrival(); },
+  },
+  {
+    status: 'invalidated',
+    service: () => ({ submit: jest.fn(async () => { throw new PublicApiError('access_denied', 403); }), reconcile: jest.fn() } as unknown as FakeService),
+    settle: async () => { await capability.acknowledgeArrival(); },
+  },
+])('settled $status state from Order A is neutral for Order B', async ({ status, service, settle }) => {
+  const value = setup(service());
+  const mounted = await render(value.tree());
+  value.publish(pickup()); await mounted.rerender(value.tree());
+  await act(async () => { await settle(); });
+  expect(capability.state.status).toBe(status);
+  value.publish(pickup(), { orderId: '77777777-7777-4777-8777-777777777777' });
+  await mounted.rerender(value.tree());
+  expect(capability.state).toEqual({ status: 'idle' });
+  await mounted.unmount(); value.cleanup();
+});
+
+test('temporary freshness loss is neutral and semantic restoration recovers retained uncertainty', async () => {
+  const service = {
+    submit: jest.fn(async () => { throw new MerchantAcknowledgeArrivalOutcomeUnknownError(); }),
+    reconcile: jest.fn(),
+  } as unknown as FakeService;
+  const value = setup(service);
+  const mounted = await render(value.tree());
+  value.publish(pickup()); await mounted.rerender(value.tree());
+  await act(async () => { await capability.acknowledgeArrival(); });
+  expect(capability.state).toEqual({ status: 'outcome_unknown' });
+  value.clear(); await mounted.rerender(value.tree());
+  expect(capability.state).toEqual({ status: 'idle' });
+  expect(capability.canReconcileAcknowledgeArrival()).toBe(false);
+  value.publish(pickup()); await mounted.rerender(value.tree());
+  expect(capability.state).toEqual({ status: 'outcome_unknown' });
+  expect(capability.canReconcileAcknowledgeArrival()).toBe(true);
+  await mounted.unmount(); value.cleanup();
+});
+
+test('an unexpected submit failure remains outcome_unknown for its publication and neutral after replacement', async () => {
+  const service = {
+    submit: jest.fn(async () => { throw new Error('unexpected'); }),
+    reconcile: jest.fn(),
+  } as unknown as FakeService;
+  const value = setup(service);
+  const mounted = await render(value.tree());
+  value.publish(pickup()); await mounted.rerender(value.tree());
+  await act(async () => { await expect(capability.acknowledgeArrival()).rejects.toThrow('unexpected'); });
+  expect(capability.state).toEqual({ status: 'outcome_unknown' });
+  value.publish(pickup(), { orderId: '77777777-7777-4777-8777-777777777777' });
+  await mounted.rerender(value.tree());
+  expect(capability.state).toEqual({ status: 'idle' });
+  await mounted.unmount(); value.cleanup();
+});
+
 test('outcome_unknown enables one explicit reconciliation and retry reuses the exact attempt and key', async () => {
   const attempts: MerchantAcknowledgeArrivalAttempt[] = [];
   let submits = 0;
@@ -240,6 +335,22 @@ const stalePublicationCases: ReadonlyArray<Readonly<{
 ];
 
 test.each(stalePublicationCases)(
+  'applied presentation state is neutral when only $dimension changes',
+  async ({ nextPickup, overrides, retireContinuity }) => {
+    const service = { submit: jest.fn(async () => applied), reconcile: jest.fn() } as unknown as FakeService;
+    const value = setup(service);
+    const mounted = await render(value.tree());
+    value.publish(pickup()); await mounted.rerender(value.tree());
+    await act(async () => { await capability.acknowledgeArrival(); });
+    expect(capability.state).toEqual({ status: 'applied' });
+    if (retireContinuity) value.retireContinuity();
+    value.publish(nextPickup, overrides); await mounted.rerender(value.tree());
+    expect(capability.state).toEqual({ status: 'idle' });
+    await mounted.unmount(); value.cleanup();
+  },
+);
+
+test.each(stalePublicationCases)(
   'an old capability fails closed when only $dimension changes',
   async ({ nextPickup, overrides, retireContinuity }) => {
     const service = { submit: jest.fn(async () => applied), reconcile: jest.fn() } as unknown as FakeService;
@@ -287,6 +398,23 @@ test('an old reconcile capability fails closed after publication replacement wit
   await act(async () => { result = await old.reconcileAcknowledgeArrival(); });
   expect(result).toEqual({ outcome: 'invalidated', reason: 'scope_changed' });
   expect(service.reconcile).not.toHaveBeenCalled();
+  await mounted.unmount(); value.cleanup();
+});
+
+test('a stale capability invocation cannot bind its invalidation to the replacement publication', async () => {
+  const service = { submit: jest.fn(async () => applied), reconcile: jest.fn() } as unknown as FakeService;
+  const value = setup(service);
+  const mounted = await render(value.tree());
+  value.publish(pickup()); await mounted.rerender(value.tree());
+  await act(async () => { await capability.acknowledgeArrival(); });
+  const old = capability;
+  value.publish(pickup(), { orderId: '77777777-7777-4777-8777-777777777777' });
+  await mounted.rerender(value.tree());
+  await act(async () => {
+    await expect(old.acknowledgeArrival()).resolves.toEqual({ outcome: 'invalidated', reason: 'scope_changed' });
+  });
+  expect(capability.state).toEqual({ status: 'idle' });
+  expect(service.submit).toHaveBeenCalledTimes(1);
   await mounted.unmount(); value.cleanup();
 });
 
