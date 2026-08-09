@@ -92,6 +92,10 @@ class Settings(BaseSettings):
     FIELD_OPERATIONS_PLATFORM_MAX_REQUEST_BYTES: int = Field(
         default=32_768, ge=4_096, le=262_144
     )
+    MERCHANT_GENERATIVE_EXPLANATION_ENABLED: bool = False
+    MERCHANT_GENERATIVE_EXPLANATION_MAX_REQUEST_BYTES: int = Field(
+        default=4_096, ge=1_024, le=16_384
+    )
 
     @model_validator(mode="after")
     def mobile_actor_context_gate(self) -> "Settings":
@@ -292,6 +296,17 @@ class Settings(BaseSettings):
         ):
             raise ValueError(
                 "Field Operations Platform production activation requires separate approval"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def production_merchant_generative_explanation_gate(self) -> "Settings":
+        if (
+            self.MERCHANT_GENERATIVE_EXPLANATION_ENABLED
+            and self.ENVIRONMENT is AppEnvironment.PRODUCTION
+        ):
+            raise ValueError(
+                "Merchant generative explanation production activation requires separate approval"
             )
         return self
 

@@ -120,27 +120,31 @@ class PostgresDispatchRateLimiter:
 class RequestSizeLimitMiddleware:
     """Reject oversized bodies before application parsing; never buffers the body."""
 
-    def __init__(self, app: ASGIApp, *, maximum_bytes: int = 16_384) -> None:
+    def __init__(
+        self,
+        app: ASGIApp,
+        *,
+        maximum_bytes: int = 16_384,
+        path_fragments: tuple[str, ...] | None = None,
+    ) -> None:
         if not 1_024 <= maximum_bytes <= 1_048_576:
             raise ValueError("Request-size limit is outside approved bounds")
         self.app = app
         self.maximum_bytes = maximum_bytes
+        self.path_fragments = path_fragments or (
+            "/dispatch",
+            "/scheduled",
+            "/active-rides",
+            "/arrival-waiting",
+            "/mobile/booking",
+        )
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
         path = scope.get("path", "")
-        if not any(
-            part in path
-            for part in (
-                "/dispatch",
-                "/scheduled",
-                "/active-rides",
-                "/arrival-waiting",
-                "/mobile/booking",
-            )
-        ):
+        if not any(part in path for part in self.path_fragments):
             await self.app(scope, receive, send)
             return
         headers = Headers(scope=scope)
