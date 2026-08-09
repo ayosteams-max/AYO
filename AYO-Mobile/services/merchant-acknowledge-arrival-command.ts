@@ -19,6 +19,7 @@ import type { SessionManager } from './session-manager.ts';
 type ScopeReader = () => MerchantAcknowledgeArrivalCommandScope | undefined;
 type OperationContinuity = (attempt: MerchantAcknowledgeArrivalAttempt) => boolean;
 type DispatchGuard = () => boolean;
+export type MerchantAcknowledgeArrivalDispatchObserver = () => void;
 
 export class MerchantAcknowledgeArrivalTransport {
   private readonly baseUrl: string;
@@ -31,17 +32,22 @@ export class MerchantAcknowledgeArrivalTransport {
     this.request = request;
   }
 
-  async post(attempt: MerchantAcknowledgeArrivalAttempt, dispatchAllowed: DispatchGuard, signal?: AbortSignal): Promise<unknown> {
+  async post(
+    attempt: MerchantAcknowledgeArrivalAttempt,
+    dispatchAllowed: DispatchGuard,
+    signal?: AbortSignal,
+    onDispatch?: MerchantAcknowledgeArrivalDispatchObserver,
+  ): Promise<unknown> {
     this.requireDispatchable(dispatchAllowed, signal);
     const session = await this.sessions.restore();
     if (!session || session.identityId.toLowerCase() !== attempt.identityId || session.sessionId.toLowerCase() !== attempt.sessionId) throw new MerchantAcknowledgeArrivalAttemptInvalidError();
     this.requireDispatchable(dispatchAllowed, signal);
-    let response = await this.send(attempt, session.accessToken, signal);
+    let response = await this.send(attempt, session.accessToken, signal, onDispatch);
     if (response.status === 401) {
       const refreshed = await this.sessions.forceRefresh(session.accessToken);
       if (!refreshed || refreshed.identityId.toLowerCase() !== attempt.identityId || refreshed.sessionId.toLowerCase() !== attempt.sessionId) throw new MerchantAcknowledgeArrivalAttemptInvalidError();
       this.requireDispatchable(dispatchAllowed, signal);
-      response = await this.send(attempt, refreshed.accessToken, signal);
+      response = await this.send(attempt, refreshed.accessToken, signal, onDispatch);
     }
     if (!response.ok) {
       if (response.status === 409) throw await parseMerchantAcknowledgeArrivalRejection(response);
@@ -51,8 +57,13 @@ export class MerchantAcknowledgeArrivalTransport {
     catch { throw new PublicApiError('malformed_response', response.status); }
   }
 
-  private send(attempt: MerchantAcknowledgeArrivalAttempt, token: string, signal?: AbortSignal) {
-    return boundedFetch(this.request, `${this.baseUrl}/mobile/merchants/${encodeURIComponent(attempt.merchantId)}/courier-pickups/${encodeURIComponent(attempt.pickupId)}/acknowledge`, {
+  private send(
+    attempt: MerchantAcknowledgeArrivalAttempt,
+    token: string,
+    signal?: AbortSignal,
+    onDispatch?: MerchantAcknowledgeArrivalDispatchObserver,
+  ) {
+    const response = boundedFetch(this.request, `${this.baseUrl}/mobile/merchants/${encodeURIComponent(attempt.merchantId)}/courier-pickups/${encodeURIComponent(attempt.pickupId)}/acknowledge`, {
       method: 'POST',
       headers: {
         Accept: 'application/json', Authorization: `Bearer ${token}`, 'Content-Type': 'application/json',
@@ -61,6 +72,8 @@ export class MerchantAcknowledgeArrivalTransport {
       body: JSON.stringify({ expected_version: attempt.expectedVersion, action: 'acknowledge_arrival' }),
       signal,
     });
+    onDispatch?.();
+    return response;
   }
 
   private requireDispatchable(dispatchAllowed: DispatchGuard, signal?: AbortSignal) {
@@ -105,13 +118,18 @@ export class MerchantAcknowledgeArrivalCommandService {
     this.operationIsCurrent = operationIsCurrent;
   }
 
-  async submit(attempt: MerchantAcknowledgeArrivalAttempt, signal?: AbortSignal): Promise<MerchantAcknowledgeArrivalResult> {
+  async submit(
+    attempt: MerchantAcknowledgeArrivalAttempt,
+    signal?: AbortSignal,
+    onDispatch?: MerchantAcknowledgeArrivalDispatchObserver,
+  ): Promise<MerchantAcknowledgeArrivalResult> {
     if (!merchantAcknowledgeArrivalAttemptMatchesScope(attempt, this.currentScope())) throw new MerchantAcknowledgeArrivalAttemptInvalidError();
     try {
       const value = await this.transport.post(
         attempt,
         () => merchantAcknowledgeArrivalAttemptMatchesScope(attempt, this.currentScope()),
         signal,
+        onDispatch,
       );
       if (!merchantAcknowledgeArrivalAttemptMatchesScope(attempt, this.currentScope())) throw new MerchantAcknowledgeArrivalAttemptInvalidError();
       return parseMerchantAcknowledgeArrivalResult(value, attempt);
