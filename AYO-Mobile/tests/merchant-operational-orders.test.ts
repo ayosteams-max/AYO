@@ -1,0 +1,168 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+
+import { MerchantOperationalOrderContractError, parseMerchantOperationalOrders } from '../domain/merchant-operational-order.ts';
+import { MerchantOperationalOrderService } from '../services/merchant-operational-orders.ts';
+import { merchantOperationalOrderCopy } from '../localization/merchant-operational-orders.ts';
+
+const merchantId = '11111111-1111-4111-8111-111111111111';
+const orderId = '22222222-2222-4222-8222-222222222222';
+
+function view(overrides: Record<string, unknown> = {}) {
+  return {
+    order: {
+      order_id: orderId, merchant_id: merchantId, merchant_display_name: 'AYO Market', state: 'ready_for_pickup',
+      lines: [{ item_id: '33333333-3333-4333-8333-333333333333', item_version: 1, name: 'Ethiopian coffee', kind: 'product', category_id: null, quantity: 2, unit_price_minor: 1000, line_total_minor: 2000, currency: 'ETB', modifier_selections: [], customer_instructions: null }],
+      pricing: { authority: 'commerce_pricing', policy_version: 'commerce.v1', subtotal_minor: 2000, currency: 'ETB', evidence_hash: 'a'.repeat(64) },
+      evidence_hash: 'b'.repeat(64), version: 4, created_at: '2026-08-09T01:00:00Z',
+      ...overrides,
+    }, timeline: [], rejection: null,
+  };
+}
+
+function whitespaceView() {
+  const base = view({
+    merchant_display_name: ' AYO Market ',
+    state: 'rejected',
+    lines: [{ item_id: '33333333-3333-4333-8333-333333333333', item_version: 1, name: ' Ethiopian coffee ', kind: ' product ', category_id: null, quantity: 2, unit_price_minor: 1000, line_total_minor: 2000, currency: 'ETB', modifier_selections: [], customer_instructions: null }],
+    pricing: { authority: 'commerce_pricing', policy_version: ' commerce.v1 ', subtotal_minor: 2000, currency: 'ETB', evidence_hash: 'a'.repeat(64) },
+  });
+  return { ...base, rejection: { order_id: orderId, customer_reason_code: 'merchant_declined', customer_message: ' This item cannot be prepared today. ', internal_merchant_note: null, decided_by_identity_id: '44444444-4444-4444-8444-444444444444', decided_at: '2026-08-09T01:01:00Z' } };
+}
+
+function lifecycleView(timelineLength: number) {
+  const event = (index: number, eventType: string, fromState: string | null, toState: string) => ({
+    event_id: `${(index + 1).toString(16).padStart(8, '0')}-5555-4555-8555-555555555555`,
+    order_id: orderId,
+    merchant_id: merchantId,
+    event_type: eventType,
+    from_state: fromState,
+    to_state: toState,
+    actor_identity_id: null,
+    order_version: index + 1,
+    customer_reason_code: null,
+    occurred_at: `2026-08-09T01:${Math.floor(index / 60).toString().padStart(2, '0')}:${(index % 60).toString().padStart(2, '0')}Z`,
+  });
+  const timeline = [
+    event(0, 'commerce.order.created', null, 'waiting_for_merchant_confirmation'),
+    event(1, 'commerce.order.accepted', 'waiting_for_merchant_confirmation', 'accepted'),
+    event(2, 'commerce.order.preparing', 'accepted', 'preparing'),
+    ...Array.from({ length: 99 }, (_, progress) => event(progress + 3, 'commerce.order.preparation_progress', 'preparing', 'preparing')),
+    event(102, 'commerce.order.ready_for_pickup', 'preparing', 'ready_for_pickup'),
+    event(103, 'commerce.order.preparation_progress', 'ready_for_pickup', 'ready_for_pickup'),
+  ].slice(0, timelineLength);
+  const ready = timelineLength >= 103;
+  return { ...view({ state: ready ? 'ready_for_pickup' : 'preparing', version: timelineLength }), timeline };
+}
+
+test('strict list parser returns only bounded merchant-safe operational fields', () => {
+  const result = parseMerchantOperationalOrders([view()], merchantId);
+  assert.deepEqual(result, [{ orderId, merchantId, state: 'ready_for_pickup', version: 4, createdAt: '2026-08-09T01:00:00Z' }]);
+  assert.ok(Object.isFrozen(result)); assert.ok(Object.isFrozen(result[0]));
+  assert.deepEqual(Object.keys(result[0]).sort(), ['createdAt', 'merchantId', 'orderId', 'state', 'version']);
+});
+
+test('one malformed or cross-merchant row rejects the entire canonical list', () => {
+  for (const malformed of [
+    [view({ state: 'invented' })],
+    [view({ merchant_id: '44444444-4444-4444-8444-444444444444' })],
+    [{ ...view(), extra: true }],
+    Array.from({ length: 26 }, () => view()),
+  ]) assert.throws(() => parseMerchantOperationalOrders(malformed, merchantId), MerchantOperationalOrderContractError);
+});
+
+test('backend-valid bounded strings preserve surrounding whitespace without invalidating the list', () => {
+  const result = parseMerchantOperationalOrders([whitespaceView()], merchantId);
+  assert.equal(result.length, 1);
+  assert.equal(result[0].orderId, orderId);
+  assert.equal(result[0].state, 'rejected');
+});
+
+test('canonical UTC timestamps are calendar-valid and preserve the exact backend wire value', () => {
+  for (const createdAt of [
+    '2026-08-09T01:00:00Z',
+    '2024-02-29T23:59:59Z',
+    '2000-02-29T00:00:00Z',
+    '2026-08-09T01:00:00.123456Z',
+  ]) {
+    const result = parseMerchantOperationalOrders([view({ created_at: createdAt })], merchantId);
+    assert.equal(result[0].createdAt, createdAt);
+  }
+
+  const timelineAt = '2024-02-29T23:59:59.120000Z';
+  const rejectionAt = '2026-08-09T01:01:00.001000Z';
+  const rejected = whitespaceView();
+  const result = parseMerchantOperationalOrders([{
+    ...rejected,
+    timeline: [{ event_id: '55555555-5555-4555-8555-555555555555', order_id: orderId, merchant_id: merchantId, event_type: 'commerce.order.rejected', from_state: 'accepted', to_state: 'rejected', actor_identity_id: null, order_version: 4, customer_reason_code: 'merchant_declined', occurred_at: timelineAt }],
+    rejection: { ...rejected.rejection, decided_at: rejectionAt },
+  }], merchantId);
+  assert.equal(result[0].createdAt, rejected.order.created_at);
+});
+
+test('impossible, non-canonical and timezone-less timestamps reject the whole list', () => {
+  const malformed = [
+    '2026-02-30T00:00:00Z',
+    '2025-02-29T00:00:00Z',
+    '1900-02-29T00:00:00Z',
+    '2026-13-01T00:00:00Z',
+    '2026-00-01T00:00:00Z',
+    '2026-01-00T00:00:00Z',
+    '2026-01-01T24:00:00Z',
+    '2026-01-01T00:60:00Z',
+    '2026-01-01T00:00:60Z',
+    '2026-01-01T00:00:00',
+    '2026-01-01T00:00:00+00:00',
+    '2026-01-01T00:00:00+99:99',
+    '2026-01-01',
+    'prefix2026-01-01T00:00:00Z',
+    '2026-01-01T00:00:00Zsuffix',
+    '2026-01-01T00:00:00.123Z',
+    '2026-01-01T00:00:00.1234567Z',
+  ];
+  for (const timestamp of malformed) {
+    assert.throws(() => parseMerchantOperationalOrders([view({ created_at: timestamp })], merchantId), MerchantOperationalOrderContractError);
+  }
+
+  const timeline = (occurredAt: string) => ({ event_id: '55555555-5555-4555-8555-555555555555', order_id: orderId, merchant_id: merchantId, event_type: 'commerce.order.accepted', from_state: null, to_state: 'accepted', actor_identity_id: null, order_version: 1, customer_reason_code: null, occurred_at: occurredAt });
+  assert.throws(() => parseMerchantOperationalOrders([{ ...view(), timeline: [timeline('2026-02-30T00:00:00Z')] }], merchantId), MerchantOperationalOrderContractError);
+  const rejected = whitespaceView();
+  assert.throws(() => parseMerchantOperationalOrders([{ ...rejected, rejection: { ...rejected.rejection, decided_at: '2025-02-29T00:00:00Z' } }], merchantId), MerchantOperationalOrderContractError);
+});
+
+test('producer-backed merchant order timeline boundaries accept 100 through 103 and reject 104', () => {
+  for (const timelineLength of [100, 101, 102, 103]) {
+    const result = parseMerchantOperationalOrders([lifecycleView(timelineLength)], merchantId);
+    assert.equal(result.length, 1);
+    assert.equal(result[0].version, timelineLength);
+  }
+  assert.throws(() => parseMerchantOperationalOrders([lifecycleView(104)], merchantId), MerchantOperationalOrderContractError);
+});
+
+test('genuinely malformed bounded strings, identifiers, hashes, literals and patterns still reject the whole list', () => {
+  const malformed = [
+    view({ merchant_display_name: 'A' }),
+    view({ merchant_display_name: 'A'.repeat(121) }),
+    view({ merchant_display_name: 42 }),
+    view({ state: 'invented' }),
+    view({ order_id: 'not-a-uuid' }),
+    view({ evidence_hash: 'not-a-hash' }),
+    { ...whitespaceView(), rejection: { ...whitespaceView().rejection, customer_reason_code: 'Invalid reason' } },
+    { ...view(), timeline: [{ event_id: '55555555-5555-4555-8555-555555555555', order_id: orderId, merchant_id: merchantId, event_type: 'Invalid event', from_state: null, to_state: 'ready_for_pickup', actor_identity_id: null, order_version: 1, customer_reason_code: null, occurred_at: '2026-08-09T01:00:00Z' }] },
+  ];
+  for (const invalid of malformed) {
+    assert.throws(() => parseMerchantOperationalOrders([view(), invalid], merchantId), MerchantOperationalOrderContractError);
+  }
+});
+
+test('service performs one bounded authenticated list GET and no detail request', async () => {
+  const calls: string[] = [];
+  const service = new MerchantOperationalOrderService(async (path) => { calls.push(path); return [view()]; });
+  assert.equal((await service.list(merchantId))[0].orderId, orderId);
+  assert.deepEqual(calls, [`/mobile/merchants/${merchantId}/orders?limit=25`]);
+});
+
+test('English and Amharic order-surface keys are complete with explicit native-review governance', () => {
+  assert.deepEqual(Object.keys(merchantOperationalOrderCopy.en).sort(), Object.keys(merchantOperationalOrderCopy.am).sort());
+  for (const locale of ['en', 'am'] as const) for (const value of Object.values(merchantOperationalOrderCopy[locale])) assert.ok(value.trim());
+});

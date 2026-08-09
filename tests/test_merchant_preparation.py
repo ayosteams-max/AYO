@@ -87,6 +87,9 @@ def test_preparation_lifecycle_is_explicit_and_future_states_are_absent() -> Non
 
 def test_progress_is_monotonic_and_ready_is_not_a_progress_value() -> None:
     assert validate_progress(20, 45) == 45
+    assert [validate_progress(value - 1, value) for value in range(1, 100)] == list(
+        range(1, 100)
+    )
     for invalid in (0, 20, 19, 100):
         with pytest.raises(PreparationConflict):
             validate_progress(20, invalid)

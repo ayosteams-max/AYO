@@ -95,7 +95,7 @@ test('construction and pure reads create no request and expose no trusted writer
   expect(value.service.load).not.toHaveBeenCalled();
   expect(read.state).toEqual({ status: 'idle' });
   expect(trusted.readMerchantPickupOperation()).toBeUndefined();
-  expect(Object.keys(read).sort()).toEqual(['inspectOrder', 'refresh', 'state']);
+  expect(Object.keys(read).sort()).toEqual(['clearInspection', 'inspectOrder', 'refresh', 'state']);
   expect(read).not.toHaveProperty('publishFresh');
   expect(read).not.toHaveProperty('contextGeneration');
   expect(read).not.toHaveProperty('pickupId');

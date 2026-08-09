@@ -9,6 +9,7 @@ import type { OperationalArea } from '@/domain/mobile-context';
 import { operationalShellCopy } from '@/localization/operational-shell';
 import { TrustedCourierHandoffStatus } from '@/contexts/courier-start-travel-command-scope';
 import { MerchantOperationalPickupProvider } from '@/contexts/merchant-operational-pickup';
+import { MerchantOperationalOrders } from '@/components/merchant-operational-orders';
 
 export function OperationalShell({ personal }: { personal: ReactNode }) {
   return (
@@ -43,7 +44,10 @@ function OperationalShellContent({ personal }: { personal: ReactNode }) {
     {personal}<AreaFooter />
   </View>;
   if (context.selected.kind === 'courier') return <TrustedCourierHandoffStatus key={context.selected.pickupId} pickupId={context.selected.pickupId} />;
-  return <Placeholder key={context.selected.key} area={context.selected} />;
+  return <View key={context.selected.key} style={styles.fill}>
+    <MerchantOperationalOrders merchantId={context.selected.merchantId} merchantName={context.selected.displayName} />
+    <AreaFooter />
+  </View>;
 }
 
 function Chooser() {
@@ -89,24 +93,6 @@ function AreaCard({ area }: { area: OperationalArea }) {
       {area.kind === 'merchant' && area.availability === 'suspended' ? <Text style={styles.cardHelp}>{copy.suspendedHelp}</Text> : null}
       {area.kind === 'courier' ? <Text style={styles.cardHelp}>{copy.currentPickup}</Text> : null}
     </Pressable>
-  );
-}
-
-function Placeholder({ area }: { area: Extract<OperationalArea, { kind: 'merchant' }> }) {
-  const { locale } = useLanguage();
-  const copy = operationalShellCopy[locale];
-  const context = useOperationalContext();
-  const title = area.displayName;
-  return (
-    <SafeAreaView style={styles.safe}>
-      <View style={styles.placeholder}>
-        <Text style={styles.badge}>{copy.preProduction}</Text>
-        <Text style={styles.title}>{title}</Text>
-        <Text style={styles.help}>{copy.businessSoon}</Text>
-        {context.status === 'stale' ? <Text accessibilityLiveRegion="assertive" style={styles.warning}>{copy.stale}</Text> : null}
-        <AreaFooter />
-      </View>
-    </SafeAreaView>
   );
 }
 
