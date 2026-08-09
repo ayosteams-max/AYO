@@ -14,6 +14,7 @@ import type { MerchantCourierPickupSnapshot } from '../domain/merchant-courier-p
 import { PublicApiError } from '../services/api-foundation.ts';
 import { MerchantAcknowledgeArrivalCommandScope } from '../services/merchant-acknowledge-arrival-command-scope.ts';
 import { MerchantAcknowledgeArrivalController } from '../services/merchant-acknowledge-arrival-controller.ts';
+import type { MerchantAcknowledgeArrivalDispatchObserver } from '../services/merchant-acknowledge-arrival-command.ts';
 
 const identityId = '11111111-1111-4111-8111-111111111111';
 const sessionId = '22222222-2222-4222-8222-222222222222';
@@ -64,7 +65,11 @@ function deferred<T>() {
 }
 
 type Service = {
-  submit(attempt: MerchantAcknowledgeArrivalAttempt, signal?: AbortSignal): Promise<MerchantAcknowledgeArrivalResult>;
+  submit(
+    attempt: MerchantAcknowledgeArrivalAttempt,
+    signal?: AbortSignal,
+    onDispatch?: MerchantAcknowledgeArrivalDispatchObserver,
+  ): Promise<MerchantAcknowledgeArrivalResult>;
   reconcile(attempt: MerchantAcknowledgeArrivalAttempt, signal?: AbortSignal): Promise<MerchantAcknowledgeArrivalReconciliation>;
 };
 
@@ -98,7 +103,10 @@ function fixture(overrides: Partial<Service> = {}) {
       return Object.freeze({ outcome: 'retry_same_attempt', pickup: arrived(attempt.expectedVersion) });
     }),
   };
-  if (overrides.submit) service.submit = async (attempt, signal) => { submitted.push(attempt); return overrides.submit!(attempt, signal); };
+  if (overrides.submit) service.submit = async (attempt, signal, onDispatch) => {
+    submitted.push(attempt);
+    return overrides.submit!(attempt, signal, onDispatch);
+  };
   if (overrides.reconcile) service.reconcile = async (attempt, signal) => { reconciled.push(attempt); return overrides.reconcile!(attempt, signal); };
   const controller = new MerchantAcknowledgeArrivalController(scope, () => service);
   const publish = (pickup = arrived()) => scope.publishFresh(currentMerchantId, currentOrderId, pickup);
@@ -395,11 +403,97 @@ test('authority-loss reconciliation invalidates without new POST or key', async 
   assert.equal(value.creations(), 1);
 });
 
-test('attempt-invalid submit is contained and cannot dispatch a replacement operation', async () => {
-  const value = fixture({ submit: async () => { throw new MerchantAcknowledgeArrivalAttemptInvalidError(); } });
+test('pre-dispatch attempt invalidation permits fresh same-version recovery with a new explicit intent', async () => {
+  const preflight = deferred<void>();
+  let dispatches = 0;
+  const value = fixture({
+    submit: async (_attempt, _signal, _onDispatch) => {
+      await preflight.promise;
+      throw new MerchantAcknowledgeArrivalAttemptInvalidError();
+    },
+  });
+  const pending = value.controller.acknowledgeArrival();
+  while (value.submitted.length === 0) await Promise.resolve();
+  value.setContextGeneration(2);
+  preflight.resolve();
+  assert.deepEqual(await pending, { outcome: 'invalidated', reason: 'scope_changed' });
+  assert.equal(dispatches, 0);
+  assert.equal(value.submitted.length, 1);
+  assert.equal(value.reconciled.length, 0);
+  assert.equal(value.creations(), 1);
+  value.publish(arrived(4));
+  assert.equal(value.controller.isAcknowledgeArrivalActionable(), true);
+  await value.controller.acknowledgeArrival();
+  assert.equal(value.submitted.length, 2);
+  assert.equal(value.creations(), 2);
+  assert.notEqual(value.submitted[0].idempotencyKey, value.submitted[1].idempotencyKey);
+});
+
+test('post-dispatch attempt invalidation consumes stale version without replacement key', async () => {
+  const response = deferred<void>();
+  const value = fixture({
+    submit: async (_attempt, _signal, onDispatch) => {
+      onDispatch?.();
+      await response.promise;
+      throw new MerchantAcknowledgeArrivalAttemptInvalidError();
+    },
+  });
+  const pending = value.controller.acknowledgeArrival();
+  while (value.submitted.length === 0) await Promise.resolve();
+  value.setContextGeneration(2);
+  response.resolve();
+  assert.deepEqual(await pending, { outcome: 'invalidated', reason: 'scope_changed' });
+
+  value.publish(arrived(4));
+  assert.equal(value.controller.isAcknowledgeArrivalActionable(), false);
   assert.deepEqual(await value.controller.acknowledgeArrival(), { outcome: 'invalidated', reason: 'scope_changed' });
   assert.equal(value.submitted.length, 1);
   assert.equal(value.reconciled.length, 0);
+  assert.equal(value.creations(), 1);
+});
+
+test('first dispatched 401 consumes version when scope retires before second POST', async () => {
+  const refresh = deferred<void>();
+  const posts: string[] = [];
+  const value = fixture({
+    submit: async (attempt, _signal, onDispatch) => {
+      posts.push(attempt.idempotencyKey);
+      onDispatch?.();
+      await refresh.promise;
+      throw new MerchantAcknowledgeArrivalAttemptInvalidError();
+    },
+  });
+  const pending = value.controller.acknowledgeArrival();
+  while (posts.length === 0) await Promise.resolve();
+  value.setContextGeneration(2);
+  refresh.resolve();
+  assert.deepEqual(await pending, { outcome: 'invalidated', reason: 'scope_changed' });
+  value.publish(arrived(4));
+  assert.equal(value.controller.isAcknowledgeArrivalActionable(), false);
+  assert.deepEqual(posts, [keys[0]]);
+  assert.equal(value.creations(), 1);
+});
+
+test('scope loss after second same-key POST consumes version and cannot produce a third POST', async () => {
+  const secondResponse = deferred<MerchantAcknowledgeArrivalResult>();
+  const posts: string[] = [];
+  const value = fixture({
+    submit: async (attempt, _signal, onDispatch) => {
+      posts.push(attempt.idempotencyKey);
+      onDispatch?.();
+      posts.push(attempt.idempotencyKey);
+      onDispatch?.();
+      return secondResponse.promise;
+    },
+  });
+  const pending = value.controller.acknowledgeArrival();
+  while (posts.length < 2) await Promise.resolve();
+  value.setContextGeneration(2);
+  secondResponse.resolve(applied);
+  assert.deepEqual(await pending, { outcome: 'invalidated', reason: 'scope_changed' });
+  value.publish(arrived(4));
+  assert.equal(value.controller.isAcknowledgeArrivalActionable(), false);
+  assert.deepEqual(posts, [keys[0], keys[0]]);
   assert.equal(value.creations(), 1);
 });
 

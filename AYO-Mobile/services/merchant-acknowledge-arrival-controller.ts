@@ -11,9 +11,18 @@ import {
   MerchantAcknowledgeArrivalCommandScope,
   type MerchantAcknowledgeArrivalAttemptHandle,
 } from './merchant-acknowledge-arrival-command-scope.ts';
-import type { MerchantAcknowledgeArrivalCommandService } from './merchant-acknowledge-arrival-command.ts';
+import type {
+  MerchantAcknowledgeArrivalCommandService,
+  MerchantAcknowledgeArrivalDispatchObserver,
+} from './merchant-acknowledge-arrival-command.ts';
 
-type Service = Pick<MerchantAcknowledgeArrivalCommandService, 'submit' | 'reconcile'>;
+type Service = Pick<MerchantAcknowledgeArrivalCommandService, 'reconcile'> & {
+  submit(
+    attempt: MerchantAcknowledgeArrivalAttempt,
+    signal?: AbortSignal,
+    onDispatch?: MerchantAcknowledgeArrivalDispatchObserver,
+  ): ReturnType<MerchantAcknowledgeArrivalCommandService['submit']>;
+};
 
 export type MerchantAcknowledgeArrivalControllerResult =
   | Readonly<{ outcome: 'applied' }>
@@ -161,9 +170,11 @@ export class MerchantAcknowledgeArrivalController {
     operation: Operation,
     signal?: AbortSignal,
   ): Promise<MerchantAcknowledgeArrivalControllerResult> {
+    let mayHaveDispatched = false;
     try {
-      await (await this.commandService()).submit(operation.attempt, signal);
+      await (await this.commandService()).submit(operation.attempt, signal, () => { mayHaveDispatched = true; });
       if (!this.scope.operationIsCurrent(operation.attempt)) {
+        if (mayHaveDispatched) this.recordConsumed(operation);
         return this.settle(operation, frozen({ outcome: 'invalidated', reason: 'scope_changed' }));
       }
       this.recordConsumed(operation);
@@ -180,6 +191,7 @@ export class MerchantAcknowledgeArrivalController {
         return this.settle(operation, frozen({ outcome: 'rejected', reason: error.reason }));
       }
       if (error instanceof MerchantAcknowledgeArrivalAttemptInvalidError) {
+        if (mayHaveDispatched) this.recordConsumed(operation);
         this.scope.clearFreshForAttempt(operation.attempt);
         return this.settle(operation, frozen({ outcome: 'invalidated', reason: 'scope_changed' }));
       }

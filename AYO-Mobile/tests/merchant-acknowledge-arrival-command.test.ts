@@ -291,6 +291,79 @@ test('401 refresh preserves the exact attempt and key and rechecks currentness',
   assert.deepEqual(postRefreshKeys, [keyA, keyA]);
 });
 
+test('trusted dispatch provenance distinguishes preflight invalidation and both 401 request boundaries', async () => {
+  const attempt = createMerchantAcknowledgeArrivalAttempt(scope(), () => keyA);
+
+  let preflightDispatches = 0;
+  let preflightPosts = 0;
+  const preflight = new MerchantAcknowledgeArrivalCommandService(
+    new MerchantAcknowledgeArrivalTransport(
+      'https://api.example.test',
+      { restore: async () => undefined } as never,
+      async () => { preflightPosts += 1; return new Response(); },
+    ),
+    { load: async () => snapshotFrom(pickupStatus('arrived_at_merchant', 5)) },
+    () => scope(),
+  );
+  await assert.rejects(preflight.submit(attempt, undefined, () => { preflightDispatches += 1; }), MerchantAcknowledgeArrivalAttemptInvalidError);
+  assert.equal(preflightPosts, 0);
+  assert.equal(preflightDispatches, 0);
+
+  let current: MerchantAcknowledgeArrivalCommandScope | undefined = scope();
+  let releaseRefresh!: () => void;
+  let firstPosts = 0;
+  let firstDispatches = 0;
+  const firstOnly = new MerchantAcknowledgeArrivalCommandService(
+    new MerchantAcknowledgeArrivalTransport(
+      'https://api.example.test',
+      {
+        restore: async () => ({ identityId: identityA, sessionId: sessionA, accessToken: 'a'.repeat(64) }),
+        forceRefresh: () => new Promise((resolve) => {
+          releaseRefresh = () => resolve({ identityId: identityA, sessionId: sessionA, accessToken: 'b'.repeat(64) });
+        }),
+      } as never,
+      async () => { firstPosts += 1; return new Response('', { status: 401 }); },
+    ),
+    { load: async () => snapshotFrom(pickupStatus('arrived_at_merchant', 5)) },
+    () => current,
+  );
+  const firstPending = firstOnly.submit(attempt, undefined, () => { firstDispatches += 1; });
+  while (!releaseRefresh) await Promise.resolve();
+  current = undefined;
+  releaseRefresh();
+  await assert.rejects(firstPending, MerchantAcknowledgeArrivalAttemptInvalidError);
+  assert.equal(firstPosts, 1);
+  assert.equal(firstDispatches, 1);
+
+  current = scope();
+  let resolveSecond!: (response: Response) => void;
+  let secondPosts = 0;
+  let secondDispatches = 0;
+  const both = new MerchantAcknowledgeArrivalCommandService(
+    new MerchantAcknowledgeArrivalTransport(
+      'https://api.example.test',
+      {
+        restore: async () => ({ identityId: identityA, sessionId: sessionA, accessToken: 'a'.repeat(64) }),
+        forceRefresh: async () => ({ identityId: identityA, sessionId: sessionA, accessToken: 'b'.repeat(64) }),
+      } as never,
+      async () => {
+        secondPosts += 1;
+        if (secondPosts === 1) return new Response('', { status: 401 });
+        return new Promise((resolve) => { resolveSecond = resolve; });
+      },
+    ),
+    { load: async () => snapshotFrom(pickupStatus('arrived_at_merchant', 5)) },
+    () => current,
+  );
+  const secondPending = both.submit(attempt, undefined, () => { secondDispatches += 1; });
+  while (!resolveSecond) await Promise.resolve();
+  current = undefined;
+  resolveSecond(new Response(JSON.stringify(commandResult()), { status: 200 }));
+  await assert.rejects(secondPending, MerchantAcknowledgeArrivalAttemptInvalidError);
+  assert.equal(secondPosts, 2);
+  assert.equal(secondDispatches, 2);
+});
+
 test('strict success parser accepts only the exact WAITING transition contract', () => {
   const attempt = createMerchantAcknowledgeArrivalAttempt(scope(), () => keyA);
   assert.deepEqual(parseMerchantAcknowledgeArrivalResult(commandResult(), attempt), {
