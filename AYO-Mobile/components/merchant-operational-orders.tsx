@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { useAuthenticatedRead, useIdentityContinuity } from '@/contexts/identity-session';
@@ -26,7 +26,9 @@ export function MerchantOperationalOrders({ merchantId, merchantName }: { mercha
   const selectedOrderIdRef = useRef<string | undefined>(undefined);
   const generation = useRef(0);
   const abort = useRef<AbortController | undefined>(undefined);
+  const pickupRef = useRef(pickup);
   const stateRef = useRef(state);
+  pickupRef.current = pickup;
   stateRef.current = state;
 
   const load = useCallback(async (retain: boolean) => {
@@ -46,7 +48,7 @@ export function MerchantOperationalOrders({ merchantId, merchantName }: { mercha
       });
       setState(orders.length ? Object.freeze({ status: 'ready', orders }) : Object.freeze({ status: 'empty' }));
     } catch (error) {
-      if (request !== generation.current || controller.signal.aborted) return;
+      if (request !== generation.current || controller.signal.aborted || !capturedContinuity.isCurrent() || continuityReader.readIdentityContinuity() !== capturedContinuity) return;
       if (error instanceof MerchantOperationalOrderContractError) setState(Object.freeze({ status: 'malformed' }));
       else if (error instanceof PublicApiError && (error.status === 401 || error.status === 403 || ['authentication_required', 'session_expired', 'access_denied'].includes(error.kind))) {
         selectedOrderIdRef.current = undefined; setSelectedOrderId(undefined); pickup.clearInspection(); setState(Object.freeze({ status: 'authority_lost' }));
@@ -55,10 +57,21 @@ export function MerchantOperationalOrders({ merchantId, merchantName }: { mercha
     }
   }, [continuity, continuityReader, merchantId, pickup, service]);
 
-  useEffect(() => {
-    selectedOrderIdRef.current = undefined; setSelectedOrderId(undefined); pickup.clearInspection(); setState(Object.freeze({ status: 'loading' })); void load(false);
-    return () => { generation.current += 1; abort.current?.abort(); pickup.clearInspection(); };
+  useLayoutEffect(() => {
+    generation.current += 1;
+    abort.current?.abort();
+    selectedOrderIdRef.current = undefined;
+    setSelectedOrderId(undefined);
+    pickup.clearInspection();
+    setState(Object.freeze({ status: 'loading' }));
+    void load(false);
   }, [continuity, merchantId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useLayoutEffect(() => () => {
+    generation.current += 1;
+    abort.current?.abort();
+    pickupRef.current.clearInspection();
+  }, []);
 
   const select = useCallback((orderId: string) => {
     if (selectedOrderIdRef.current === orderId) return;
