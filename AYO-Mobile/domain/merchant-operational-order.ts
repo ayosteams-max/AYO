@@ -19,6 +19,8 @@ export class MerchantOperationalOrderContractError extends Error {
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const hash = /^[a-f0-9]{64}$/;
+const eventType = /^[a-z][a-z0-9_.]{2,62}$/;
+const rejectionReason = /^[a-z][a-z0-9_]{2,62}$/;
 const states = new Set<MerchantOperationalOrderState>([
   'waiting_for_merchant_confirmation', 'accepted', 'rejected', 'preparing', 'ready_for_pickup',
 ]);
@@ -47,7 +49,7 @@ function safeInteger(value: unknown, minimum = 0): number {
 }
 
 function text(value: unknown, minimum: number, maximum: number): string {
-  if (typeof value !== 'string' || value.length < minimum || value.length > maximum || value.trim() !== value) throw new MerchantOperationalOrderContractError();
+  if (typeof value !== 'string' || value.length < minimum || value.length > maximum) throw new MerchantOperationalOrderContractError();
   return value;
 }
 
@@ -65,7 +67,8 @@ function validateTimeline(value: unknown, orderId: string, merchantId: string): 
   const event = object(value, ['event_id', 'order_id', 'merchant_id', 'event_type', 'from_state', 'to_state', 'actor_identity_id', 'order_version', 'customer_reason_code', 'occurred_at']);
   identifier(event.event_id);
   if (identifier(event.order_id) !== orderId || identifier(event.merchant_id) !== merchantId) throw new MerchantOperationalOrderContractError();
-  text(event.event_type, 3, 63); safeInteger(event.order_version, 1); instant(event.occurred_at);
+  if (!eventType.test(text(event.event_type, 3, 63))) throw new MerchantOperationalOrderContractError();
+  safeInteger(event.order_version, 1); instant(event.occurred_at);
   if (event.actor_identity_id !== null) identifier(event.actor_identity_id);
   if (event.from_state !== null && (typeof event.from_state !== 'string' || !states.has(event.from_state as MerchantOperationalOrderState))) throw new MerchantOperationalOrderContractError();
   if (typeof event.to_state !== 'string' || !states.has(event.to_state as MerchantOperationalOrderState)) throw new MerchantOperationalOrderContractError();
@@ -92,7 +95,8 @@ function parseView(value: unknown, expectedMerchantId: string): MerchantOperatio
   if (view.rejection !== null) {
     const rejection = object(view.rejection, ['order_id', 'customer_reason_code', 'customer_message', 'internal_merchant_note', 'decided_by_identity_id', 'decided_at']);
     if (identifier(rejection.order_id) !== orderId) throw new MerchantOperationalOrderContractError();
-    text(rejection.customer_reason_code, 3, 63); text(rejection.customer_message, 2, 240); identifier(rejection.decided_by_identity_id); instant(rejection.decided_at);
+    if (!rejectionReason.test(text(rejection.customer_reason_code, 3, 63))) throw new MerchantOperationalOrderContractError();
+    text(rejection.customer_message, 2, 240); identifier(rejection.decided_by_identity_id); instant(rejection.decided_at);
     if (rejection.internal_merchant_note !== null && (typeof rejection.internal_merchant_note !== 'string' || rejection.internal_merchant_note.length > 1000)) throw new MerchantOperationalOrderContractError();
   }
   if ((order.state === 'rejected') !== (view.rejection !== null)) throw new MerchantOperationalOrderContractError();
