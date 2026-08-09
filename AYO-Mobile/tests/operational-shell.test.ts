@@ -18,7 +18,8 @@ test('shell uses centralized copy, textual availability and accessible controls'
   assert.match(source, /accessibilityLiveRegion/);
   assert.match(source, /accessibilityState=\{\{ disabled \}\}/);
   assert.match(source, /minHeight: 48/);
-  assert.doesNotMatch(source, /merchantId\}|identityId|permission/);
+  assert.match(source, /<MerchantOperationalOrders/);
+  assert.doesNotMatch(source, /identityId|permission/);
 });
 
 test('destination search remains present and is guarded by returned personal context', async () => {

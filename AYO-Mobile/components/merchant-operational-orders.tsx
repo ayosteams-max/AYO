@@ -1,0 +1,107 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+
+import { useAuthenticatedRead, useIdentityContinuity } from '@/contexts/identity-session';
+import { useLanguage } from '@/contexts/language';
+import { useMerchantOperationalPickup } from '@/contexts/merchant-operational-pickup';
+import { MerchantOperationalOrderContractError, type MerchantOperationalOrder } from '@/domain/merchant-operational-order';
+import { merchantOperationalOrderCopy } from '@/localization/merchant-operational-orders';
+import { PublicApiError } from '@/services/api-foundation';
+import { MerchantOperationalOrderService } from '@/services/merchant-operational-orders';
+
+type ListState =
+  | Readonly<{ status: 'loading' | 'empty' | 'unavailable' | 'malformed' | 'authority_lost' }>
+  | Readonly<{ status: 'ready' | 'stale'; orders: readonly MerchantOperationalOrder[] }>;
+
+export function MerchantOperationalOrders({ merchantId, merchantName }: { merchantId: string; merchantName: string }) {
+  const read = useAuthenticatedRead();
+  const continuityReader = useIdentityContinuity();
+  const continuity = continuityReader.readIdentityContinuity();
+  const service = useMemo(() => new MerchantOperationalOrderService(read), [read]);
+  const pickup = useMerchantOperationalPickup();
+  const { locale } = useLanguage();
+  const copy = merchantOperationalOrderCopy[locale];
+  const [state, setState] = useState<ListState>(Object.freeze({ status: 'loading' }));
+  const [selectedOrderId, setSelectedOrderId] = useState<string>();
+  const selectedOrderIdRef = useRef<string | undefined>(undefined);
+  const generation = useRef(0);
+  const abort = useRef<AbortController | undefined>(undefined);
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
+  const load = useCallback(async (retain: boolean) => {
+    const capturedContinuity = continuity;
+    if (!capturedContinuity?.isCurrent()) { selectedOrderIdRef.current = undefined; setSelectedOrderId(undefined); pickup.clearInspection(); setState(Object.freeze({ status: 'authority_lost' })); return; }
+    const request = ++generation.current;
+    abort.current?.abort();
+    const controller = new AbortController(); abort.current = controller;
+    const prior = stateRef.current.status === 'ready' || stateRef.current.status === 'stale' ? stateRef.current.orders : undefined;
+    setState(retain && prior ? Object.freeze({ status: 'stale', orders: prior }) : Object.freeze({ status: 'loading' }));
+    try {
+      const orders = await service.list(merchantId, controller.signal);
+      if (request !== generation.current || controller.signal.aborted || !capturedContinuity.isCurrent() || continuityReader.readIdentityContinuity() !== capturedContinuity) return;
+      setSelectedOrderId((selected) => {
+        if (selected && !orders.some((order) => order.orderId === selected)) { selectedOrderIdRef.current = undefined; pickup.clearInspection(); return undefined; }
+        return selected;
+      });
+      setState(orders.length ? Object.freeze({ status: 'ready', orders }) : Object.freeze({ status: 'empty' }));
+    } catch (error) {
+      if (request !== generation.current || controller.signal.aborted) return;
+      if (error instanceof MerchantOperationalOrderContractError) setState(Object.freeze({ status: 'malformed' }));
+      else if (error instanceof PublicApiError && (error.status === 401 || error.status === 403 || ['authentication_required', 'session_expired', 'access_denied'].includes(error.kind))) {
+        selectedOrderIdRef.current = undefined; setSelectedOrderId(undefined); pickup.clearInspection(); setState(Object.freeze({ status: 'authority_lost' }));
+      } else if (retain && prior) setState(Object.freeze({ status: 'stale', orders: prior }));
+      else setState(Object.freeze({ status: 'unavailable' }));
+    }
+  }, [continuity, continuityReader, merchantId, pickup, service]);
+
+  useEffect(() => {
+    selectedOrderIdRef.current = undefined; setSelectedOrderId(undefined); pickup.clearInspection(); setState(Object.freeze({ status: 'loading' })); void load(false);
+    return () => { generation.current += 1; abort.current?.abort(); pickup.clearInspection(); };
+  }, [continuity, merchantId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const select = useCallback((orderId: string) => {
+    if (selectedOrderIdRef.current === orderId) return;
+    selectedOrderIdRef.current = orderId;
+    setSelectedOrderId(orderId);
+    void pickup.inspectOrder(orderId);
+  }, [pickup]);
+
+  const orders = state.status === 'ready' || state.status === 'stale' ? state.orders : [];
+  const selected = orders.find((order) => order.orderId === selectedOrderId);
+  return <View style={styles.fill}>
+    <ScrollView contentContainerStyle={styles.content}>
+      <Text style={styles.badge}>PRE-PRODUCTION</Text>
+      <Text style={styles.title}>{merchantName}</Text>
+      <Text style={styles.heading}>{copy.heading}</Text>
+      <Text style={styles.help}>{copy.help}</Text>
+      {state.status === 'loading' ? <View accessibilityLiveRegion="polite" style={styles.status}><ActivityIndicator color="#A78BFA" /><Text style={styles.help}>{copy.loading}</Text></View> : null}
+      {state.status === 'empty' ? <Text accessibilityLiveRegion="polite" style={styles.empty}>{copy.empty}</Text> : null}
+      {state.status === 'unavailable' || state.status === 'malformed' || state.status === 'authority_lost' ? <Text accessibilityLiveRegion="assertive" style={styles.warning}>{state.status === 'malformed' ? copy.malformed : state.status === 'authority_lost' ? copy.authorityLost : copy.unavailable}</Text> : null}
+      {state.status === 'stale' ? <Text accessibilityLiveRegion="polite" style={styles.warning}>{copy.stale}</Text> : null}
+      <View style={styles.orders}>{orders.map((order) => {
+        const short = order.orderId.slice(0, 8).toUpperCase(); const active = order.orderId === selectedOrderId;
+        return <Pressable key={order.orderId} accessibilityLabel={`${copy.orderLabel} ${short}. ${copy[order.state]}`} accessibilityRole="button" accessibilityState={{ selected: active }} onPress={() => select(order.orderId)} style={[styles.order, active && styles.orderSelected]}>
+          <Text style={styles.orderTitle}>{copy.orderLabel} {short}</Text><Text style={styles.orderState}>{copy[order.state]}</Text><Text style={styles.meta}>{copy.createdLabel}: {new Date(order.createdAt).toLocaleString(locale)}</Text>
+        </Pressable>;
+      })}</View>
+      {selected ? <SelectedPickup order={selected} /> : null}
+      <Pressable accessibilityLabel={copy.refresh} accessibilityRole="button" disabled={state.status === 'loading'} onPress={() => void load(true)} style={styles.refresh}><Text style={styles.refreshText}>{state.status === 'stale' ? copy.refreshing : copy.refresh}</Text></Pressable>
+    </ScrollView>
+  </View>;
+}
+
+function SelectedPickup({ order }: { order: MerchantOperationalOrder }) {
+  const pickup = useMerchantOperationalPickup(); const { locale } = useLanguage(); const copy = merchantOperationalOrderCopy[locale];
+  const state = pickup.state;
+  let message = copy.pickupUnavailable;
+  if ((state.status === 'loading' || state.status === 'unavailable' || state.status === 'malformed' || state.status === 'authority_lost') && state.orderId === order.orderId) message = state.status === 'loading' ? copy.pickupLoading : state.status === 'malformed' ? copy.pickupMalformed : state.status === 'authority_lost' ? copy.pickupAuthorityLost : copy.pickupUnavailable;
+  if ((state.status === 'ready' || state.status === 'refreshing' || state.status === 'stale') && state.value.orderId === order.orderId) message = state.status === 'stale' || state.status === 'refreshing' ? copy.pickupStale : copy[state.value.pickup.state];
+  return <View accessibilityLiveRegion="polite" style={styles.pickup}><Text style={styles.selected}>{copy.selected}</Text><Text style={styles.orderTitle}>{copy.orderLabel} {order.orderId.slice(0, 8).toUpperCase()}</Text><Text style={styles.help}>{message}</Text></View>;
+}
+
+const styles = StyleSheet.create({
+  fill: { flex: 1, backgroundColor: '#07111F' }, content: { padding: 24, paddingTop: 42, paddingBottom: 36 }, badge: { alignSelf: 'flex-start', color: '#C4B5FD', backgroundColor: '#2E1065', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, fontSize: 12, fontWeight: '800', marginBottom: 16, overflow: 'hidden' },
+  title: { color: '#FFFFFF', fontSize: 28, fontWeight: '800' }, heading: { color: '#DDD6FE', fontSize: 20, fontWeight: '800', marginTop: 8 }, help: { color: '#B8C4D2', fontSize: 15, lineHeight: 22, marginTop: 6 }, status: { flexDirection: 'row', gap: 12, alignItems: 'center', marginTop: 24 }, empty: { color: '#B8C4D2', fontSize: 16, paddingVertical: 28 }, warning: { color: '#FDE68A', backgroundColor: '#422006', borderRadius: 12, padding: 14, marginTop: 18 },
+  orders: { gap: 12, marginTop: 22 }, order: { minHeight: 92, padding: 16, borderRadius: 16, backgroundColor: '#151F31', borderWidth: 1, borderColor: '#334155' }, orderSelected: { borderColor: '#8B5CF6', backgroundColor: '#21183B' }, orderTitle: { color: '#FFFFFF', fontSize: 17, fontWeight: '800' }, orderState: { color: '#C4B5FD', fontSize: 14, fontWeight: '700', marginTop: 5 }, meta: { color: '#94A3B8', fontSize: 12, marginTop: 7 }, pickup: { marginTop: 22, borderRadius: 16, padding: 18, backgroundColor: '#111827', borderWidth: 1, borderColor: '#7C3AED' }, selected: { color: '#A78BFA', fontSize: 12, fontWeight: '800', marginBottom: 6 }, refresh: { minHeight: 48, marginTop: 22, borderRadius: 14, borderWidth: 1, borderColor: '#7C3AED', alignItems: 'center', justifyContent: 'center' }, refreshText: { color: '#DDD6FE', fontSize: 16, fontWeight: '800' },
+});

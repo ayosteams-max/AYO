@@ -71,6 +71,7 @@ function setup(service: FakeService) {
     },
     inspectOrder: async () => ({ status: 'idle' as const }),
     refresh: async () => ({ status: 'idle' as const }),
+    clearInspection: () => { operation = undefined; },
   };
   const operationReader = Object.freeze({
     readMerchantPickupOperation: () => operation,

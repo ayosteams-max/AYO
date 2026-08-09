@@ -26,6 +26,7 @@ export type MerchantOperationalPickupRead = Readonly<{
   state: MerchantOperationalPickupState;
   inspectOrder(orderId: string, signal?: AbortSignal): Promise<MerchantOperationalPickupState>;
   refresh(signal?: AbortSignal): Promise<MerchantOperationalPickupState>;
+  clearInspection(): void;
 }>;
 
 export type MerchantPickupOperationContextSnapshot = Readonly<{
@@ -221,6 +222,12 @@ export function MerchantOperationalPickupProvider({ children, service: suppliedS
     return orderId ? inspectOrder(orderId, signal) : Promise.resolve(current);
   }, [inspectOrder]);
 
+  const clearInspection = useCallback(() => {
+    cancelFlight();
+    retire(true);
+    publishState(idle);
+  }, [cancelFlight, publishState, retire]);
+
   useLayoutEffect(() => {
     const selection = selectionRef.current;
     const committedSelection = committedSelectionRef.current;
@@ -256,7 +263,7 @@ export function MerchantOperationalPickupProvider({ children, service: suppliedS
     flightRef.current = undefined;
   }, []);
 
-  const read = useMemo<MerchantOperationalPickupRead>(() => Object.freeze({ state, inspectOrder, refresh }), [inspectOrder, refresh, state]);
+  const read = useMemo<MerchantOperationalPickupRead>(() => Object.freeze({ state, inspectOrder, refresh, clearInspection }), [clearInspection, inspectOrder, refresh, state]);
   const operation = useMemo<MerchantPickupOperationContextReader>(() => Object.freeze({
     readMerchantPickupOperation: () => trustedRef.current,
   }), []);
