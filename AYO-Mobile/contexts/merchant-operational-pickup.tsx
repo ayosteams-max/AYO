@@ -75,6 +75,8 @@ export function MerchantOperationalPickupProvider({ children, service: suppliedS
   const [state, setState] = useState<MerchantOperationalPickupState>(idle);
   const stateRef = useRef<MerchantOperationalPickupState>(idle);
   const selectionRef = useRef<Selection | undefined>(undefined);
+  const committedSelectionRef = useRef<Selection | undefined>(undefined);
+  const selectionOwnershipInitializedRef = useRef(false);
   const trustedRef = useRef<MerchantPickupOperationContextSnapshot | undefined>(undefined);
   const lastOperationRef = useRef<OperationIdentity | undefined>(undefined);
   const contextGeneration = useRef(0);
@@ -221,6 +223,19 @@ export function MerchantOperationalPickupProvider({ children, service: suppliedS
 
   useLayoutEffect(() => {
     const selection = selectionRef.current;
+    const committedSelection = committedSelectionRef.current;
+    const selectionChanged = selectionOwnershipInitializedRef.current && (
+      committedSelection?.merchantId !== selection?.merchantId ||
+      committedSelection?.identityContinuity !== selection?.identityContinuity
+    );
+    selectionOwnershipInitializedRef.current = true;
+    committedSelectionRef.current = selection;
+    if (selectionChanged) {
+      cancelFlight();
+      retire(true);
+      publishState(idle);
+      return;
+    }
     const trusted = trustedRef.current;
     const flight = flightRef.current;
     const operation = lastOperationRef.current;

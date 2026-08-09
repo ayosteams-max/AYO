@@ -69,7 +69,7 @@ function operational(selectedMerchant?: string): ReturnType<typeof operationalCo
 }
 
 function setup(load: (merchantId: string, orderId: string, signal?: AbortSignal) => Promise<MerchantCourierPickupSnapshot>) {
-  let selected = merchantA;
+  let selected: string | undefined = merchantA;
   let current = true;
   let continuity = Object.freeze({ isCurrent: () => current });
   const operationalSpy = jest.spyOn(operationalContext, 'useOperationalContext').mockImplementation(() => operational(selected));
@@ -82,7 +82,7 @@ function setup(load: (merchantId: string, orderId: string, signal?: AbortSignal)
   const cleanup = () => { operationalSpy.mockRestore(); identitySpy.mockRestore(); readSpy.mockRestore(); };
   return {
     service, tree, cleanup,
-    setSelected: (value: string) => { selected = value; },
+    setSelected: (value: string | undefined) => { selected = value; },
     replaceIdentity: () => { current = false; continuity = Object.freeze({ isCurrent: () => true }); },
   };
 }
@@ -183,6 +183,119 @@ test('identity replacement while a read is pending ignores the old response', as
   expect(read.state).toEqual({ status: 'idle' });
   await act(async () => { pending.resolve(pickup(pickupA)); await request; });
   expect(trusted.readMerchantPickupOperation()).toBeUndefined();
+  await mounted.unmount(); value.cleanup();
+});
+
+test.each([
+  ['unavailable', new PublicApiError('not_found', 404)],
+  ['malformed', new MerchantCourierPickupContractError()],
+  ['authority_lost', new PublicApiError('access_denied', 403)],
+] as const)('merchant switch retires %s terminal state and its order identity', async (status, failure) => {
+  const value = setup(async () => { throw failure; });
+  const mounted = await render(value.tree());
+  await act(async () => { await read.inspectOrder(orderA); });
+  expect(read.state).toEqual({ status, orderId: orderA });
+  expect(trusted.readMerchantPickupOperation()).toBeUndefined();
+  expect(value.service.load).toHaveBeenCalledTimes(1);
+
+  value.setSelected(merchantB);
+  await mounted.rerender(value.tree());
+  expect(read.state).toEqual({ status: 'idle' });
+  expect(read.state).not.toHaveProperty('orderId');
+  expect(trusted.readMerchantPickupOperation()).toBeUndefined();
+  expect(value.service.load).toHaveBeenCalledTimes(1);
+  await mounted.unmount(); value.cleanup();
+});
+
+test('same selection preserves terminal state while continuity replacement retires it', async () => {
+  const value = setup(async () => { throw new PublicApiError('not_found', 404); });
+  const mounted = await render(value.tree());
+  await act(async () => { await read.inspectOrder(orderA); });
+  expect(read.state).toEqual({ status: 'unavailable', orderId: orderA });
+
+  await mounted.rerender(value.tree());
+  expect(read.state).toEqual({ status: 'unavailable', orderId: orderA });
+  value.replaceIdentity();
+  await mounted.rerender(value.tree());
+  expect(read.state).toEqual({ status: 'idle' });
+  expect(read.state).not.toHaveProperty('orderId');
+  expect(value.service.load).toHaveBeenCalledTimes(1);
+  await mounted.unmount(); value.cleanup();
+});
+
+test('selection loss retires ready state without loading another operation', async () => {
+  const value = setup(async () => pickup(pickupA));
+  const mounted = await render(value.tree());
+  await act(async () => { await read.inspectOrder(orderA); });
+  expect(read.state.status).toBe('ready');
+  expect(trusted.readMerchantPickupOperation()).toBeDefined();
+
+  value.setSelected(undefined);
+  await mounted.rerender(value.tree());
+  expect(read.state).toEqual({ status: 'idle' });
+  expect(trusted.readMerchantPickupOperation()).toBeUndefined();
+  expect(value.service.load).toHaveBeenCalledTimes(1);
+  await mounted.unmount(); value.cleanup();
+});
+
+test('direct merchant switch retires ready state and trusted operation without loading merchant B', async () => {
+  const value = setup(async () => pickup(pickupA));
+  const mounted = await render(value.tree());
+  await act(async () => { await read.inspectOrder(orderA); });
+  expect(trusted.readMerchantPickupOperation()).toMatchObject({ merchantId: merchantA, orderId: orderA });
+  value.setSelected(merchantB);
+  await mounted.rerender(value.tree());
+  expect(read.state).toEqual({ status: 'idle' });
+  expect(trusted.readMerchantPickupOperation()).toBeUndefined();
+  expect(value.service.load).toHaveBeenCalledTimes(1);
+  await mounted.unmount(); value.cleanup();
+});
+
+test('merchant switch retires stale and refreshing presentation without an automatic read', async () => {
+  const pendingRefreshResult = deferred<MerchantCourierPickupSnapshot>();
+  let calls = 0;
+  const value = setup(async () => {
+    if (++calls === 1) return pickup(pickupA);
+    if (calls === 2) throw new PublicApiError('temporarily_unavailable', 503);
+    if (calls === 3) return pickup(pickupA);
+    return pendingRefreshResult.promise;
+  });
+  const mounted = await render(value.tree());
+  await act(async () => { await read.inspectOrder(orderA); await read.refresh(); });
+  expect(read.state.status).toBe('stale');
+  value.setSelected(merchantB);
+  await mounted.rerender(value.tree());
+  expect(read.state).toEqual({ status: 'idle' });
+  expect(value.service.load).toHaveBeenCalledTimes(2);
+
+  value.setSelected(merchantA);
+  await mounted.rerender(value.tree());
+  let pending!: Promise<unknown>;
+  await act(async () => { pending = read.inspectOrder(orderA); await pending; });
+  expect(read.state.status).toBe('ready');
+  let pendingRefresh!: Promise<unknown>;
+  await act(async () => { pendingRefresh = read.refresh(); await Promise.resolve(); });
+  expect(read.state.status).toBe('refreshing');
+  value.setSelected(merchantB);
+  await mounted.rerender(value.tree());
+  expect(read.state).toEqual({ status: 'idle' });
+  expect(trusted.readMerchantPickupOperation()).toBeUndefined();
+  expect(value.service.load).toHaveBeenCalledTimes(4);
+  await act(async () => { pendingRefreshResult.resolve(pickup(pickupA)); await pendingRefresh; });
+  expect(read.state).toEqual({ status: 'idle' });
+  await mounted.unmount(); value.cleanup();
+});
+
+test('merchant switch removes invalid lookup input without an automatic read', async () => {
+  const value = setup(async () => pickup(pickupA));
+  const mounted = await render(value.tree());
+  await act(async () => { await read.inspectOrder('../merchant-a-order'); });
+  expect(read.state).toEqual({ status: 'unavailable', orderId: '../merchant-a-order' });
+  value.setSelected(merchantB);
+  await mounted.rerender(value.tree());
+  expect(read.state).toEqual({ status: 'idle' });
+  expect(read.state).not.toHaveProperty('orderId');
+  expect(value.service.load).not.toHaveBeenCalled();
   await mounted.unmount(); value.cleanup();
 });
 
