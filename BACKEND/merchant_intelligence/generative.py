@@ -36,16 +36,26 @@ _SEMANTICS: dict[str, tuple[str, bool, str]] = {
     "ACK_IN_PROGRESS": ("acknowledging_arrival", False, "informative"),
     "ACK_CONFIRMED": ("arrival_acknowledged", False, "positive"),
     "ACK_RESULT_UNCERTAIN_RECONCILIATION_AVAILABLE": (
-        "check_acknowledgement_status", True, "caution"
+        "check_acknowledgement_status",
+        True,
+        "caution",
     ),
     "ACK_RECONCILIATION_IN_PROGRESS": (
-        "checking_acknowledgement_status", False, "informative"
+        "checking_acknowledgement_status",
+        False,
+        "informative",
     ),
     "ACK_SAME_ATTEMPT_RETRY_AVAILABLE": ("retry_same_acknowledgement", True, "caution"),
     "ACK_RETRY_ALLOWED_BY_CAPABILITY": ("retry_acknowledgement", True, "caution"),
-    "ACK_RESULT_UNCERTAIN_NO_CURRENT_ACTION": ("acknowledgement_issue", False, "caution"),
+    "ACK_RESULT_UNCERTAIN_NO_CURRENT_ACTION": (
+        "acknowledgement_issue",
+        False,
+        "caution",
+    ),
     "ACK_SAME_ATTEMPT_RETRY_NOT_CURRENTLY_ALLOWED": (
-        "acknowledgement_issue", False, "caution"
+        "acknowledgement_issue",
+        False,
+        "caution",
     ),
     "ACK_REJECTED_NO_CURRENT_ACTION": ("acknowledgement_issue", False, "caution"),
 }
@@ -82,7 +92,9 @@ class MerchantGenerativeExplanationRequest(BaseModel):
         ):
             if value is not None and (
                 value != value.strip()
-                or any(ord(character) < 32 or ord(character) == 127 for character in value)
+                or any(
+                    ord(character) < 32 or ord(character) == 127 for character in value
+                )
             ):
                 raise ValueError("deterministic text is not canonical")
         if self.user_action_available != (self.deterministic_action_label is not None):

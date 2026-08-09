@@ -265,7 +265,8 @@ def create_app(
     custody_platform: CustodyPlatformActivation | None = None,
     delivery_platform: DeliveryPlatformActivation | None = None,
     field_operations_platform: FieldOperationsPlatformActivation | None = None,
-    merchant_generative_explanation: MerchantGenerativeExplanationActivation | None = None,
+    merchant_generative_explanation: MerchantGenerativeExplanationActivation
+    | None = None,
     engineering_runtime: EngineeringRuntime | None = None,
 ) -> FastAPI:
     configured = configuration or settings
@@ -989,9 +990,7 @@ def create_app(
             maximum_bytes=(
                 configured.MERCHANT_GENERATIVE_EXPLANATION_MAX_REQUEST_BYTES
             ),
-            path_fragments=(
-                "/mobile/merchant-intelligence/generative-explanation",
-            ),
+            path_fragments=("/mobile/merchant-intelligence/generative-explanation",),
         )
 
     @application.exception_handler(HTTPException)

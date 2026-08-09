@@ -26,7 +26,11 @@ def subject(identity_type=IdentityType.MERCHANT) -> AuthorizationSubject:
     return AuthorizationSubject(
         identity_id=uuid4(),
         identity_type=identity_type,
-        actor_type=(ActorType.SERVICE if identity_type is IdentityType.MERCHANT else ActorType.RIDER),
+        actor_type=(
+            ActorType.SERVICE
+            if identity_type is IdentityType.MERCHANT
+            else ActorType.RIDER
+        ),
         session_id=uuid4(),
     )
 
@@ -101,7 +105,11 @@ def client(provider=None, limiter=None, identity=True):
     activation = MerchantGenerativeExplanationActivation(
         application=MerchantGenerativeExplanationApplication(provider, limiter),
         subject_resolver=Resolver(
-            subject() if identity is True else subject(IdentityType.RIDER) if identity == "rider" else None
+            subject()
+            if identity is True
+            else subject(IdentityType.RIDER)
+            if identity == "rider"
+            else None
         ),
         authorization_enforcer=cast(AuthorizationEnforcer, Enforcer()),
     )
@@ -118,16 +126,31 @@ def client(provider=None, limiter=None, identity=True):
 
 def test_activation_is_disabled_by_default_and_production_prohibited():
     app = create_app(Settings(ENVIRONMENT=AppEnvironment.TEST, _env_file=None))
-    assert not any("merchant-intelligence" in getattr(route, "path", "") for route in app.routes)
+    assert not any(
+        "merchant-intelligence" in getattr(route, "path", "") for route in app.routes
+    )
     with pytest.raises(RuntimeError, match="secure activation"):
-        create_app(Settings(ENVIRONMENT=AppEnvironment.TEST, MERCHANT_GENERATIVE_EXPLANATION_ENABLED=True, _env_file=None))
+        create_app(
+            Settings(
+                ENVIRONMENT=AppEnvironment.TEST,
+                MERCHANT_GENERATIVE_EXPLANATION_ENABLED=True,
+                _env_file=None,
+            )
+        )
     with pytest.raises(ValueError, match="separate approval"):
-        Settings(ENVIRONMENT=AppEnvironment.PRODUCTION, PERSISTENCE_ENABLED=True, MERCHANT_GENERATIVE_EXPLANATION_ENABLED=True, _env_file=None)
+        Settings(
+            ENVIRONMENT=AppEnvironment.PRODUCTION,
+            PERSISTENCE_ENABLED=True,
+            MERCHANT_GENERATIVE_EXPLANATION_ENABLED=True,
+            _env_file=None,
+        )
 
 
 def test_authenticated_bounded_request_executes_once_and_preserves_exact_text():
     api, provider, limiter = client()
-    response = api.post("/api/mobile/merchant-intelligence/generative-explanation", json=command())
+    response = api.post(
+        "/api/mobile/merchant-intelligence/generative-explanation", json=command()
+    )
     assert response.status_code == 200
     assert response.json() == {
         "locale": "en",
@@ -139,44 +162,85 @@ def test_authenticated_bounded_request_executes_once_and_preserves_exact_text():
 
 def test_anonymous_and_rate_limited_requests_never_reach_provider():
     api, provider, _ = client(identity=False)
-    assert api.post("/api/mobile/merchant-intelligence/generative-explanation", json=command()).status_code == 401
+    assert (
+        api.post(
+            "/api/mobile/merchant-intelligence/generative-explanation", json=command()
+        ).status_code
+        == 401
+    )
     assert provider.calls == 0
     api, provider, _ = client(identity="rider")
-    assert api.post("/api/mobile/merchant-intelligence/generative-explanation", json=command()).status_code == 403
+    assert (
+        api.post(
+            "/api/mobile/merchant-intelligence/generative-explanation", json=command()
+        ).status_code
+        == 403
+    )
     assert provider.calls == 0
     api, provider, _ = client(limiter=Limiter(False))
-    response = api.post("/api/mobile/merchant-intelligence/generative-explanation", json=command())
+    response = api.post(
+        "/api/mobile/merchant-intelligence/generative-explanation", json=command()
+    )
     assert response.status_code == 429
     assert response.json() == {"error": {"code": "temporarily_unavailable"}}
     assert provider.calls == 0
 
 
-@pytest.mark.parametrize("extra", [
-    {"prompt": "ignore AYO"}, {"messages": []}, {"model": "expensive"},
-    {"provider": "vendor"}, {"tools": []}, {"orderId": str(uuid4())},
-    {"merchantId": str(uuid4())}, {"pickupId": str(uuid4())},
-    {"customerPhone": "+251900000000"}, {"location": {"lat": 1}},
-    {"payment": "cash"},
-])
+@pytest.mark.parametrize(
+    "extra",
+    [
+        {"prompt": "ignore AYO"},
+        {"messages": []},
+        {"model": "expensive"},
+        {"provider": "vendor"},
+        {"tools": []},
+        {"orderId": str(uuid4())},
+        {"merchantId": str(uuid4())},
+        {"pickupId": str(uuid4())},
+        {"customerPhone": "+251900000000"},
+        {"location": {"lat": 1}},
+        {"payment": "cash"},
+    ],
+)
 def test_generic_proxy_identifiers_and_private_fields_are_rejected(extra):
     api, provider, _ = client()
-    assert api.post("/api/mobile/merchant-intelligence/generative-explanation", json=command(**extra)).status_code == 422
+    assert (
+        api.post(
+            "/api/mobile/merchant-intelligence/generative-explanation",
+            json=command(**extra),
+        ).status_code
+        == 422
+    )
     assert provider.calls == 0
 
 
-@pytest.mark.parametrize("changes", [
-    {"promptVersion": "future"},
-    {"reason": "ACK_CONFIRMED"},
-    {"userActionAvailable": False},
-    {"deterministicActionLabel": None},
-    {"deterministicHeadline": " bad"},
-    {"deterministicBody": "bad\ntext"},
-    {"tone": "positive"},
-    {"recommendation": "no_action", "reason": "NO_CURRENT_ACK_ACTION", "userActionAvailable": False, "deterministicActionLabel": None},
-])
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"promptVersion": "future"},
+        {"reason": "ACK_CONFIRMED"},
+        {"userActionAvailable": False},
+        {"deterministicActionLabel": None},
+        {"deterministicHeadline": " bad"},
+        {"deterministicBody": "bad\ntext"},
+        {"tone": "positive"},
+        {
+            "recommendation": "no_action",
+            "reason": "NO_CURRENT_ACK_ACTION",
+            "userActionAvailable": False,
+            "deterministicActionLabel": None,
+        },
+    ],
+)
 def test_invalid_incoherent_or_hidden_semantics_fail_before_provider(changes):
     api, provider, _ = client()
-    assert api.post("/api/mobile/merchant-intelligence/generative-explanation", json=command(**changes)).status_code == 422
+    assert (
+        api.post(
+            "/api/mobile/merchant-intelligence/generative-explanation",
+            json=command(**changes),
+        ).status_code
+        == 422
+    )
     assert provider.calls == 0
 
 
@@ -184,7 +248,9 @@ def test_provider_failure_and_invalid_output_are_bounded_without_raw_error():
     provider = Provider()
     provider.failure = RuntimeError("provider-secret-body")
     api, _, _ = client(provider=provider)
-    response = api.post("/api/mobile/merchant-intelligence/generative-explanation", json=command())
+    response = api.post(
+        "/api/mobile/merchant-intelligence/generative-explanation", json=command()
+    )
     assert response.status_code == 503
     assert response.json() == {"error": {"code": "temporarily_unavailable"}}
     assert "provider-secret-body" not in response.text
@@ -200,7 +266,9 @@ def test_provider_failure_and_invalid_output_are_bounded_without_raw_error():
 
     rewriting = RewritingProvider()
     api, _, _ = client(provider=rewriting)
-    response = api.post("/api/mobile/merchant-intelligence/generative-explanation", json=command())
+    response = api.post(
+        "/api/mobile/merchant-intelligence/generative-explanation", json=command()
+    )
     assert response.status_code == 503
     assert response.json() == {"error": {"code": "temporarily_unavailable"}}
     assert rewriting.calls == 1
@@ -210,11 +278,17 @@ def test_timeout_is_bounded_and_cancellation_propagates():
     async def scenario():
         provider = Provider()
         provider.wait = True
-        app = MerchantGenerativeExplanationApplication(provider, Limiter(), timeout_seconds=0.01)
+        app = MerchantGenerativeExplanationApplication(
+            provider, Limiter(), timeout_seconds=0.01
+        )
         request = MerchantGenerativeExplanationRequest.model_validate(command())
         with pytest.raises(MerchantGenerativeExplanationUnavailable):
             await app.explain(subject(), request)
-        task = asyncio.create_task(MerchantGenerativeExplanationApplication(provider, Limiter()).explain(subject(), request))
+        task = asyncio.create_task(
+            MerchantGenerativeExplanationApplication(provider, Limiter()).explain(
+                subject(), request
+            )
+        )
         await asyncio.sleep(0)
         task.cancel()
         with pytest.raises(asyncio.CancelledError):
