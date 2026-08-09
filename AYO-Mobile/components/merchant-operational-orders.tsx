@@ -3,14 +3,13 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 
 import { useAuthenticatedRead, useIdentityContinuity } from '@/contexts/identity-session';
 import { useLanguage } from '@/contexts/language';
-import { useMerchantAcknowledgeArrivalCapability } from '@/contexts/merchant-acknowledge-arrival-capability';
+import { useMerchantAcknowledgeArrivalCapability, type MerchantAcknowledgeArrivalPresentationCapability } from '@/contexts/merchant-acknowledge-arrival-capability';
 import { useMerchantOperationalPickup } from '@/contexts/merchant-operational-pickup';
 import { recommendMerchantOperationalAction, type MerchantAcknowledgementPresentationStatus } from '@/domain/merchant-operational-intelligence';
 import { MerchantOperationalOrderContractError, type MerchantOperationalOrder } from '@/domain/merchant-operational-order';
 import { explainMerchantOperationalIntelligence, type MerchantOperationalIntelligenceLanguage } from '@/localization/merchant-operational-intelligence';
 import { merchantOperationalOrderCopy } from '@/localization/merchant-operational-orders';
 import { PublicApiError } from '@/services/api-foundation';
-import type { MerchantAcknowledgeArrivalControllerState } from '@/services/merchant-acknowledge-arrival-controller';
 import { MerchantOperationalOrderService } from '@/services/merchant-operational-orders';
 
 type ListState =
@@ -143,7 +142,7 @@ function MerchantArrivalAcknowledgement() {
   return canAcknowledge ? <View style={styles.ackStatus}><IntelligenceGuidance guidance={guidance} /><Pressable accessibilityLabel={copy.acknowledgeArrival} accessibilityRole="button" onPress={acknowledge} style={styles.ackButton}><Text style={styles.ackButtonText}>{copy.acknowledgeArrival}</Text></Pressable></View> : null;
 }
 
-function intelligenceStatus(state: MerchantAcknowledgeArrivalControllerState): MerchantAcknowledgementPresentationStatus {
+function intelligenceStatus(state: MerchantAcknowledgeArrivalPresentationCapability['state']): MerchantAcknowledgementPresentationStatus {
   switch (state.status) {
     case 'idle': case 'submitting': case 'reconciling': case 'applied': case 'outcome_unknown':
     case 'retry_same_attempt': case 'rejected': case 'invalidated': return state.status;
