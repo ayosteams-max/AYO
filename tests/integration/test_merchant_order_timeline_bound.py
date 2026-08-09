@@ -9,7 +9,11 @@ from BACKEND.audit.models import ActorType
 from BACKEND.authorization.contracts import AuthorizationSubject
 from BACKEND.identity.models import IdentityType
 from BACKEND.merchant_orders.application import MerchantOrderApplication
-from BACKEND.merchant_orders.models import MerchantOrderAction, MerchantOrderView
+from BACKEND.merchant_orders.models import (
+    MerchantOrderAction,
+    MerchantOrderRecord,
+    MerchantOrderView,
+)
 from BACKEND.merchant_preparation.application import MerchantPreparationApplication
 from BACKEND.merchant_preparation.models import PreparationAction
 from BACKEND.ordering.application import OrderingApplication
@@ -37,6 +41,7 @@ CUSTOMER = UUID("11111111-1111-4111-8111-111111111111")
 MERCHANT_OWNER = UUID("22222222-2222-4222-8222-222222222222")
 MERCHANT = UUID("33333333-3333-4333-8333-333333333333")
 ITEM = UUID("44444444-4444-4444-8444-444444444444")
+ACCESS_INTERACTION = UUID("55555555-5555-4555-8555-555555555555")
 
 
 def subject(identity_id: UUID) -> AuthorizationSubject:
@@ -201,6 +206,7 @@ def test_real_merchant_order_producer_has_hard_103_event_maximum(
         lines=(BasketLine(item_id=ITEM, quantity=1, observed_version=1),),
         idempotency_key="timeline-order-create-0001",
         at=NOW,
+        access_interaction_id=ACCESS_INTERACTION,
     )
 
     def projected() -> MerchantOrderView:
@@ -208,7 +214,31 @@ def test_real_merchant_order_producer_has_hard_103_event_maximum(
             owner, merchant_id=MERCHANT, order_id=created.order_id, at=NOW
         )
 
-    assert [event.event_type for event in projected().timeline] == [
+    created_view = projected()
+    assert MerchantOrderRecord.model_config["extra"] == "forbid"
+    assert set(created.model_dump()) - set(created_view.order.model_dump()) == {
+        "access_interaction_id",
+        "availability_evaluation_id",
+        "composition_hash",
+        "customer_identity_id",
+    }
+    assert set(created_view.order.model_dump()) == {
+        "created_at",
+        "evidence_hash",
+        "lines",
+        "merchant_display_name",
+        "merchant_id",
+        "order_id",
+        "pricing",
+        "state",
+        "version",
+    }
+    assert created.access_interaction_id == ACCESS_INTERACTION
+    assert created.composition_hash is not None
+    assert orders.list_orders(
+        owner, merchant_id=MERCHANT, state=None, limit=25, at=NOW
+    ) == (created_view,)
+    assert [event.event_type for event in created_view.timeline] == [
         "commerce.order.created"
     ]
 

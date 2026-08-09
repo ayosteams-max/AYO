@@ -382,7 +382,7 @@ class PostgresMerchantOrderRepository:
             .one_or_none()
         )
         safe_order = MerchantOrderRecord.model_validate(
-            order.model_dump(exclude={"customer_identity_id"})
+            order.model_dump(include=set(MerchantOrderRecord.model_fields))
         )
         return MerchantOrderView(
             order=safe_order,
