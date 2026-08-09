@@ -21,6 +21,7 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 const hash = /^[a-f0-9]{64}$/;
 const eventType = /^[a-z][a-z0-9_.]{2,62}$/;
 const rejectionReason = /^[a-z][a-z0-9_]{2,62}$/;
+const maxMerchantOrderTimelineEvents = 103;
 const states = new Set<MerchantOperationalOrderState>([
   'waiting_for_merchant_confirmation', 'accepted', 'rejected', 'preparing', 'ready_for_pickup',
 ]);
@@ -97,7 +98,7 @@ function parseView(value: unknown, expectedMerchantId: string): MerchantOperatio
   text(pricing.policy_version, 3, 63); safeInteger(pricing.subtotal_minor);
   if (typeof pricing.evidence_hash !== 'string' || !hash.test(pricing.evidence_hash)) throw new MerchantOperationalOrderContractError();
   if (typeof order.evidence_hash !== 'string' || !hash.test(order.evidence_hash)) throw new MerchantOperationalOrderContractError();
-  if (!Array.isArray(view.timeline) || view.timeline.length > 100) throw new MerchantOperationalOrderContractError();
+  if (!Array.isArray(view.timeline) || view.timeline.length > maxMerchantOrderTimelineEvents) throw new MerchantOperationalOrderContractError();
   view.timeline.forEach((event) => validateTimeline(event, orderId, merchantId));
   if (view.rejection !== null) {
     const rejection = object(view.rejection, ['order_id', 'customer_reason_code', 'customer_message', 'internal_merchant_note', 'decided_by_identity_id', 'decided_at']);

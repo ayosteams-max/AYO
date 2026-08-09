@@ -30,6 +30,31 @@ function whitespaceView() {
   return { ...base, rejection: { order_id: orderId, customer_reason_code: 'merchant_declined', customer_message: ' This item cannot be prepared today. ', internal_merchant_note: null, decided_by_identity_id: '44444444-4444-4444-8444-444444444444', decided_at: '2026-08-09T01:01:00Z' } };
 }
 
+function lifecycleView(timelineLength: number) {
+  const event = (index: number, eventType: string, fromState: string | null, toState: string) => ({
+    event_id: `${(index + 1).toString(16).padStart(8, '0')}-5555-4555-8555-555555555555`,
+    order_id: orderId,
+    merchant_id: merchantId,
+    event_type: eventType,
+    from_state: fromState,
+    to_state: toState,
+    actor_identity_id: null,
+    order_version: index + 1,
+    customer_reason_code: null,
+    occurred_at: `2026-08-09T01:${Math.floor(index / 60).toString().padStart(2, '0')}:${(index % 60).toString().padStart(2, '0')}Z`,
+  });
+  const timeline = [
+    event(0, 'commerce.order.created', null, 'waiting_for_merchant_confirmation'),
+    event(1, 'commerce.order.accepted', 'waiting_for_merchant_confirmation', 'accepted'),
+    event(2, 'commerce.order.preparing', 'accepted', 'preparing'),
+    ...Array.from({ length: 99 }, (_, progress) => event(progress + 3, 'commerce.order.preparation_progress', 'preparing', 'preparing')),
+    event(102, 'commerce.order.ready_for_pickup', 'preparing', 'ready_for_pickup'),
+    event(103, 'commerce.order.preparation_progress', 'ready_for_pickup', 'ready_for_pickup'),
+  ].slice(0, timelineLength);
+  const ready = timelineLength >= 103;
+  return { ...view({ state: ready ? 'ready_for_pickup' : 'preparing', version: timelineLength }), timeline };
+}
+
 test('strict list parser returns only bounded merchant-safe operational fields', () => {
   const result = parseMerchantOperationalOrders([view()], merchantId);
   assert.deepEqual(result, [{ orderId, merchantId, state: 'ready_for_pickup', version: 4, createdAt: '2026-08-09T01:00:00Z' }]);
@@ -103,6 +128,15 @@ test('impossible, non-canonical and timezone-less timestamps reject the whole li
   assert.throws(() => parseMerchantOperationalOrders([{ ...view(), timeline: [timeline('2026-02-30T00:00:00Z')] }], merchantId), MerchantOperationalOrderContractError);
   const rejected = whitespaceView();
   assert.throws(() => parseMerchantOperationalOrders([{ ...rejected, rejection: { ...rejected.rejection, decided_at: '2025-02-29T00:00:00Z' } }], merchantId), MerchantOperationalOrderContractError);
+});
+
+test('producer-backed merchant order timeline boundaries accept 100 through 103 and reject 104', () => {
+  for (const timelineLength of [100, 101, 102, 103]) {
+    const result = parseMerchantOperationalOrders([lifecycleView(timelineLength)], merchantId);
+    assert.equal(result.length, 1);
+    assert.equal(result[0].version, timelineLength);
+  }
+  assert.throws(() => parseMerchantOperationalOrders([lifecycleView(104)], merchantId), MerchantOperationalOrderContractError);
 });
 
 test('genuinely malformed bounded strings, identifiers, hashes, literals and patterns still reject the whole list', () => {
