@@ -237,6 +237,7 @@ test('actionable idle shows one localized ACK action; mount and non-actionable i
   expect(value.acknowledgeArrival).not.toHaveBeenCalled(); expect(value.reconcileAcknowledgeArrival).not.toHaveBeenCalled();
   expect(screen.queryByLabelText('Acknowledge arrival')).toBeNull();
   await act(async () => { fireEvent.press(screen.getByLabelText('Order 33333333. Ready for pickup')); });
+  expect(screen.getByText('Courier has arrived')).toBeTruthy(); expect(screen.getByText('You can acknowledge the courier’s arrival now.')).toBeTruthy();
   expect(screen.getByLabelText('Acknowledge arrival')).toBeTruthy();
   await act(async () => { fireEvent.press(screen.getByLabelText('Acknowledge arrival')); });
   expect(value.acknowledgeArrival).toHaveBeenCalledTimes(1); expect(value.reconcileAcknowledgeArrival).not.toHaveBeenCalled();
@@ -269,7 +270,7 @@ test('submitting and reconciling are disabled, restrained, and cannot duplicate 
 test('applied confirms arrival without another mutation or navigation action', async () => {
   const read = jest.fn<Promise<unknown>, [string, AbortSignal?]>(async () => [view(merchantA, orderA)]); const value = setup(read); value.setAcknowledgement(Object.freeze({ status: 'applied' }));
   await render(value.tree()); await screen.findByText('Order 33333333'); await act(async () => { fireEvent.press(screen.getByLabelText('Order 33333333. Ready for pickup')); });
-  expect(screen.getByText('Arrival acknowledged')).toBeTruthy(); expect(value.acknowledgeArrival).not.toHaveBeenCalled(); expect(value.reconcileAcknowledgeArrival).not.toHaveBeenCalled();
+  expect(screen.getByText('Arrival acknowledged')).toBeTruthy(); expect(screen.getByText('The courier’s arrival has been confirmed.')).toBeTruthy(); expect(value.acknowledgeArrival).not.toHaveBeenCalled(); expect(value.reconcileAcknowledgeArrival).not.toHaveBeenCalled();
 });
 
 test('publication replacement presentation follows the locked capability and removes stale applied state', async () => {
@@ -283,8 +284,9 @@ test('publication replacement presentation follows the locked capability and rem
 test('outcome unknown never claims success and offers explicit status check only under capability authority', async () => {
   const read = jest.fn<Promise<unknown>, [string, AbortSignal?]>(async () => [view(merchantA, orderA)]); const value = setup(read); value.setAcknowledgement(Object.freeze({ status: 'outcome_unknown' }));
   const mounted = await render(value.tree()); await screen.findByText('Order 33333333'); await act(async () => { fireEvent.press(screen.getByLabelText('Order 33333333. Ready for pickup')); });
-  expect(screen.getByText('We could not confirm the result yet.')).toBeTruthy(); expect(screen.queryByText('Arrival acknowledged')).toBeNull(); expect(screen.queryByLabelText('Check status')).toBeNull(); expect(value.reconcileAcknowledgeArrival).not.toHaveBeenCalled();
+  expect(screen.getByText('Confirmation not clear yet')).toBeTruthy(); expect(screen.getByText('AYO could not confirm the result. No action is available right now.')).toBeTruthy(); expect(screen.queryByText('Arrival acknowledged')).toBeNull(); expect(screen.queryByLabelText('Check status')).toBeNull(); expect(value.reconcileAcknowledgeArrival).not.toHaveBeenCalled();
   value.setAcknowledgement(Object.freeze({ status: 'outcome_unknown' }), false, true); await mounted.rerender(value.tree());
+  expect(screen.getByText('AYO could not confirm the result. You can check the current status.')).toBeTruthy();
   await act(async () => { fireEvent.press(screen.getByLabelText('Check status')); });
   expect(value.reconcileAcknowledgeArrival).toHaveBeenCalledTimes(1); expect(value.acknowledgeArrival).not.toHaveBeenCalled();
 });
@@ -292,6 +294,7 @@ test('outcome unknown never claims success and offers explicit status check only
 test('same-attempt retry is explicit and delegates only through the locked capability', async () => {
   const read = jest.fn<Promise<unknown>, [string, AbortSignal?]>(async () => [view(merchantA, orderA)]); const value = setup(read); value.setAcknowledgement(Object.freeze({ status: 'retry_same_attempt' }), true);
   await render(value.tree()); await screen.findByText('Order 33333333'); await act(async () => { fireEvent.press(screen.getByLabelText('Order 33333333. Ready for pickup')); });
+  expect(screen.getByText('You can retry the same acknowledgement safely.')).toBeTruthy();
   await act(async () => { fireEvent.press(screen.getByLabelText('Try again')); });
   expect(value.acknowledgeArrival).toHaveBeenCalledTimes(1); expect(value.reconcileAcknowledgeArrival).not.toHaveBeenCalled();
 });
@@ -299,7 +302,7 @@ test('same-attempt retry is explicit and delegates only through the locked capab
 test('rejected state is bounded, hides internal reason, and only retries when capability permits', async () => {
   const read = jest.fn<Promise<unknown>, [string, AbortSignal?]>(async () => [view(merchantA, orderA)]); const value = setup(read); value.setAcknowledgement(Object.freeze({ status: 'rejected', reason: 'temporarily_unavailable' }));
   const mounted = await render(value.tree()); await screen.findByText('Order 33333333'); await act(async () => { fireEvent.press(screen.getByLabelText('Order 33333333. Ready for pickup')); });
-  expect(screen.getByText('Arrival was not acknowledged.')).toBeTruthy(); expect(screen.queryByText(/temporarily_unavailable|refresh_required/)).toBeNull(); expect(screen.queryByLabelText('Try again')).toBeNull();
+  expect(screen.getByText('Action not available right now')).toBeTruthy(); expect(screen.getByText('The arrival acknowledgement did not complete, and no action is available right now.')).toBeTruthy(); expect(screen.queryByText(/temporarily_unavailable|refresh_required/)).toBeNull(); expect(screen.queryByLabelText('Try again')).toBeNull();
   value.setAcknowledgement(Object.freeze({ status: 'rejected', reason: 'refresh_required' }), true); await mounted.rerender(value.tree());
   await act(async () => { fireEvent.press(screen.getByLabelText('Try again')); }); expect(value.acknowledgeArrival).toHaveBeenCalledTimes(1);
 });

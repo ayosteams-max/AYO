@@ -786,3 +786,11 @@ Supersedes / superseded by:
 - **Problem:** Future merchant guidance needs to explain trusted acknowledgement state and the next safe action without receiving or reconstructing command authority.
 - **Decision:** Add one deterministic, synchronous and immutable recommendation function over privacy-minimal presentation evidence: ACK status and the bounded capability's two actionability predicates. It emits typed recommendation and reason keys only. Capability predicates remain final action authority; unknown or contradictory evidence fails closed. The intelligence has no command callback, controller, scope, identifier, attempt, key, service or transport.
 - **Boundary:** This first intelligence capability advises only. It adds no LLM/model, arbitrary prose, external request, autonomous action, UI, localization, persistence, backend, schema, dependency, polling or timer. Future natural-language intelligence must consume the bounded recommendation rather than command internals. PRE-PRODUCTION only.
+
+### AP-061 — AYO Intelligence Phase 2 bounded natural-language explanation
+
+- **Date:** 2026-08-10
+- **Status:** Founder/CEO implementation authorization granted; awaiting CTO review. Merge, generative-model integration and production activation remain unauthorized.
+- **Problem:** The merchant ACK panel exposes correct bounded state and controls, but merchants need a concise explanation of what is happening, why, and what safe next action is available without giving a language layer command authority.
+- **Decision:** Convert only the locked Phase 1 recommendation into deterministic English/Amharic headline, body and optional descriptive action-label semantics. Replace competing ACK state prose in the existing panel with this single guidance source while leaving all buttons and invocation ownership in the locked presentation capability. Exhaustive reason mapping and an exhaustive capability-state adapter prevent silent drift; malformed combinations fail closed to hidden neutral language.
+- **Boundary:** Phase 2 has no command callback, identifier, model/LLM, prompt, external network, persistence, polling, timer or autonomous action. Amharic operational wording remains `NEEDS_NATIVE_AMHARIC_REVIEW`. PRE-PRODUCTION only. Any future generative intelligence must consume this bounded language contract rather than command internals.
