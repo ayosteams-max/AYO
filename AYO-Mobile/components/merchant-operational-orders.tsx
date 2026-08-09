@@ -3,6 +3,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 
 import { useAuthenticatedRead, useIdentityContinuity } from '@/contexts/identity-session';
 import { useLanguage } from '@/contexts/language';
+import { useMerchantAcknowledgeArrivalCapability } from '@/contexts/merchant-acknowledge-arrival-capability';
 import { useMerchantOperationalPickup } from '@/contexts/merchant-operational-pickup';
 import { MerchantOperationalOrderContractError, type MerchantOperationalOrder } from '@/domain/merchant-operational-order';
 import { merchantOperationalOrderCopy } from '@/localization/merchant-operational-orders';
@@ -110,11 +111,31 @@ function SelectedPickup({ order }: { order: MerchantOperationalOrder }) {
   let message = copy.pickupUnavailable;
   if ((state.status === 'loading' || state.status === 'unavailable' || state.status === 'malformed' || state.status === 'authority_lost') && state.orderId === order.orderId) message = state.status === 'loading' ? copy.pickupLoading : state.status === 'malformed' ? copy.pickupMalformed : state.status === 'authority_lost' ? copy.pickupAuthorityLost : copy.pickupUnavailable;
   if ((state.status === 'ready' || state.status === 'refreshing' || state.status === 'stale') && state.value.orderId === order.orderId) message = state.status === 'stale' || state.status === 'refreshing' ? copy.pickupStale : copy[state.value.pickup.state];
-  return <View accessibilityLiveRegion="polite" style={styles.pickup}><Text style={styles.selected}>{copy.selected}</Text><Text style={styles.orderTitle}>{copy.orderLabel} {order.orderId.slice(0, 8).toUpperCase()}</Text><Text style={styles.help}>{message}</Text></View>;
+  return <View accessibilityLiveRegion="polite" style={styles.pickup}><Text style={styles.selected}>{copy.selected}</Text><Text style={styles.orderTitle}>{copy.orderLabel} {order.orderId.slice(0, 8).toUpperCase()}</Text><Text style={styles.help}>{message}</Text><MerchantArrivalAcknowledgement /></View>;
+}
+
+function MerchantArrivalAcknowledgement() {
+  const capability = useMerchantAcknowledgeArrivalCapability();
+  const { locale } = useLanguage();
+  const copy = merchantOperationalOrderCopy[locale];
+  const state = capability.state;
+  const canAcknowledge = capability.canAcknowledgeArrival();
+  const canReconcile = capability.canReconcileAcknowledgeArrival();
+  const acknowledge = () => { void capability.acknowledgeArrival().catch(() => undefined); };
+  const reconcile = () => { void capability.reconcileAcknowledgeArrival().catch(() => undefined); };
+
+  if (state.status === 'submitting') return <View style={styles.ackStatus}><ActivityIndicator color="#A78BFA" /><Text style={styles.help}>{copy.acknowledgingArrival}</Text><Pressable accessibilityLabel={copy.acknowledgingArrival} accessibilityRole="button" accessibilityState={{ disabled: true, busy: true }} disabled style={[styles.ackButton, styles.ackButtonDisabled]}><Text style={styles.ackButtonText}>{copy.acknowledgingArrival}</Text></Pressable></View>;
+  if (state.status === 'reconciling') return <View style={styles.ackStatus}><ActivityIndicator color="#A78BFA" /><Text style={styles.help}>{copy.checkingArrivalStatus}</Text><Pressable accessibilityLabel={copy.checkingArrivalStatus} accessibilityRole="button" accessibilityState={{ disabled: true, busy: true }} disabled style={[styles.ackButton, styles.ackButtonDisabled]}><Text style={styles.ackButtonText}>{copy.checkingArrivalStatus}</Text></Pressable></View>;
+  if (state.status === 'applied') return <Text accessibilityLiveRegion="polite" style={styles.ackConfirmed}>{copy.arrivalAcknowledged}</Text>;
+  if (state.status === 'outcome_unknown') return <View style={styles.ackStatus}><Text accessibilityLiveRegion="assertive" style={styles.warning}>{copy.arrivalOutcomeUnknown}</Text>{canReconcile ? <Pressable accessibilityLabel={copy.checkArrivalStatus} accessibilityRole="button" onPress={reconcile} style={styles.ackButton}><Text style={styles.ackButtonText}>{copy.checkArrivalStatus}</Text></Pressable> : null}</View>;
+  if (state.status === 'retry_same_attempt') return <View style={styles.ackStatus}><Text accessibilityLiveRegion="polite" style={styles.help}>{copy.arrivalRetryAvailable}</Text>{canAcknowledge ? <Pressable accessibilityLabel={copy.tryArrivalAgain} accessibilityRole="button" onPress={acknowledge} style={styles.ackButton}><Text style={styles.ackButtonText}>{copy.tryArrivalAgain}</Text></Pressable> : null}</View>;
+  if (state.status === 'rejected') return <View style={styles.ackStatus}><Text accessibilityLiveRegion="assertive" style={styles.warning}>{copy.arrivalNotAcknowledged}</Text>{canAcknowledge ? <Pressable accessibilityLabel={copy.tryArrivalAgain} accessibilityRole="button" onPress={acknowledge} style={styles.ackButton}><Text style={styles.ackButtonText}>{copy.tryArrivalAgain}</Text></Pressable> : null}</View>;
+  if (state.status === 'invalidated') return null;
+  return canAcknowledge ? <Pressable accessibilityLabel={copy.acknowledgeArrival} accessibilityRole="button" onPress={acknowledge} style={styles.ackButton}><Text style={styles.ackButtonText}>{copy.acknowledgeArrival}</Text></Pressable> : null;
 }
 
 const styles = StyleSheet.create({
   fill: { flex: 1, backgroundColor: '#07111F' }, content: { padding: 24, paddingTop: 42, paddingBottom: 36 }, badge: { alignSelf: 'flex-start', color: '#C4B5FD', backgroundColor: '#2E1065', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, fontSize: 12, fontWeight: '800', marginBottom: 16, overflow: 'hidden' },
   title: { color: '#FFFFFF', fontSize: 28, fontWeight: '800' }, heading: { color: '#DDD6FE', fontSize: 20, fontWeight: '800', marginTop: 8 }, help: { color: '#B8C4D2', fontSize: 15, lineHeight: 22, marginTop: 6 }, status: { flexDirection: 'row', gap: 12, alignItems: 'center', marginTop: 24 }, empty: { color: '#B8C4D2', fontSize: 16, paddingVertical: 28 }, warning: { color: '#FDE68A', backgroundColor: '#422006', borderRadius: 12, padding: 14, marginTop: 18 },
-  orders: { gap: 12, marginTop: 22 }, order: { minHeight: 92, padding: 16, borderRadius: 16, backgroundColor: '#151F31', borderWidth: 1, borderColor: '#334155' }, orderSelected: { borderColor: '#8B5CF6', backgroundColor: '#21183B' }, orderTitle: { color: '#FFFFFF', fontSize: 17, fontWeight: '800' }, orderState: { color: '#C4B5FD', fontSize: 14, fontWeight: '700', marginTop: 5 }, meta: { color: '#94A3B8', fontSize: 12, marginTop: 7 }, pickup: { marginTop: 22, borderRadius: 16, padding: 18, backgroundColor: '#111827', borderWidth: 1, borderColor: '#7C3AED' }, selected: { color: '#A78BFA', fontSize: 12, fontWeight: '800', marginBottom: 6 }, refresh: { minHeight: 48, marginTop: 22, borderRadius: 14, borderWidth: 1, borderColor: '#7C3AED', alignItems: 'center', justifyContent: 'center' }, refreshText: { color: '#DDD6FE', fontSize: 16, fontWeight: '800' },
+  orders: { gap: 12, marginTop: 22 }, order: { minHeight: 92, padding: 16, borderRadius: 16, backgroundColor: '#151F31', borderWidth: 1, borderColor: '#334155' }, orderSelected: { borderColor: '#8B5CF6', backgroundColor: '#21183B' }, orderTitle: { color: '#FFFFFF', fontSize: 17, fontWeight: '800' }, orderState: { color: '#C4B5FD', fontSize: 14, fontWeight: '700', marginTop: 5 }, meta: { color: '#94A3B8', fontSize: 12, marginTop: 7 }, pickup: { marginTop: 22, borderRadius: 16, padding: 18, backgroundColor: '#111827', borderWidth: 1, borderColor: '#7C3AED' }, selected: { color: '#A78BFA', fontSize: 12, fontWeight: '800', marginBottom: 6 }, ackStatus: { gap: 10, marginTop: 14 }, ackButton: { minHeight: 48, marginTop: 14, borderRadius: 14, backgroundColor: '#7C3AED', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 18 }, ackButtonDisabled: { opacity: 0.65 }, ackButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' }, ackConfirmed: { color: '#86EFAC', fontSize: 15, fontWeight: '800', marginTop: 14 }, refresh: { minHeight: 48, marginTop: 22, borderRadius: 14, borderWidth: 1, borderColor: '#7C3AED', alignItems: 'center', justifyContent: 'center' }, refreshText: { color: '#DDD6FE', fontSize: 16, fontWeight: '800' },
 });
