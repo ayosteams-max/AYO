@@ -5,9 +5,12 @@ import { useAuthenticatedRead, useIdentityContinuity } from '@/contexts/identity
 import { useLanguage } from '@/contexts/language';
 import { useMerchantAcknowledgeArrivalCapability } from '@/contexts/merchant-acknowledge-arrival-capability';
 import { useMerchantOperationalPickup } from '@/contexts/merchant-operational-pickup';
+import { recommendMerchantOperationalAction, type MerchantAcknowledgementPresentationStatus } from '@/domain/merchant-operational-intelligence';
 import { MerchantOperationalOrderContractError, type MerchantOperationalOrder } from '@/domain/merchant-operational-order';
+import { explainMerchantOperationalIntelligence, type MerchantOperationalIntelligenceLanguage } from '@/localization/merchant-operational-intelligence';
 import { merchantOperationalOrderCopy } from '@/localization/merchant-operational-orders';
 import { PublicApiError } from '@/services/api-foundation';
+import type { MerchantAcknowledgeArrivalControllerState } from '@/services/merchant-acknowledge-arrival-controller';
 import { MerchantOperationalOrderService } from '@/services/merchant-operational-orders';
 
 type ListState =
@@ -121,21 +124,47 @@ function MerchantArrivalAcknowledgement() {
   const state = capability.state;
   const canAcknowledge = capability.canAcknowledgeArrival();
   const canReconcile = capability.canReconcileAcknowledgeArrival();
+  const intelligence = recommendMerchantOperationalAction({
+    acknowledgementStatus: intelligenceStatus(state),
+    canAcknowledgeArrival: canAcknowledge,
+    canReconcileAcknowledgeArrival: canReconcile,
+  });
+  const guidance = explainMerchantOperationalIntelligence(intelligence, locale);
   const acknowledge = () => { void capability.acknowledgeArrival().catch(() => undefined); };
   const reconcile = () => { void capability.reconcileAcknowledgeArrival().catch(() => undefined); };
 
-  if (state.status === 'submitting') return <View style={styles.ackStatus}><ActivityIndicator color="#A78BFA" /><Text style={styles.help}>{copy.acknowledgingArrival}</Text><Pressable accessibilityLabel={copy.acknowledgingArrival} accessibilityRole="button" accessibilityState={{ disabled: true, busy: true }} disabled style={[styles.ackButton, styles.ackButtonDisabled]}><Text style={styles.ackButtonText}>{copy.acknowledgingArrival}</Text></Pressable></View>;
-  if (state.status === 'reconciling') return <View style={styles.ackStatus}><ActivityIndicator color="#A78BFA" /><Text style={styles.help}>{copy.checkingArrivalStatus}</Text><Pressable accessibilityLabel={copy.checkingArrivalStatus} accessibilityRole="button" accessibilityState={{ disabled: true, busy: true }} disabled style={[styles.ackButton, styles.ackButtonDisabled]}><Text style={styles.ackButtonText}>{copy.checkingArrivalStatus}</Text></Pressable></View>;
-  if (state.status === 'applied') return <Text accessibilityLiveRegion="polite" style={styles.ackConfirmed}>{copy.arrivalAcknowledged}</Text>;
-  if (state.status === 'outcome_unknown') return <View style={styles.ackStatus}><Text accessibilityLiveRegion="assertive" style={styles.warning}>{copy.arrivalOutcomeUnknown}</Text>{canReconcile ? <Pressable accessibilityLabel={copy.checkArrivalStatus} accessibilityRole="button" onPress={reconcile} style={styles.ackButton}><Text style={styles.ackButtonText}>{copy.checkArrivalStatus}</Text></Pressable> : null}</View>;
-  if (state.status === 'retry_same_attempt') return <View style={styles.ackStatus}><Text accessibilityLiveRegion="polite" style={styles.help}>{copy.arrivalRetryAvailable}</Text>{canAcknowledge ? <Pressable accessibilityLabel={copy.tryArrivalAgain} accessibilityRole="button" onPress={acknowledge} style={styles.ackButton}><Text style={styles.ackButtonText}>{copy.tryArrivalAgain}</Text></Pressable> : null}</View>;
-  if (state.status === 'rejected') return <View style={styles.ackStatus}><Text accessibilityLiveRegion="assertive" style={styles.warning}>{copy.arrivalNotAcknowledged}</Text>{canAcknowledge ? <Pressable accessibilityLabel={copy.tryArrivalAgain} accessibilityRole="button" onPress={acknowledge} style={styles.ackButton}><Text style={styles.ackButtonText}>{copy.tryArrivalAgain}</Text></Pressable> : null}</View>;
+  if (state.status === 'submitting') return <View style={styles.ackStatus}><ActivityIndicator color="#A78BFA" /><IntelligenceGuidance guidance={guidance} /><Pressable accessibilityLabel={copy.acknowledgingArrival} accessibilityRole="button" accessibilityState={{ disabled: true, busy: true }} disabled style={[styles.ackButton, styles.ackButtonDisabled]}><Text style={styles.ackButtonText}>{copy.acknowledgingArrival}</Text></Pressable></View>;
+  if (state.status === 'reconciling') return <View style={styles.ackStatus}><ActivityIndicator color="#A78BFA" /><IntelligenceGuidance guidance={guidance} /><Pressable accessibilityLabel={copy.checkingArrivalStatus} accessibilityRole="button" accessibilityState={{ disabled: true, busy: true }} disabled style={[styles.ackButton, styles.ackButtonDisabled]}><Text style={styles.ackButtonText}>{copy.checkingArrivalStatus}</Text></Pressable></View>;
+  if (state.status === 'applied') return <IntelligenceGuidance guidance={guidance} />;
+  if (state.status === 'outcome_unknown') return <View style={styles.ackStatus}><IntelligenceGuidance guidance={guidance} assertive />{canReconcile ? <Pressable accessibilityLabel={copy.checkArrivalStatus} accessibilityRole="button" onPress={reconcile} style={styles.ackButton}><Text style={styles.ackButtonText}>{copy.checkArrivalStatus}</Text></Pressable> : null}</View>;
+  if (state.status === 'retry_same_attempt') return <View style={styles.ackStatus}><IntelligenceGuidance guidance={guidance} />{canAcknowledge ? <Pressable accessibilityLabel={copy.tryArrivalAgain} accessibilityRole="button" onPress={acknowledge} style={styles.ackButton}><Text style={styles.ackButtonText}>{copy.tryArrivalAgain}</Text></Pressable> : null}</View>;
+  if (state.status === 'rejected') return <View style={styles.ackStatus}><IntelligenceGuidance guidance={guidance} assertive />{canAcknowledge ? <Pressable accessibilityLabel={copy.tryArrivalAgain} accessibilityRole="button" onPress={acknowledge} style={styles.ackButton}><Text style={styles.ackButtonText}>{copy.tryArrivalAgain}</Text></Pressable> : null}</View>;
   if (state.status === 'invalidated') return null;
-  return canAcknowledge ? <Pressable accessibilityLabel={copy.acknowledgeArrival} accessibilityRole="button" onPress={acknowledge} style={styles.ackButton}><Text style={styles.ackButtonText}>{copy.acknowledgeArrival}</Text></Pressable> : null;
+  return canAcknowledge ? <View style={styles.ackStatus}><IntelligenceGuidance guidance={guidance} /><Pressable accessibilityLabel={copy.acknowledgeArrival} accessibilityRole="button" onPress={acknowledge} style={styles.ackButton}><Text style={styles.ackButtonText}>{copy.acknowledgeArrival}</Text></Pressable></View> : null;
+}
+
+function intelligenceStatus(state: MerchantAcknowledgeArrivalControllerState): MerchantAcknowledgementPresentationStatus {
+  switch (state.status) {
+    case 'idle': case 'submitting': case 'reconciling': case 'applied': case 'outcome_unknown':
+    case 'retry_same_attempt': case 'rejected': case 'invalidated': return state.status;
+    default: return unsupportedState(state);
+  }
+}
+
+function unsupportedState(value: never): MerchantAcknowledgementPresentationStatus {
+  void value;
+  return '__unsupported__' as MerchantAcknowledgementPresentationStatus;
+}
+
+function IntelligenceGuidance({ guidance, assertive = false }: { guidance: MerchantOperationalIntelligenceLanguage; assertive?: boolean }) {
+  if (!guidance.visible) return null;
+  return <View accessibilityLiveRegion={assertive ? 'assertive' : 'polite'} style={[styles.intelligence, guidance.tone === 'caution' && styles.intelligenceCaution]}>
+    <Text style={styles.intelligenceHeadline}>{guidance.headline}</Text><Text style={styles.help}>{guidance.body}</Text>
+  </View>;
 }
 
 const styles = StyleSheet.create({
   fill: { flex: 1, backgroundColor: '#07111F' }, content: { padding: 24, paddingTop: 42, paddingBottom: 36 }, badge: { alignSelf: 'flex-start', color: '#C4B5FD', backgroundColor: '#2E1065', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, fontSize: 12, fontWeight: '800', marginBottom: 16, overflow: 'hidden' },
-  title: { color: '#FFFFFF', fontSize: 28, fontWeight: '800' }, heading: { color: '#DDD6FE', fontSize: 20, fontWeight: '800', marginTop: 8 }, help: { color: '#B8C4D2', fontSize: 15, lineHeight: 22, marginTop: 6 }, status: { flexDirection: 'row', gap: 12, alignItems: 'center', marginTop: 24 }, empty: { color: '#B8C4D2', fontSize: 16, paddingVertical: 28 }, warning: { color: '#FDE68A', backgroundColor: '#422006', borderRadius: 12, padding: 14, marginTop: 18 },
+  title: { color: '#FFFFFF', fontSize: 28, fontWeight: '800' }, heading: { color: '#DDD6FE', fontSize: 20, fontWeight: '800', marginTop: 8 }, help: { color: '#B8C4D2', fontSize: 15, lineHeight: 22, marginTop: 6 }, status: { flexDirection: 'row', gap: 12, alignItems: 'center', marginTop: 24 }, empty: { color: '#B8C4D2', fontSize: 16, paddingVertical: 28 }, warning: { color: '#FDE68A', backgroundColor: '#422006', borderRadius: 12, padding: 14, marginTop: 18 }, intelligence: { borderRadius: 12, padding: 14, backgroundColor: '#172033' }, intelligenceCaution: { backgroundColor: '#422006' }, intelligenceHeadline: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' },
   orders: { gap: 12, marginTop: 22 }, order: { minHeight: 92, padding: 16, borderRadius: 16, backgroundColor: '#151F31', borderWidth: 1, borderColor: '#334155' }, orderSelected: { borderColor: '#8B5CF6', backgroundColor: '#21183B' }, orderTitle: { color: '#FFFFFF', fontSize: 17, fontWeight: '800' }, orderState: { color: '#C4B5FD', fontSize: 14, fontWeight: '700', marginTop: 5 }, meta: { color: '#94A3B8', fontSize: 12, marginTop: 7 }, pickup: { marginTop: 22, borderRadius: 16, padding: 18, backgroundColor: '#111827', borderWidth: 1, borderColor: '#7C3AED' }, selected: { color: '#A78BFA', fontSize: 12, fontWeight: '800', marginBottom: 6 }, ackStatus: { gap: 10, marginTop: 14 }, ackButton: { minHeight: 48, marginTop: 14, borderRadius: 14, backgroundColor: '#7C3AED', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 18 }, ackButtonDisabled: { opacity: 0.65 }, ackButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' }, ackConfirmed: { color: '#86EFAC', fontSize: 15, fontWeight: '800', marginTop: 14 }, refresh: { minHeight: 48, marginTop: 22, borderRadius: 14, borderWidth: 1, borderColor: '#7C3AED', alignItems: 'center', justifyContent: 'center' }, refreshText: { color: '#DDD6FE', fontSize: 16, fontWeight: '800' },
 });
