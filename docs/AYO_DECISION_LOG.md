@@ -778,3 +778,11 @@ Supersedes / superseded by:
 - **Problem:** Merchants can select a canonical order and inspect trusted courier-arrival truth, but cannot yet explicitly acknowledge arrival from the merchant surface.
 - **Decision:** Add one calm localized action to the selected Pickup panel. Presentation consumes only the locked publication-scoped capability state and its actionability predicates; explicit taps delegate ACK, reconciliation or same-attempt retry to that capability. No render, mount, effect, timer or background path invokes a command.
 - **Boundary:** No command identity or infrastructure escapes to UI. No backend, schema, dependency, persistence, Custody, payment, courier/rider, automatic retry/reconciliation, polling or production activation is added. Amharic operational wording remains subject to native review.
+
+### AP-060 — AYO Intelligence Phase 1 bounded operational recommendation
+
+- **Date:** 2026-08-10
+- **Status:** Founder/CEO implementation authorization granted; awaiting CTO review. Merge, visible intelligence presentation, model integration and production activation remain unauthorized.
+- **Problem:** Future merchant guidance needs to explain trusted acknowledgement state and the next safe action without receiving or reconstructing command authority.
+- **Decision:** Add one deterministic, synchronous and immutable recommendation function over privacy-minimal presentation evidence: ACK status and the bounded capability's two actionability predicates. It emits typed recommendation and reason keys only. Capability predicates remain final action authority; unknown or contradictory evidence fails closed. The intelligence has no command callback, controller, scope, identifier, attempt, key, service or transport.
+- **Boundary:** This first intelligence capability advises only. It adds no LLM/model, arbitrary prose, external request, autonomous action, UI, localization, persistence, backend, schema, dependency, polling or timer. Future natural-language intelligence must consume the bounded recommendation rather than command internals. PRE-PRODUCTION only.
