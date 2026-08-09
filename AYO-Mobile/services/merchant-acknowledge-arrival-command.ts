@@ -113,6 +113,7 @@ export class MerchantAcknowledgeArrivalCommandService {
         () => merchantAcknowledgeArrivalAttemptMatchesScope(attempt, this.currentScope()),
         signal,
       );
+      if (!merchantAcknowledgeArrivalAttemptMatchesScope(attempt, this.currentScope())) throw new MerchantAcknowledgeArrivalAttemptInvalidError();
       return parseMerchantAcknowledgeArrivalResult(value, attempt);
     } catch (error) {
       if (error instanceof MerchantAcknowledgeArrivalContractError ||

@@ -186,6 +186,40 @@ test('identity/session failure and currentness loss during restore prevent dispa
   assert.equal(posts, 0);
 });
 
+test('successful POST cannot complete into a retired or replacement trusted scope', async () => {
+  for (const replacement of [undefined, scope({ contextGeneration: 10 })]) {
+    let current: MerchantAcknowledgeArrivalCommandScope | undefined = scope();
+    let resolvePost!: (value: unknown) => void;
+    let posts = 0;
+    let reads = 0;
+    let keysCreated = 0;
+    const attempt = createMerchantAcknowledgeArrivalAttempt(scope(), () => { keysCreated += 1; return keyA; });
+    const keys: string[] = [];
+    const service = new MerchantAcknowledgeArrivalCommandService(
+      {
+        post: async (value) => {
+          posts += 1;
+          keys.push(value.idempotencyKey);
+          return new Promise((resolve) => { resolvePost = resolve; });
+        },
+      },
+      { load: async () => { reads += 1; return snapshotFrom(pickupStatus('arrived_at_merchant', 5)); } },
+      () => current,
+    );
+
+    const pending = service.submit(attempt);
+    while (!resolvePost) await Promise.resolve();
+    current = replacement;
+    resolvePost(commandResult());
+
+    await assert.rejects(pending, MerchantAcknowledgeArrivalAttemptInvalidError);
+    assert.equal(posts, 1);
+    assert.deepEqual(keys, [keyA]);
+    assert.equal(keysCreated, 1);
+    assert.equal(reads, 0);
+  }
+});
+
 test('401 refresh preserves the exact attempt and key and rechecks currentness', async () => {
   const attempt = createMerchantAcknowledgeArrivalAttempt(scope(), () => keyA);
   let current: MerchantAcknowledgeArrivalCommandScope | undefined = scope();
@@ -229,6 +263,32 @@ test('401 refresh preserves the exact attempt and key and rechecks currentness',
     { key: keyA, body: JSON.stringify({ expected_version: 5, action: 'acknowledge_arrival' }) },
     { key: keyA, body: JSON.stringify({ expected_version: 5, action: 'acknowledge_arrival' }) },
   ]);
+
+  let postRefreshCurrent: MerchantAcknowledgeArrivalCommandScope | undefined = scope();
+  let resolveSecond!: (value: Response) => void;
+  const postRefreshKeys: string[] = [];
+  const postRefresh = new MerchantAcknowledgeArrivalCommandService(
+    new MerchantAcknowledgeArrivalTransport(
+      'https://api.example.test',
+      {
+        restore: async () => ({ identityId: identityA, sessionId: sessionA, accessToken: 'a'.repeat(64) }),
+        forceRefresh: async () => ({ identityId: identityA, sessionId: sessionA, accessToken: 'b'.repeat(64) }),
+      } as never,
+      async (_input, init) => {
+        postRefreshKeys.push((init?.headers as Record<string, string>)['Idempotency-Key']);
+        if (postRefreshKeys.length === 1) return new Response('', { status: 401 });
+        return new Promise((resolve) => { resolveSecond = resolve; });
+      },
+    ),
+    { load: async () => snapshotFrom(pickupStatus('arrived_at_merchant', 5)) },
+    () => postRefreshCurrent,
+  );
+  const postRefreshPending = postRefresh.submit(attempt);
+  while (!resolveSecond) await Promise.resolve();
+  postRefreshCurrent = undefined;
+  resolveSecond(new Response(JSON.stringify(commandResult()), { status: 200 }));
+  await assert.rejects(postRefreshPending, MerchantAcknowledgeArrivalAttemptInvalidError);
+  assert.deepEqual(postRefreshKeys, [keyA, keyA]);
 });
 
 test('strict success parser accepts only the exact WAITING transition contract', () => {
