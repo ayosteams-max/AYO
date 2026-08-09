@@ -53,6 +53,58 @@ test('backend-valid bounded strings preserve surrounding whitespace without inva
   assert.equal(result[0].state, 'rejected');
 });
 
+test('canonical UTC timestamps are calendar-valid and preserve the exact backend wire value', () => {
+  for (const createdAt of [
+    '2026-08-09T01:00:00Z',
+    '2024-02-29T23:59:59Z',
+    '2000-02-29T00:00:00Z',
+    '2026-08-09T01:00:00.123456Z',
+  ]) {
+    const result = parseMerchantOperationalOrders([view({ created_at: createdAt })], merchantId);
+    assert.equal(result[0].createdAt, createdAt);
+  }
+
+  const timelineAt = '2024-02-29T23:59:59.120000Z';
+  const rejectionAt = '2026-08-09T01:01:00.001000Z';
+  const rejected = whitespaceView();
+  const result = parseMerchantOperationalOrders([{
+    ...rejected,
+    timeline: [{ event_id: '55555555-5555-4555-8555-555555555555', order_id: orderId, merchant_id: merchantId, event_type: 'commerce.order.rejected', from_state: 'accepted', to_state: 'rejected', actor_identity_id: null, order_version: 4, customer_reason_code: 'merchant_declined', occurred_at: timelineAt }],
+    rejection: { ...rejected.rejection, decided_at: rejectionAt },
+  }], merchantId);
+  assert.equal(result[0].createdAt, rejected.order.created_at);
+});
+
+test('impossible, non-canonical and timezone-less timestamps reject the whole list', () => {
+  const malformed = [
+    '2026-02-30T00:00:00Z',
+    '2025-02-29T00:00:00Z',
+    '1900-02-29T00:00:00Z',
+    '2026-13-01T00:00:00Z',
+    '2026-00-01T00:00:00Z',
+    '2026-01-00T00:00:00Z',
+    '2026-01-01T24:00:00Z',
+    '2026-01-01T00:60:00Z',
+    '2026-01-01T00:00:60Z',
+    '2026-01-01T00:00:00',
+    '2026-01-01T00:00:00+00:00',
+    '2026-01-01T00:00:00+99:99',
+    '2026-01-01',
+    'prefix2026-01-01T00:00:00Z',
+    '2026-01-01T00:00:00Zsuffix',
+    '2026-01-01T00:00:00.123Z',
+    '2026-01-01T00:00:00.1234567Z',
+  ];
+  for (const timestamp of malformed) {
+    assert.throws(() => parseMerchantOperationalOrders([view({ created_at: timestamp })], merchantId), MerchantOperationalOrderContractError);
+  }
+
+  const timeline = (occurredAt: string) => ({ event_id: '55555555-5555-4555-8555-555555555555', order_id: orderId, merchant_id: merchantId, event_type: 'commerce.order.accepted', from_state: null, to_state: 'accepted', actor_identity_id: null, order_version: 1, customer_reason_code: null, occurred_at: occurredAt });
+  assert.throws(() => parseMerchantOperationalOrders([{ ...view(), timeline: [timeline('2026-02-30T00:00:00Z')] }], merchantId), MerchantOperationalOrderContractError);
+  const rejected = whitespaceView();
+  assert.throws(() => parseMerchantOperationalOrders([{ ...rejected, rejection: { ...rejected.rejection, decided_at: '2025-02-29T00:00:00Z' } }], merchantId), MerchantOperationalOrderContractError);
+});
+
 test('genuinely malformed bounded strings, identifiers, hashes, literals and patterns still reject the whole list', () => {
   const malformed = [
     view({ merchant_display_name: 'A' }),
