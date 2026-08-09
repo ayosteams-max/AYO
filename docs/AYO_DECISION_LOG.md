@@ -770,3 +770,11 @@ Supersedes / superseded by:
 - **Problem:** The bounded ACK capability already prevented stale publications from delegating commands, but its exported state mirrored a stable shared controller without proving which merchant/order/Pickup publication owned that operation. A future presentation consumer could therefore misattribute one publication's submitting, applied or uncertain status to another.
 - **Decision:** Privately bind controller presentation state only when an explicit ACK or reconciliation invocation delegates for the current semantic publication. Expose that state only when all publication dimensions match: merchant, order, Pickup, context generation, Pickup version and identity-continuity handle. During freshness absence or replacement expose neutral idle; exact semantic restoration may reveal retained controller custody again. Command authority, scope/controller lifetime and the public capability shape remain unchanged.
 - **Boundary:** This adds no visible UI, localization, network request, command semantic, backend, schema, dependency, persistence or production activation.
+
+### AP-059 — First visible PRE-PRODUCTION merchant arrival acknowledgement
+
+- **Date:** 2026-08-10
+- **Status:** Founder/CEO implementation authorization granted; awaiting CTO review. Merge and production activation remain unauthorized.
+- **Problem:** Merchants can select a canonical order and inspect trusted courier-arrival truth, but cannot yet explicitly acknowledge arrival from the merchant surface.
+- **Decision:** Add one calm localized action to the selected Pickup panel. Presentation consumes only the locked publication-scoped capability state and its actionability predicates; explicit taps delegate ACK, reconciliation or same-attempt retry to that capability. No render, mount, effect, timer or background path invokes a command.
+- **Boundary:** No command identity or infrastructure escapes to UI. No backend, schema, dependency, persistence, Custody, payment, courier/rider, automatic retry/reconciliation, polling or production activation is added. Amharic operational wording remains subject to native review.

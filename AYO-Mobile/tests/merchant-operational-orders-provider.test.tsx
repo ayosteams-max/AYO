@@ -1,11 +1,14 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react-native';
-import type { ReactElement } from 'react';
+import { StrictMode, type ReactElement } from 'react';
 
 import { MerchantOperationalOrders } from '@/components/merchant-operational-orders';
 import * as identity from '@/contexts/identity-session';
 import { LanguageProvider } from '@/contexts/language';
+import * as acknowledgeContext from '@/contexts/merchant-acknowledge-arrival-capability';
 import * as pickupContext from '@/contexts/merchant-operational-pickup';
+import { merchantOperationalOrderCopy } from '@/localization/merchant-operational-orders';
 import { PublicApiError } from '@/services/api-foundation';
+import type { MerchantAcknowledgeArrivalControllerState } from '@/services/merchant-acknowledge-arrival-controller';
 
 const merchantA = '11111111-1111-4111-8111-111111111111';
 const merchantB = '22222222-2222-4222-8222-222222222222';
@@ -36,11 +39,28 @@ function setup(read: ReadMock) {
     refresh: jest.fn<Promise<pickupContext.MerchantOperationalPickupState>, [AbortSignal?]>(async () => Object.freeze({ status: 'idle' as const })),
     clearInspection: jest.fn(),
   };
+  let acknowledgementState: MerchantAcknowledgeArrivalControllerState = Object.freeze({ status: 'idle' });
+  let acknowledgementAvailable = false;
+  let reconciliationAvailable = false;
+  const acknowledgeArrival = jest.fn(async () => Object.freeze({ outcome: 'applied' as const }));
+  const reconcileAcknowledgeArrival = jest.fn(async () => Object.freeze({ outcome: 'applied' as const }));
   jest.spyOn(identity, 'useAuthenticatedRead').mockReturnValue(read);
   jest.spyOn(identity, 'useIdentityContinuity').mockImplementation(() => ({ readIdentityContinuity: () => continuity }));
   jest.spyOn(pickupContext, 'useMerchantOperationalPickup').mockReturnValue(pickup);
+  jest.spyOn(acknowledgeContext, 'useMerchantAcknowledgeArrivalCapability').mockImplementation(() => Object.freeze({
+    state: acknowledgementState,
+    canAcknowledgeArrival: () => acknowledgementAvailable,
+    canReconcileAcknowledgeArrival: () => reconciliationAvailable,
+    acknowledgeArrival,
+    reconcileAcknowledgeArrival,
+  }));
   return {
     pickup,
+    acknowledgeArrival,
+    reconcileAcknowledgeArrival,
+    setAcknowledgement(next: MerchantAcknowledgeArrivalControllerState, canAcknowledge = false, canReconcile = false) {
+      acknowledgementState = next; acknowledgementAvailable = canAcknowledge; reconciliationAvailable = canReconcile;
+    },
     currentContinuity: () => continuity,
     replaceIdentity() {
       const previous = continuity;
@@ -48,7 +68,10 @@ function setup(read: ReadMock) {
       continuity = createContinuity();
       return { previous, replacement: continuity };
     },
-    tree(merchantId = merchantA, name = 'Merchant A') { return <LanguageProvider><MerchantOperationalOrders merchantId={merchantId} merchantName={name} /></LanguageProvider>; },
+    tree(merchantId = merchantA, name = 'Merchant A', strict = false) {
+      const content = <LanguageProvider><MerchantOperationalOrders merchantId={merchantId} merchantName={name} /></LanguageProvider>;
+      return strict ? <StrictMode>{content}</StrictMode> : content;
+    },
   };
 }
 
@@ -205,4 +228,86 @@ test('authority loss clears selected order and trusted Pickup inspection', async
   const read = jest.fn<Promise<unknown>, [string, AbortSignal?]>().mockResolvedValueOnce([view(merchantA, orderA)]).mockRejectedValueOnce(new PublicApiError('access_denied', 403)); const value = setup(read);
   await render(value.tree()); await screen.findByText('Order 33333333'); await act(async () => { fireEvent.press(screen.getByLabelText('Order 33333333. Ready for pickup')); fireEvent.press(screen.getByLabelText('Refresh orders')); });
   expect(screen.getByText('This merchant area is no longer available.')).toBeTruthy(); expect(screen.queryByText('Order 33333333')).toBeNull(); expect(value.pickup.clearInspection).toHaveBeenCalled();
+});
+
+test('actionable idle shows one localized ACK action; mount and non-actionable idle create no command work', async () => {
+  const read = jest.fn<Promise<unknown>, [string, AbortSignal?]>(async () => [view(merchantA, orderA)]); const value = setup(read);
+  value.setAcknowledgement(Object.freeze({ status: 'idle' }), true);
+  await render(value.tree()); await screen.findByText('Order 33333333');
+  expect(value.acknowledgeArrival).not.toHaveBeenCalled(); expect(value.reconcileAcknowledgeArrival).not.toHaveBeenCalled();
+  expect(screen.queryByLabelText('Acknowledge arrival')).toBeNull();
+  await act(async () => { fireEvent.press(screen.getByLabelText('Order 33333333. Ready for pickup')); });
+  expect(screen.getByLabelText('Acknowledge arrival')).toBeTruthy();
+  await act(async () => { fireEvent.press(screen.getByLabelText('Acknowledge arrival')); });
+  expect(value.acknowledgeArrival).toHaveBeenCalledTimes(1); expect(value.reconcileAcknowledgeArrival).not.toHaveBeenCalled();
+});
+
+test('Strict Mode rehearsal creates no ACK or reconciliation work', async () => {
+  const read = jest.fn<Promise<unknown>, [string, AbortSignal?]>(async () => [view(merchantA, orderA)]); const value = setup(read); value.setAcknowledgement(Object.freeze({ status: 'idle' }), true);
+  await render(value.tree(merchantA, 'Merchant A', true)); await screen.findByText('Order 33333333');
+  expect(value.acknowledgeArrival).not.toHaveBeenCalled(); expect(value.reconcileAcknowledgeArrival).not.toHaveBeenCalled();
+});
+
+test('non-actionable idle and invalidated state fabricate no ACK control', async () => {
+  const read = jest.fn<Promise<unknown>, [string, AbortSignal?]>(async () => [view(merchantA, orderA)]); const value = setup(read);
+  const mounted = await render(value.tree()); await screen.findByText('Order 33333333'); await act(async () => { fireEvent.press(screen.getByLabelText('Order 33333333. Ready for pickup')); });
+  expect(screen.queryByLabelText('Acknowledge arrival')).toBeNull();
+  value.setAcknowledgement(Object.freeze({ status: 'invalidated', reason: 'scope_changed' }), true); await mounted.rerender(value.tree());
+  expect(screen.queryByLabelText('Acknowledge arrival')).toBeNull(); expect(screen.queryByText(/scope_changed/)).toBeNull();
+});
+
+test('submitting and reconciling are disabled, restrained, and cannot duplicate invocation', async () => {
+  const read = jest.fn<Promise<unknown>, [string, AbortSignal?]>(async () => [view(merchantA, orderA)]); const value = setup(read);
+  value.setAcknowledgement(Object.freeze({ status: 'submitting' })); const mounted = await render(value.tree()); await screen.findByText('Order 33333333'); await act(async () => { fireEvent.press(screen.getByLabelText('Order 33333333. Ready for pickup')); });
+  expect(screen.getByLabelText('Acknowledging arrival…').props.accessibilityState).toEqual({ disabled: true, busy: true });
+  fireEvent.press(screen.getByLabelText('Acknowledging arrival…')); expect(value.acknowledgeArrival).not.toHaveBeenCalled();
+  value.setAcknowledgement(Object.freeze({ status: 'reconciling' })); await mounted.rerender(value.tree());
+  expect(screen.getByLabelText('Checking status…').props.accessibilityState).toEqual({ disabled: true, busy: true });
+  fireEvent.press(screen.getByLabelText('Checking status…')); expect(value.reconcileAcknowledgeArrival).not.toHaveBeenCalled();
+});
+
+test('applied confirms arrival without another mutation or navigation action', async () => {
+  const read = jest.fn<Promise<unknown>, [string, AbortSignal?]>(async () => [view(merchantA, orderA)]); const value = setup(read); value.setAcknowledgement(Object.freeze({ status: 'applied' }));
+  await render(value.tree()); await screen.findByText('Order 33333333'); await act(async () => { fireEvent.press(screen.getByLabelText('Order 33333333. Ready for pickup')); });
+  expect(screen.getByText('Arrival acknowledged')).toBeTruthy(); expect(value.acknowledgeArrival).not.toHaveBeenCalled(); expect(value.reconcileAcknowledgeArrival).not.toHaveBeenCalled();
+});
+
+test('publication replacement presentation follows the locked capability and removes stale applied state', async () => {
+  const read = jest.fn<Promise<unknown>, [string, AbortSignal?]>(async () => [view(merchantA, orderA), view(merchantA, orderB)]); const value = setup(read); value.setAcknowledgement(Object.freeze({ status: 'applied' }));
+  const mounted = await render(value.tree()); await screen.findByText('Order 33333333'); await act(async () => { fireEvent.press(screen.getByLabelText('Order 33333333. Ready for pickup')); });
+  expect(screen.getByText('Arrival acknowledged')).toBeTruthy();
+  value.setAcknowledgement(Object.freeze({ status: 'idle' }), false); await act(async () => { fireEvent.press(screen.getByLabelText('Order 44444444. Ready for pickup')); }); await mounted.rerender(value.tree());
+  expect(screen.queryByText('Arrival acknowledged')).toBeNull(); expect(screen.queryByLabelText('Acknowledge arrival')).toBeNull(); expect(value.acknowledgeArrival).not.toHaveBeenCalled();
+});
+
+test('outcome unknown never claims success and offers explicit status check only under capability authority', async () => {
+  const read = jest.fn<Promise<unknown>, [string, AbortSignal?]>(async () => [view(merchantA, orderA)]); const value = setup(read); value.setAcknowledgement(Object.freeze({ status: 'outcome_unknown' }));
+  const mounted = await render(value.tree()); await screen.findByText('Order 33333333'); await act(async () => { fireEvent.press(screen.getByLabelText('Order 33333333. Ready for pickup')); });
+  expect(screen.getByText('We could not confirm the result yet.')).toBeTruthy(); expect(screen.queryByText('Arrival acknowledged')).toBeNull(); expect(screen.queryByLabelText('Check status')).toBeNull(); expect(value.reconcileAcknowledgeArrival).not.toHaveBeenCalled();
+  value.setAcknowledgement(Object.freeze({ status: 'outcome_unknown' }), false, true); await mounted.rerender(value.tree());
+  await act(async () => { fireEvent.press(screen.getByLabelText('Check status')); });
+  expect(value.reconcileAcknowledgeArrival).toHaveBeenCalledTimes(1); expect(value.acknowledgeArrival).not.toHaveBeenCalled();
+});
+
+test('same-attempt retry is explicit and delegates only through the locked capability', async () => {
+  const read = jest.fn<Promise<unknown>, [string, AbortSignal?]>(async () => [view(merchantA, orderA)]); const value = setup(read); value.setAcknowledgement(Object.freeze({ status: 'retry_same_attempt' }), true);
+  await render(value.tree()); await screen.findByText('Order 33333333'); await act(async () => { fireEvent.press(screen.getByLabelText('Order 33333333. Ready for pickup')); });
+  await act(async () => { fireEvent.press(screen.getByLabelText('Try again')); });
+  expect(value.acknowledgeArrival).toHaveBeenCalledTimes(1); expect(value.reconcileAcknowledgeArrival).not.toHaveBeenCalled();
+});
+
+test('rejected state is bounded, hides internal reason, and only retries when capability permits', async () => {
+  const read = jest.fn<Promise<unknown>, [string, AbortSignal?]>(async () => [view(merchantA, orderA)]); const value = setup(read); value.setAcknowledgement(Object.freeze({ status: 'rejected', reason: 'temporarily_unavailable' }));
+  const mounted = await render(value.tree()); await screen.findByText('Order 33333333'); await act(async () => { fireEvent.press(screen.getByLabelText('Order 33333333. Ready for pickup')); });
+  expect(screen.getByText('Arrival was not acknowledged.')).toBeTruthy(); expect(screen.queryByText(/temporarily_unavailable|refresh_required/)).toBeNull(); expect(screen.queryByLabelText('Try again')).toBeNull();
+  value.setAcknowledgement(Object.freeze({ status: 'rejected', reason: 'refresh_required' }), true); await mounted.rerender(value.tree());
+  await act(async () => { fireEvent.press(screen.getByLabelText('Try again')); }); expect(value.acknowledgeArrival).toHaveBeenCalledTimes(1);
+});
+
+test('Amharic ACK copy resolves and visible command labels expose no authority identifiers', async () => {
+  expect(merchantOperationalOrderCopy.am.acknowledgeArrival).toBe('መድረሱን አረጋግጥ');
+  const read = jest.fn<Promise<unknown>, [string, AbortSignal?]>(async () => [view(merchantA, orderA)]); const value = setup(read); value.setAcknowledgement(Object.freeze({ status: 'idle' }), true);
+  await render(value.tree()); await screen.findByText('Order 33333333'); await act(async () => { fireEvent.press(screen.getByLabelText('Order 33333333. Ready for pickup')); });
+  const label = screen.getByLabelText('Acknowledge arrival').props.accessibilityLabel;
+  expect(label).toBe('Acknowledge arrival'); for (const hidden of [merchantA, orderA, 'pickup', 'generation', 'version', 'attempt', 'key']) expect(label).not.toContain(hidden);
 });
