@@ -97,6 +97,10 @@ export class MerchantAcknowledgeArrivalCommandScope {
     });
   }
 
+  clearFresh(): void {
+    this.freshEvidence = undefined;
+  }
+
   clearFreshForAttempt(attempt: MerchantAcknowledgeArrivalAttempt): void {
     if (this.freshEvidenceMatchesAttempt(attempt)) this.freshEvidence = undefined;
   }
