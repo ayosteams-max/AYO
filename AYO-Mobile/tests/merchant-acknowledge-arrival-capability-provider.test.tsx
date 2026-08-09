@@ -22,8 +22,12 @@ const merchantId = '33333333-3333-4333-8333-333333333333';
 const orderId = '44444444-4444-4444-8444-444444444444';
 const pickupId = '55555555-5555-4555-8555-555555555555';
 
-const pickup = (version = 4, action: 'acknowledge_arrival' | 'none' = 'acknowledge_arrival'): MerchantCourierPickupSnapshot => Object.freeze({
-  pickupId,
+const pickup = (
+  version = 4,
+  action: 'acknowledge_arrival' | 'none' = 'acknowledge_arrival',
+  currentPickupId = pickupId,
+): MerchantCourierPickupSnapshot => Object.freeze({
+  pickupId: currentPickupId,
   state: 'arrived_at_merchant',
   version,
   arrivedAt: '2026-08-09T00:00:00Z',
@@ -59,7 +63,8 @@ type FakeService = Pick<MerchantAcknowledgeArrivalCommandService, 'submit' | 're
 function setup(service: FakeService) {
   let signal = 0;
   let operation: pickupContext.MerchantPickupOperationContextSnapshot | undefined;
-  const continuity = Object.freeze({ isCurrent: () => true });
+  let continuityCurrent = true;
+  const continuity = Object.freeze({ isCurrent: () => continuityCurrent });
   const read = {
     get state(): pickupContext.MerchantOperationalPickupState {
       return signal % 2 ? Object.freeze({ status: 'loading', orderId }) : Object.freeze({ status: 'idle' });
@@ -86,6 +91,7 @@ function setup(service: FakeService) {
       signal += 1;
       operation = Object.freeze({ merchantId, orderId, pickupId: next.pickupId, pickup: next, contextGeneration: 1, identityContinuity: continuity, ...overrides });
     },
+    retireContinuity() { continuityCurrent = false; },
     clear() { signal += 1; operation = undefined; },
     cleanup() { readSpy.mockRestore(); operationSpy.mockRestore(); },
   };
@@ -193,18 +199,100 @@ test('consumed same-version evidence stays suppressed while genuinely newer ARRI
   await mounted.unmount(); value.cleanup();
 });
 
-test('merchant/order/Pickup/identity replacement invalidates old capability without exposing custody internals', async () => {
-  const service = { submit: jest.fn(async () => applied), reconcile: jest.fn() } as unknown as FakeService;
+const stalePublicationCases: ReadonlyArray<Readonly<{
+  dimension: string;
+  nextPickup: MerchantCourierPickupSnapshot;
+  overrides: Partial<pickupContext.MerchantPickupOperationContextSnapshot>;
+  retireContinuity?: boolean;
+}>> = [
+  {
+    dimension: 'merchantId',
+    nextPickup: pickup(),
+    overrides: { merchantId: '66666666-6666-4666-8666-666666666666' },
+  },
+  {
+    dimension: 'orderId',
+    nextPickup: pickup(),
+    overrides: { orderId: '77777777-7777-4777-8777-777777777777' },
+  },
+  {
+    dimension: 'pickupId',
+    nextPickup: pickup(4, 'acknowledge_arrival', '88888888-8888-4888-8888-888888888888'),
+    overrides: {},
+  },
+  {
+    dimension: 'contextGeneration',
+    nextPickup: pickup(),
+    overrides: { contextGeneration: 2 },
+  },
+  {
+    dimension: 'pickupVersion',
+    nextPickup: pickup(5),
+    overrides: {},
+  },
+  {
+    dimension: 'identityContinuity',
+    nextPickup: pickup(),
+    overrides: { identityContinuity: Object.freeze({ isCurrent: () => true }) },
+    retireContinuity: true,
+  },
+];
+
+test.each(stalePublicationCases)(
+  'an old capability fails closed when only $dimension changes',
+  async ({ nextPickup, overrides, retireContinuity }) => {
+    const service = { submit: jest.fn(async () => applied), reconcile: jest.fn() } as unknown as FakeService;
+    const value = setup(service);
+    const random = jest.spyOn(globalThis.crypto, 'randomUUID');
+    const mounted = await render(value.tree());
+    value.publish(pickup()); await mounted.rerender(value.tree());
+    const old = capability;
+
+    if (retireContinuity) value.retireContinuity();
+    value.publish(nextPickup, overrides);
+    await mounted.rerender(value.tree());
+
+    expect(old.canAcknowledgeArrival()).toBe(false);
+    expect(old.canReconcileAcknowledgeArrival()).toBe(false);
+    let result!: Awaited<ReturnType<MerchantAcknowledgeArrivalPresentationCapability['acknowledgeArrival']>>;
+    await act(async () => { result = await old.acknowledgeArrival(); });
+    expect(result).toEqual({ outcome: 'invalidated', reason: 'scope_changed' });
+    expect(value.runtime.createMerchantAcknowledgeArrivalCommandService).not.toHaveBeenCalled();
+    expect(random).not.toHaveBeenCalled();
+    expect(service.submit).not.toHaveBeenCalled();
+    expect(service.reconcile).not.toHaveBeenCalled();
+    await mounted.unmount(); value.cleanup();
+  },
+);
+
+test('an old reconcile capability fails closed after publication replacement without another GET', async () => {
+  const service = {
+    submit: jest.fn(async () => { throw new MerchantAcknowledgeArrivalOutcomeUnknownError(); }),
+    reconcile: jest.fn(),
+  } as unknown as FakeService;
   const value = setup(service);
   const mounted = await render(value.tree());
   value.publish(pickup()); await mounted.rerender(value.tree());
+  await act(async () => { await capability.acknowledgeArrival(); });
   const old = capability;
-  value.publish(pickup(), { merchantId: '66666666-6666-4666-8666-666666666666', contextGeneration: 2 });
+  expect(old.canReconcileAcknowledgeArrival()).toBe(true);
+
+  value.publish(pickup(), { contextGeneration: 2 });
   await mounted.rerender(value.tree());
-  let oldResult!: Awaited<ReturnType<MerchantAcknowledgeArrivalPresentationCapability['acknowledgeArrival']>>;
-  await act(async () => { oldResult = await old.acknowledgeArrival(); });
-  expect(oldResult.outcome).toBe('invalidated');
-  expect(service.submit).not.toHaveBeenCalled();
+
+  expect(old.canAcknowledgeArrival()).toBe(false);
+  expect(old.canReconcileAcknowledgeArrival()).toBe(false);
+  let result!: Awaited<ReturnType<MerchantAcknowledgeArrivalPresentationCapability['reconcileAcknowledgeArrival']>>;
+  await act(async () => { result = await old.reconcileAcknowledgeArrival(); });
+  expect(result).toEqual({ outcome: 'invalidated', reason: 'scope_changed' });
+  expect(service.reconcile).not.toHaveBeenCalled();
+  await mounted.unmount(); value.cleanup();
+});
+
+test('the bounded capability surface exposes no command custody internals', async () => {
+  const service = { submit: jest.fn(async () => applied), reconcile: jest.fn() } as unknown as FakeService;
+  const value = setup(service);
+  const mounted = await render(value.tree());
   for (const hidden of ['controller', 'scope', 'attempt', 'handle', 'idempotencyKey', 'transport', 'service', 'dispatchObserver', 'writer']) {
     expect(capability).not.toHaveProperty(hidden);
   }
