@@ -14,6 +14,10 @@ import type { CourierStartTravelCommandScope } from '@/services/courier-start-tr
 import { CourierStartTravelCommandInfrastructureProvider } from '@/contexts/courier-start-travel-command-scope';
 import { CourierMarkArrivedCommandService, CourierMarkArrivedTransport } from '@/services/courier-mark-arrived-command';
 import type { CourierMarkArrivedCommandScope } from '@/services/courier-mark-arrived-command-scope';
+import { MerchantAcknowledgeArrivalCommandService, MerchantAcknowledgeArrivalTransport } from '@/services/merchant-acknowledge-arrival-command';
+import type { MerchantAcknowledgeArrivalCommandScope } from '@/services/merchant-acknowledge-arrival-command-scope';
+import { MerchantCourierPickupStatusService } from '@/services/merchant-courier-pickup-status';
+import { MerchantAcknowledgeArrivalInfrastructureProvider } from '@/contexts/merchant-acknowledge-arrival-capability';
 
 type SessionStatus = 'restoring' | 'signed_out' | 'verification_required' | 'authenticated';
 type IdentityContextValue = Readonly<{ status: SessionStatus; identity?: SessionIdentity; error?: string; signIn(c: Credentials): Promise<void>; register(c: Credentials): Promise<void>; prepareVerification(kind: Credentials['contactKind'], contact: string): Promise<string>; completeVerification(challengeId: string, code: string): Promise<void>; retry(): Promise<void>; signOut(): Promise<void> }>;
@@ -25,6 +29,7 @@ type IdentityCommandRuntime = Readonly<{
   readIdentity(): CommandIdentitySnapshot | undefined;
   createStartTravelCommandService(scope: CourierStartTravelCommandScope): Promise<CourierStartTravelCommandService>;
   createMarkArrivedCommandService(scope: CourierMarkArrivedCommandScope): Promise<CourierMarkArrivedCommandService>;
+  createMerchantAcknowledgeArrivalCommandService(scope: MerchantAcknowledgeArrivalCommandScope): Promise<MerchantAcknowledgeArrivalCommandService>;
 }>;
 const IdentityCommandRuntimeContext = createContext<IdentityCommandRuntime | undefined>(undefined);
 export type IdentityContinuityHandle = Readonly<{ isCurrent(): boolean }>;
@@ -121,6 +126,12 @@ export function IdentitySessionProvider({ children, services: suppliedServices }
       () => scope.currentScope(),
       (attempt) => scope.operationIsCurrent(attempt),
     ),
+    createMerchantAcknowledgeArrivalCommandService: async (scope) => new MerchantAcknowledgeArrivalCommandService(
+      new MerchantAcknowledgeArrivalTransport(baseUrl(), await services.manager),
+      new MerchantCourierPickupStatusService(authenticatedRead),
+      () => scope.currentScope(),
+      (attempt) => scope.operationIsCurrent(attempt),
+    ),
   }), [authenticatedRead, services.manager]);
   const identityContinuity = useMemo<IdentityContinuityReader>(() => ({
     readIdentityContinuity: () => commandIdentityContinuityRef.current,
@@ -138,4 +149,11 @@ export function TrustedCourierStartTravelCommandProvider({ children }: PropsWith
   const identity = useContext(IdentityCommandRuntimeContext);
   if (!identity) throw new Error('identity_session_provider_required');
   return <CourierStartTravelCommandInfrastructureProvider identity={identity}>{children}</CourierStartTravelCommandInfrastructureProvider>;
+}
+
+/** Trusted merchant ACK composition; ordinary descendants receive only its bounded capability. */
+export function TrustedMerchantAcknowledgeArrivalProvider({ children }: PropsWithChildren) {
+  const identity = useContext(IdentityCommandRuntimeContext);
+  if (!identity) throw new Error('identity_session_provider_required');
+  return <MerchantAcknowledgeArrivalInfrastructureProvider identity={identity}>{children}</MerchantAcknowledgeArrivalInfrastructureProvider>;
 }

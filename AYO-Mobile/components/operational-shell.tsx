@@ -2,7 +2,7 @@ import { Link, Redirect } from 'expo-router';
 import type { ReactNode } from 'react';
 import { ActivityIndicator, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { TrustedCourierStartTravelCommandProvider, useIdentitySession } from '@/contexts/identity-session';
+import { TrustedCourierStartTravelCommandProvider, TrustedMerchantAcknowledgeArrivalProvider, useIdentitySession } from '@/contexts/identity-session';
 import { useLanguage } from '@/contexts/language';
 import { useOperationalContext } from '@/contexts/operational-context';
 import type { OperationalArea } from '@/domain/mobile-context';
@@ -14,7 +14,9 @@ export function OperationalShell({ personal }: { personal: ReactNode }) {
   return (
     <TrustedCourierStartTravelCommandProvider>
       <MerchantOperationalPickupProvider>
-        <OperationalShellContent personal={personal} />
+        <TrustedMerchantAcknowledgeArrivalProvider>
+          <OperationalShellContent personal={personal} />
+        </TrustedMerchantAcknowledgeArrivalProvider>
       </MerchantOperationalPickupProvider>
     </TrustedCourierStartTravelCommandProvider>
   );
