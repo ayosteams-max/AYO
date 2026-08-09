@@ -732,3 +732,13 @@ Supersedes / superseded by:
 - **Reason:** Revision `0016` executes before canonical Subject exists, so a later forward migration cannot repair a clean replay failure inside `0016`. The correction temporarily excludes only future `ayo.canonical_subjects` foreign keys and restores them to metadata after historical table creation.
 - **Permanent rule:** After this checkpoint, revision `0016` is immutable. Every later schema correction uses a new forward migration. No history rewrite, renumbering or silent retroactive change is permitted.
 - **Boundary:** This decision creates no PostgreSQL certification, production readiness, deployment, backup, cleanup or Batch 1 authority.
+
+### AP-055 — PRE-PRODUCTION merchant operational Pickup read ownership
+
+- **Date:** 2026-08-09
+- **Status:** Founder/CEO implementation authorization granted for the bounded read-only foundation; awaiting CTO review. Merge, visible merchant order/ACK UI, ACK facade/provider composition and production activation remain unauthorized.
+- **Problem:** Merchant ACK command custody exists, but the mobile merchant shell previously had no authoritative order/Pickup operation context or normal owner for the canonical merchant Pickup status read. Route identifiers therefore could not safely become command evidence.
+- **Decision:** Treat an order identifier only as an untrusted lookup request under the currently selected authenticated merchant. Promote a fresh operation context only after the existing canonical merchant Pickup endpoint succeeds and returns a strictly parsed server Pickup identifier. Maintain identity continuity, operation generation, single-flight refresh, immediate freshness retirement and request-generation/abort stale-response containment in a bounded provider mounted at the authenticated operational shell.
+- **Authority and efficiency:** The existing Pickup endpoint independently verifies merchant ownership, APPROVED state, merchant/order binding and read permission, so an additional merchant-order detail or list GET would add latency without adding authority. The backend remains final authority. A definitive bounded 404 creates no Pickup context; transient failure may retain display-only stale data but never fresh command authority.
+- **Alternatives:** Inventing a global “current order,” selecting an arbitrary list result, accepting route-supplied Pickup identity, or adding a generic store were rejected. A detail-plus-status two-GET flow was rejected as redundant under the existing endpoint contract.
+- **Boundary:** No ACK scope/controller/facade, command attempt, POST, UI, localization, Custody client, polling, persistence, backend, schema, dependency or production change is authorized by this decision.

@@ -8,9 +8,16 @@ import { useOperationalContext } from '@/contexts/operational-context';
 import type { OperationalArea } from '@/domain/mobile-context';
 import { operationalShellCopy } from '@/localization/operational-shell';
 import { TrustedCourierHandoffStatus } from '@/contexts/courier-start-travel-command-scope';
+import { MerchantOperationalPickupProvider } from '@/contexts/merchant-operational-pickup';
 
 export function OperationalShell({ personal }: { personal: ReactNode }) {
-  return <TrustedCourierStartTravelCommandProvider><OperationalShellContent personal={personal} /></TrustedCourierStartTravelCommandProvider>;
+  return (
+    <TrustedCourierStartTravelCommandProvider>
+      <MerchantOperationalPickupProvider>
+        <OperationalShellContent personal={personal} />
+      </MerchantOperationalPickupProvider>
+    </TrustedCourierStartTravelCommandProvider>
+  );
 }
 
 function OperationalShellContent({ personal }: { personal: ReactNode }) {
