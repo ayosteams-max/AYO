@@ -196,7 +196,7 @@ class CandidateTechnicalProfile(BaseModel):
     model_id: ModelId
     exact_model_version_pinned: bool
     server_side_only: bool
-    mobile_secret_absent: bool
+    mobile_credentials_absent: bool
     arbitrary_client_prose_forbidden: bool
     structured_output_supported: bool
     tools_disabled: bool
@@ -246,7 +246,7 @@ class GateName(StrEnum):
     SECURITY_COMPLIANCE = "security_compliance"
     EVIDENCE_FRESHNESS = "evidence_freshness"
     SERVER_SIDE_ONLY = "server_side_only"
-    MOBILE_SECRET_ABSENT = "mobile_secret_absent"
+    MOBILE_CREDENTIALS_ABSENT = "mobile_credentials_absent"
     ARBITRARY_CLIENT_PROSE_FORBIDDEN = "arbitrary_client_prose_forbidden"
     STRUCTURED_OUTPUT = "structured_output"
     EXACT_MODEL_VERSION = "exact_model_version"
@@ -265,7 +265,7 @@ class GateName(StrEnum):
 
 
 class GateStatus(StrEnum):
-    PASS = "pass"
+    MET = "met"
     FAIL = "fail"
     UNKNOWN = "unknown"
 
@@ -345,7 +345,7 @@ def _policy_gate(
             reason="provider availability is not verified for the AYO account",
         )
     if item.conclusion is EvidenceConclusion.SATISFIES:
-        return GateResult(gate=gate, status=GateStatus.PASS, reason="verified")
+        return GateResult(gate=gate, status=GateStatus.MET, reason="verified")
     if item.conclusion is EvidenceConclusion.DOES_NOT_SATISFY:
         return GateResult(
             gate=gate, status=GateStatus.FAIL, reason="requirement not met"
@@ -406,7 +406,7 @@ def evaluate_offline_candidate(
         GateResult(
             gate=GateName.EVIDENCE_FRESHNESS,
             status=(
-                GateStatus.PASS
+                GateStatus.MET
                 if all(
                     item is not None and item.is_current(evaluated_on)
                     for item in mandatory
@@ -423,7 +423,7 @@ def evaluate_offline_candidate(
 
     profile_gates = (
         (GateName.SERVER_SIDE_ONLY, profile.server_side_only),
-        (GateName.MOBILE_SECRET_ABSENT, profile.mobile_secret_absent),
+        (GateName.MOBILE_CREDENTIALS_ABSENT, profile.mobile_credentials_absent),
         (
             GateName.ARBITRARY_CLIENT_PROSE_FORBIDDEN,
             profile.arbitrary_client_prose_forbidden,
@@ -440,7 +440,7 @@ def evaluate_offline_candidate(
     gates.extend(
         GateResult(
             gate=gate,
-            status=GateStatus.PASS if passed else GateStatus.FAIL,
+            status=GateStatus.MET if passed else GateStatus.FAIL,
             reason="verified" if passed else "requirement not met",
         )
         for gate, passed in profile_gates
@@ -470,30 +470,28 @@ def evaluate_offline_candidate(
         (
             GateResult(
                 gate=GateName.CORPUS_COMPLETE,
-                status=GateStatus.PASS if corpus_complete else GateStatus.FAIL,
+                status=GateStatus.MET if corpus_complete else GateStatus.FAIL,
                 reason="all 20 canonical scenarios recorded"
                 if corpus_complete
                 else "corpus evidence incomplete",
             ),
             GateResult(
                 gate=GateName.EXACT_PRESERVATION,
-                status=GateStatus.PASS if len(exact) == 20 else GateStatus.FAIL,
+                status=GateStatus.MET if len(exact) == 20 else GateStatus.FAIL,
                 reason="all outputs exact"
                 if len(exact) == 20
                 else "one or more outputs changed canonical text",
             ),
             GateResult(
                 gate=GateName.LOCALE_ADHERENCE,
-                status=GateStatus.PASS
-                if len(locale_matches) == 20
-                else GateStatus.FAIL,
+                status=GateStatus.MET if len(locale_matches) == 20 else GateStatus.FAIL,
                 reason="all locales exact"
                 if len(locale_matches) == 20
                 else "one or more locale mismatches",
             ),
             GateResult(
                 gate=GateName.LATENCY,
-                status=GateStatus.PASS
+                status=GateStatus.MET
                 if p95 is not None and p95 <= 2_000
                 else GateStatus.FAIL,
                 reason="p95 within 2-second bound"
@@ -502,7 +500,7 @@ def evaluate_offline_candidate(
             ),
             GateResult(
                 gate=GateName.RELIABILITY,
-                status=GateStatus.PASS if success_count == 20 else GateStatus.FAIL,
+                status=GateStatus.MET if success_count == 20 else GateStatus.FAIL,
                 reason="all scenarios returned"
                 if success_count == 20
                 else "one or more scenarios failed",
@@ -517,7 +515,7 @@ def evaluate_offline_candidate(
     gates.append(
         GateResult(
             gate=GateName.AMHARIC_HUMAN_REVIEW,
-            status=GateStatus.PASS if amharic_approved else GateStatus.UNKNOWN,
+            status=GateStatus.MET if amharic_approved else GateStatus.UNKNOWN,
             reason="native human review complete"
             if amharic_approved
             else "NEEDS_NATIVE_AMHARIC_REVIEW",
@@ -558,7 +556,7 @@ def evaluate_offline_candidate(
         projected_usd_per_100k=None if per_call is None else per_call * 100_000,
         projected_usd_per_1m=None if per_call is None else per_call * 1_000_000,
     )
-    eligible = all(gate.status is GateStatus.PASS for gate in gates)
+    eligible = all(gate.status is GateStatus.MET for gate in gates)
     return EvaluationReport(
         provider_id=profile.provider_id,
         model_id=profile.model_id,

@@ -34,7 +34,7 @@ def profile(**changes: object) -> CandidateTechnicalProfile:
         "model_id": MODEL,
         "exact_model_version_pinned": True,
         "server_side_only": True,
-        "mobile_secret_absent": True,
+        "mobile_credentials_absent": True,
         "arbitrary_client_prose_forbidden": True,
         "structured_output_supported": True,
         "tools_disabled": True,
@@ -173,7 +173,7 @@ def test_corpus_is_fixed_complete_bilingual_and_privacy_minimal():
 
 def test_complete_current_account_evidence_passes_hard_gates_but_only_evaluates():
     result = report()
-    assert all(item.status is GateStatus.PASS for item in result.gates)
+    assert all(item.status is GateStatus.MET for item in result.gates)
     assert result.eligible_for_admission_recommendation is True
     assert result.lifecycle_state == "evaluated"
     assert result.metrics.sample_count == 20
@@ -243,7 +243,7 @@ def test_policy_evidence_requires_auditable_applicability_and_dates():
     "field,gate_name",
     [
         ("server_side_only", GateName.SERVER_SIDE_ONLY),
-        ("mobile_secret_absent", GateName.MOBILE_SECRET_ABSENT),
+        ("mobile_credentials_absent", GateName.MOBILE_CREDENTIALS_ABSENT),
         ("arbitrary_client_prose_forbidden", GateName.ARBITRARY_CLIENT_PROSE_FORBIDDEN),
         ("structured_output_supported", GateName.STRUCTURED_OUTPUT),
         ("exact_model_version_pinned", GateName.EXACT_MODEL_VERSION),
