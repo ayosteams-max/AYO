@@ -1,6 +1,6 @@
 # AYO Intelligence Phase 8 Anthropic Haiku readiness
 
-**Status:** PRE-PRODUCTION architecture/readiness only; no live provider call authorized
+**Status:** PRE-PRODUCTION readiness merged and locked; one admissible technical evaluation completed; awaiting CTO review; admission recommendation not eligible
 
 **Research and revalidation date:** 2026-08-10
 
@@ -114,6 +114,63 @@ startup, workers, schedulers, mobile or UI. It has no product feature flag or
 runtime provider composition. `MERCHANT_GENERATIVE_EXPLANATION_ENABLED` remains
 false by default.
 
-This readiness candidate makes zero Anthropic, OpenAI or other provider calls.
-Live evaluation requires separate Founder/CEO authorization after review, merge
-authorization, merge and post-merge lock. No Phase 9 work is authorized.
+This readiness candidate made zero Anthropic, OpenAI or other provider calls. At that
+time, live evaluation required separate Founder/CEO authorization after review, merge
+authorization, merge and post-merge lock.
+
+## Readiness history
+
+AP-069 records the pre-execution readiness decision truthfully: no Phase 8 call had
+occurred when the architecture was approved. The candidate was subsequently reviewed,
+merged and post-merge locked without changing the fixed corpus, two-second timeout,
+zero-retry/failover rule, exact-preservation policy or Phase 5 hard gates.
+
+## Live evaluation — completed with admissible evidence
+
+Founder/CEO authorized one controlled execution on 2026-08-11. It ran from authoritative
+main `8b4413be4c914fcb71315a2946c9c171abb6efc2`, tree
+`534ae673489814506aef7b3152a87d2143373774`, against Anthropic
+`claude-haiku-4-5-20251001` and `merchant_ack_corpus_v1`. The exact gitignored UTF-8
+artifact is bound to governance by SHA-256
+`5cc2746feffec07df8274432ab113c1194e232ede9add5d751d214b30d3e1a73`;
+the raw provider outputs are not committed.
+
+The 20 sequential attempts used zero retries and zero failover and produced 13 responses,
+seven timeouts, zero malformed outputs and zero provider errors. Exact preservation,
+locale adherence and reliability were each 13/20 (65%). English returned 6/10 and
+Amharic returned 7/10 exact, locale-correct responses; the remaining scenarios timed out.
+Latency was 1,041 ms minimum, 1,537 ms median, 2,057 ms p95, 2,088 ms p99 and 2,088 ms
+maximum. Usage was 4,011 input and 657 output tokens; estimated cost was USD 0.007296.
+
+## Admission result — not eligible
+
+The locked p95 gate is at most 2,000 ms, so 2,057 ms fails. Exact preservation, locale
+adherence and reliability also fail because timeouts cannot count as successful outputs.
+Evidence freshness fails because qualifying mandatory policy evidence remains absent.
+Privacy, training/data use, retention, regional/data location, security/compliance and
+Amharic human review remain unknown. `NEEDS_NATIVE_AMHARIC_REVIEW` remains required;
+7/10 exact machine Amharic responses are not native-language certification.
+
+The technical gates met were server-side-only, mobile credentials absent, arbitrary
+client prose forbidden, structured output, exact model version, automatic retry disabled,
+automatic failover absent, tool-free, stateless, provider-neutral, production disabled
+and corpus complete. The result remains
+`eligible_for_admission_recommendation=false`. The candidate is technically evaluated,
+but it is not recommended, admitted, Founder-approved, eligible for pre-production
+activation, activated or production-approved. CTO review of this evidence remains
+required.
+
+## Bounded prior-run comparison
+
+Phase 8 Haiku returned 13/20 responses and 65% reliability, exact preservation and
+locale adherence, compared with 18/20 and 90% in each of the Phase 6 mini and Phase 7
+nano runs. Its 2,057 ms p95 was 3 ms slower than mini's 2,054 ms and 16 ms faster than
+nano's 2,073 ms; all three failed the locked two-second p95 gate. Estimated Phase 8 cost
+was USD 0.007296, between mini's USD 0.00831975 and nano's USD 0.002202. Under these
+exact controlled runs, changing provider did not resolve the observed AYO reliability,
+exact-preservation, locale or latency failures. This bounded result does not establish
+universal model performance or permanent provider rejection.
+
+No additional Phase 8 run is authorized. No provider has been recommended, admitted,
+activated or connected to AYO product runtime. Broader generative rephrasing and Phase 9
+remain unauthorized.
