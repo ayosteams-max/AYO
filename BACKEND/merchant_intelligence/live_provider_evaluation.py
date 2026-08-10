@@ -384,9 +384,7 @@ def run_configured_evaluation(
         production_disabled=True,
         automatic_retry_disabled=True,
         automatic_failover_absent=True,
-        input_price_usd_per_million_tokens=(
-            configuration.input_price_usd_per_million
-        ),
+        input_price_usd_per_million_tokens=(configuration.input_price_usd_per_million),
         output_price_usd_per_million_tokens=(
             configuration.output_price_usd_per_million
         ),

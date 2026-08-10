@@ -80,8 +80,13 @@ def test_nano_runner_preserves_locked_20_call_request_boundary():
     )
     assert all(payload["store"] is False for payload in transport.payloads)
     assert all(payload["tools"] == [] for payload in transport.payloads)
-    assert all(payload["reasoning"] == {"effort": "none"} for payload in transport.payloads)
-    assert all(payload["max_output_tokens"] == MAX_OUTPUT_TOKENS for payload in transport.payloads)
+    assert all(
+        payload["reasoning"] == {"effort": "none"} for payload in transport.payloads
+    )
+    assert all(
+        payload["max_output_tokens"] == MAX_OUTPUT_TOKENS
+        for payload in transport.payloads
+    )
     assert all(
         set(json.loads(payload["input"])) == {"locale", "headline", "body"}
         for payload in transport.payloads
