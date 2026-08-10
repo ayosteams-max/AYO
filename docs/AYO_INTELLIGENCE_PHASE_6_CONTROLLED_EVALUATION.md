@@ -1,6 +1,6 @@
 # AYO Intelligence Phase 6 controlled evaluation status
 
-**Status:** PRE-PRODUCTION engineering foundation; first experiment evidence is not admissible
+**Status:** PRE-PRODUCTION engineering foundation; Run 2 technical evidence is admissible but not eligible for admission recommendation
 
 **Date:** 2026-08-10
 
@@ -45,5 +45,35 @@ cost estimate. It excludes credentials, authorization headers, raw transports, r
 responses, request IDs, user data, operational identifiers, commands, tools, and runtime
 authority.
 
-No live provider call was made during this repair. A second controlled live evaluation
-requires separate Founder/CEO authorization after CTO review.
+No live provider call was made during this repair.
+
+## Run 2 admissible technical evaluation
+
+Founder/CEO separately authorized Run 2 on 2026-08-10. It used authoritative main
+`517d7d0ccc3d40cb0831c64b0d03ca01d1adb83c`, tree
+`47208b0cb691d6c8486fa2c2e2e90b95aebf34e0`, the same exact model and corpus, and the
+locked one-call-per-scenario controls. The complete sanitized artifact was durably captured
+as UTF-8 and admitted by CTO review. Its exact bytes are bound by SHA-256:
+
+`53644f537440ca1f5b6cc59d33e31a2d91ffaab7ec72e81a0d251d55c17391fb`
+
+Run 2 made 20 attempts with zero retry and zero failover. It recorded 18 responses, two
+timeouts, zero malformed outputs and zero provider errors. All 18 responses preserved the
+canonical text and locale exactly: English returned 8/10 with two timeouts; Amharic
+returned 10/10. Overall exact preservation, locale adherence and reliability were each
+18/20 (90%). Latency was 1,228 ms minimum, 1,588 ms median, 2,054 ms p95, 2,093 ms p99
+and 2,093 ms maximum. Usage was 2,819 input tokens and 1,379 output tokens; estimated cost
+was USD 0.00831975.
+
+The locked p95 requirement is at most 2,000 ms, so 2,054 ms is a failure. Exact
+preservation, locale adherence and reliability also fail because all 20 scenarios are
+required. Evidence freshness failed because mandatory qualifying policy evidence was not
+provided. Privacy, training/data use, retention, regional/data location,
+security/compliance and native Amharic review remain unknown. Exact Amharic reproduction
+does not satisfy human linguistic review; `NEEDS_NATIVE_AMHARIC_REVIEW` remains in force.
+
+The candidate is technically evaluated with admissible evidence but is not eligible for
+admission recommendation. It is not recommended, admitted, Founder-approved, eligible for
+pre-production activation, activated or production-approved. No provider is connected to
+product runtime, no user/product data was used, and no further live run is authorized.
+The raw generated artifact remains gitignored and is not committed.
