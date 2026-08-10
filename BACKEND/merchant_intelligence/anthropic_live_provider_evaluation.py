@@ -189,6 +189,8 @@ def _observation(
             raise ValueError("provider response is not an object")
         if response.get("model") != MODEL_ID:
             raise ValueError("provider response model identity mismatch")
+        if response.get("stop_reason") != "end_turn":
+            raise ValueError("provider response did not complete normally")
         parsed = json.loads(_output_text(response))
         if not isinstance(parsed, Mapping) or set(parsed) != {
             "locale",

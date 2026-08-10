@@ -34,6 +34,8 @@ from BACKEND.merchant_intelligence.provider_evaluation import (
     ObservationOutcome,
 )
 
+_MISSING_STOP_REASON = object()
+
 
 class FakeTransport:
     def __init__(self) -> None:
@@ -47,6 +49,7 @@ class FakeTransport:
         canonical = parsed["messages"][0]["content"]
         body = {
             "model": MODEL_ID,
+            "stop_reason": "end_turn",
             "content": [{"type": "text", "text": canonical}],
             "usage": {"input_tokens": 100, "output_tokens": 50},
         }
@@ -86,6 +89,21 @@ class ChangedTextTransport(FakeTransport):
         output = json.loads(body["content"][0]["text"])
         output["headline"] = "Changed"
         body["content"][0]["text"] = json.dumps(output)
+        return ProviderHttpResult(status_code=200, body=json.dumps(body).encode())
+
+
+class StopReasonTransport(FakeTransport):
+    def __init__(self, stop_reason: object) -> None:
+        super().__init__()
+        self.stop_reason = stop_reason
+
+    def post(self, payload: bytes, *, timeout_seconds: float) -> ProviderHttpResult:
+        result = super().post(payload, timeout_seconds=timeout_seconds)
+        body = json.loads(result.body)
+        if self.stop_reason is _MISSING_STOP_REASON:
+            del body["stop_reason"]
+        else:
+            body["stop_reason"] = self.stop_reason
         return ProviderHttpResult(status_code=200, body=json.dumps(body).encode())
 
 
@@ -156,6 +174,41 @@ def test_phase8_strict_schema_admits_only_canonical_language_fields():
     assert set(schema["properties"]) == {"locale", "headline", "body"}
     assert set(schema["required"]) == {"locale", "headline", "body"}
     assert schema["properties"]["locale"]["enum"] == ["en", "am"]
+
+
+def test_phase8_end_turn_with_exact_structured_content_is_response():
+    result = run_phase_8_evaluation(FakeTransport(), evaluated_on=date(2026, 8, 10))
+    assert all(
+        observation.outcome is ObservationOutcome.RESPONSE
+        for observation in result.observations
+    )
+
+
+@pytest.mark.parametrize(
+    "stop_reason",
+    [
+        "refusal",
+        "max_tokens",
+        "stop_sequence",
+        "tool_use",
+        "pause_turn",
+        "model_context_window_exceeded",
+        "unknown_future_reason",
+        _MISSING_STOP_REASON,
+        None,
+    ],
+)
+def test_phase8_abnormal_completion_with_valid_canonical_json_fails_closed(
+    stop_reason,
+):
+    transport = StopReasonTransport(stop_reason)
+    result = run_phase_8_evaluation(transport, evaluated_on=date(2026, 8, 10))
+    assert len(transport.payloads) == MAX_CALLS == 20
+    assert all(
+        observation.outcome is ObservationOutcome.MALFORMED
+        for observation in result.observations
+    )
+    assert result.report.eligible_for_admission_recommendation is False
 
 
 def test_phase8_reuses_phase5_gate_semantics_without_governance_promotion():

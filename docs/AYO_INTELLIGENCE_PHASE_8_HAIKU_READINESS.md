@@ -34,6 +34,12 @@ Haiku 4.5 through `output_config.format` with a JSON schema. The provider
 guarantees schema conformance, not canonical semantic equality; AYO therefore
 continues to compare `locale`, `headline` and `body` exactly.
 
+AYO also requires `stop_reason: "end_turn"` before parsing a response as successful.
+Anthropic documents that refusals can return HTTP 200 and that `refusal` and
+`max_tokens` may bypass Structured Output guarantees. Every other, missing or
+future stop reason therefore fails closed as `MALFORMED`, even when its text is
+otherwise valid canonical JSON; no retry or token-limit increase follows.
+
 Anthropic compiles a structured-output schema into a grammar. The first use of a
 new schema can incur compilation latency and the compiled grammar may be cached
 for up to 24 hours. A future authorized run must count the first canonical
