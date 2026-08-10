@@ -34,6 +34,9 @@ from BACKEND.field_operations.application import FieldOperationsApplication
 from BACKEND.field_performance.application import FieldPerformanceApplication
 from BACKEND.identity.runtime import AuthenticationRuntime
 from BACKEND.merchant.application import MerchantApplication
+from BACKEND.merchant_intelligence.generative import (
+    MerchantGenerativeExplanationApplication,
+)
 from BACKEND.merchant_orders.application import MerchantOrderApplication
 from BACKEND.merchant_preparation.application import MerchantPreparationApplication
 from BACKEND.mobile_context.application import (
@@ -62,6 +65,7 @@ from BACKEND.routes.dispatch_internal import create_dispatch_internal_router
 from BACKEND.routes.field_operations import create_field_operations_router
 from BACKEND.routes.field_performance import create_field_performance_router
 from BACKEND.routes.merchant import create_merchant_router
+from BACKEND.routes.merchant_intelligence import create_merchant_intelligence_router
 from BACKEND.routes.merchant_orders import create_merchant_order_router
 from BACKEND.routes.merchant_preparation import create_merchant_preparation_router
 from BACKEND.routes.mobile_context import create_mobile_context_router
@@ -231,6 +235,13 @@ class FieldOperationsPlatformActivation:
     performance_application: FieldPerformanceApplication | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class MerchantGenerativeExplanationActivation:
+    application: MerchantGenerativeExplanationApplication
+    subject_resolver: TrustedSubjectResolver
+    authorization_enforcer: AuthorizationEnforcer
+
+
 def create_app(
     configuration: Settings | None = None,
     *,
@@ -254,6 +265,8 @@ def create_app(
     custody_platform: CustodyPlatformActivation | None = None,
     delivery_platform: DeliveryPlatformActivation | None = None,
     field_operations_platform: FieldOperationsPlatformActivation | None = None,
+    merchant_generative_explanation: MerchantGenerativeExplanationActivation
+    | None = None,
     engineering_runtime: EngineeringRuntime | None = None,
 ) -> FastAPI:
     configured = configuration or settings
@@ -931,6 +944,54 @@ def create_app(
                 RequestSizeLimitMiddleware,
                 maximum_bytes=configured.FIELD_OPERATIONS_PLATFORM_MAX_REQUEST_BYTES,
             )
+
+    if configured.MERCHANT_GENERATIVE_EXPLANATION_ENABLED:
+        if merchant_generative_explanation is None:
+            raise RuntimeError(
+                "Enabled merchant generative explanation requires explicit secure activation dependencies"
+            )
+        application.state.authorization_enforcer = (
+            merchant_generative_explanation.authorization_enforcer
+        )
+        application.include_router(
+            create_merchant_intelligence_router(
+                merchant_generative_explanation.application
+            ),
+            prefix=configured.API_PREFIX,
+        )
+        if not any(
+            (
+                configured.DISPATCH_ENABLED,
+                configured.CANONICAL_DISPATCH_ENABLED,
+                configured.SCHEDULED_DISPATCH_ENABLED,
+                configured.ACTIVE_RIDE_ENABLED,
+                configured.ARRIVAL_WAITING_ENABLED,
+                configured.MOBILE_CASH_QUOTE_ENABLED,
+                configured.RIDER_BOOKING_ENABLED,
+                configured.POST_TRIP_ENABLED,
+                configured.MERCHANT_PLATFORM_ENABLED,
+                configured.CATALOGUE_PLATFORM_ENABLED,
+                configured.ORDERING_PLATFORM_ENABLED,
+                configured.MERCHANT_ORDER_MANAGEMENT_ENABLED,
+                configured.MERCHANT_PREPARATION_ENABLED,
+                configured.COURIER_DISPATCH_PLATFORM_ENABLED,
+                configured.COURIER_PICKUP_PLATFORM_ENABLED,
+                configured.CUSTODY_PLATFORM_ENABLED,
+                configured.DELIVERY_PLATFORM_ENABLED,
+                configured.FIELD_OPERATIONS_PLATFORM_ENABLED,
+            )
+        ):
+            application.add_middleware(
+                AuthorizationContextMiddleware,
+                resolver=merchant_generative_explanation.subject_resolver,
+            )
+        application.add_middleware(
+            RequestSizeLimitMiddleware,
+            maximum_bytes=(
+                configured.MERCHANT_GENERATIVE_EXPLANATION_MAX_REQUEST_BYTES
+            ),
+            path_fragments=("/mobile/merchant-intelligence/generative-explanation",),
+        )
 
     @application.exception_handler(HTTPException)
     async def stable_http_error(request: Request, error: HTTPException) -> JSONResponse:
