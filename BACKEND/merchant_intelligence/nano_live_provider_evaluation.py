@@ -21,6 +21,9 @@ PHASE_7_CONFIGURATION: Final = ControlledEvaluationConfiguration(
     ),
     input_price_usd_per_million=0.20,
     output_price_usd_per_million=1.25,
+    documented_rate_limit=(
+        "Account tier is not verified by this controlled evaluation."
+    ),
 )
 
 

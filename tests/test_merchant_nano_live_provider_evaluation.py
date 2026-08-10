@@ -5,8 +5,11 @@ import pytest
 from pydantic import ValidationError
 
 from BACKEND.merchant_intelligence.live_provider_evaluation import (
+    EVIDENCE_PATH,
     MAX_CALLS,
     MAX_OUTPUT_TOKENS,
+    MODEL_ID,
+    PHASE_6_CONFIGURATION,
     TIMEOUT_SECONDS,
     ProviderHttpResult,
     _write_evidence,
@@ -44,6 +47,13 @@ def _gate(result, name: GateName):
 
 
 def test_nano_configuration_is_exact_frozen_and_separate_from_phase6():
+    assert PHASE_6_CONFIGURATION.model_id == MODEL_ID == "gpt-5.4-mini-2026-03-17"
+    assert PHASE_6_CONFIGURATION.evidence_path == EVIDENCE_PATH
+    assert PHASE_6_CONFIGURATION.input_price_usd_per_million == 0.75
+    assert PHASE_6_CONFIGURATION.output_price_usd_per_million == 4.50
+    assert PHASE_6_CONFIGURATION.documented_rate_limit == (
+        "Account tier is not verified by Phase 6."
+    )
     assert PHASE_7_CONFIGURATION.model_id == "gpt-5.4-nano-2026-03-17"
     assert PHASE_7_CONFIGURATION.input_price_usd_per_million == 0.20
     assert PHASE_7_CONFIGURATION.output_price_usd_per_million == 1.25
@@ -51,6 +61,10 @@ def test_nano_configuration_is_exact_frozen_and_separate_from_phase6():
         "artifacts/intelligence/phase7/controlled_openai_nano_evaluation.json"
     )
     assert "phase6" not in PHASE_7_CONFIGURATION.evidence_path.parts
+    assert PHASE_7_CONFIGURATION.documented_rate_limit == (
+        "Account tier is not verified by this controlled evaluation."
+    )
+    assert "Phase 6" not in PHASE_7_CONFIGURATION.documented_rate_limit
     with pytest.raises(ValidationError):
         PHASE_7_CONFIGURATION.model_id = "floating-alias"
 
@@ -93,6 +107,20 @@ def test_nano_result_is_sanitized_and_cannot_promote_governance(tmp_path):
         "request_id",
     ):
         assert prohibited not in serialized.lower()
+
+
+def test_phase6_and_phase7_gate_statuses_are_identical_for_same_fake_evidence():
+    from BACKEND.merchant_intelligence.live_provider_evaluation import (
+        run_controlled_evaluation,
+    )
+
+    phase6 = run_controlled_evaluation(FakeTransport(), evaluated_on=date(2026, 8, 10))
+    phase7 = run_phase_7_evaluation(FakeTransport(), evaluated_on=date(2026, 8, 10))
+    assert [(gate.gate, gate.status) for gate in phase6.report.gates] == [
+        (gate.gate, gate.status) for gate in phase7.report.gates
+    ]
+    assert phase6.report.eligible_for_admission_recommendation is False
+    assert phase7.report.eligible_for_admission_recommendation is False
 
 
 def test_phase7_artifact_refuses_preexecution_overwrite(monkeypatch, tmp_path):

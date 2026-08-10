@@ -47,6 +47,7 @@ class ControlledEvaluationConfiguration(BaseModel):
     evidence_path: Path
     input_price_usd_per_million: float = Field(ge=0)
     output_price_usd_per_million: float = Field(ge=0)
+    documented_rate_limit: str = Field(min_length=1, max_length=240)
 
 
 PHASE_6_CONFIGURATION: Final = ControlledEvaluationConfiguration(
@@ -54,6 +55,7 @@ PHASE_6_CONFIGURATION: Final = ControlledEvaluationConfiguration(
     evidence_path=EVIDENCE_PATH,
     input_price_usd_per_million=INPUT_PRICE_USD_PER_MILLION,
     output_price_usd_per_million=OUTPUT_PRICE_USD_PER_MILLION,
+    documented_rate_limit="Account tier is not verified by Phase 6.",
 )
 _INSTRUCTIONS: Final = (
     "Return exactly the supplied canonical merchant explanation. Preserve locale, "
@@ -388,7 +390,7 @@ def run_configured_evaluation(
         output_price_usd_per_million_tokens=(
             configuration.output_price_usd_per_million
         ),
-        documented_rate_limit="Account tier is not verified by Phase 6.",
+        documented_rate_limit=configuration.documented_rate_limit,
         lifecycle_risk="Pinned snapshot lifecycle remains subject to provider deprecation.",
     )
     frozen_observations = tuple(observations)
