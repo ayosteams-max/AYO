@@ -36,6 +36,25 @@ _PATH: Final = "/v1/responses"
 EVIDENCE_PATH: Final = Path(
     "artifacts/intelligence/phase6/controlled_openai_evaluation.json"
 )
+
+
+class ControlledEvaluationConfiguration(BaseModel):
+    """The only candidate-specific inputs admitted by the locked evaluator."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    model_id: str
+    evidence_path: Path
+    input_price_usd_per_million: float = Field(ge=0)
+    output_price_usd_per_million: float = Field(ge=0)
+
+
+PHASE_6_CONFIGURATION: Final = ControlledEvaluationConfiguration(
+    model_id=MODEL_ID,
+    evidence_path=EVIDENCE_PATH,
+    input_price_usd_per_million=INPUT_PRICE_USD_PER_MILLION,
+    output_price_usd_per_million=OUTPUT_PRICE_USD_PER_MILLION,
+)
 _INSTRUCTIONS: Final = (
     "Return exactly the supplied canonical merchant explanation. Preserve locale, "
     "headline, body, facts, and actionability exactly. Add nothing. Use the required "
@@ -150,7 +169,9 @@ def write_evidence(result: ControlledEvaluationResult) -> None:
     _write_evidence(result, EVIDENCE_PATH)
 
 
-def _console_summary(result: ControlledEvaluationResult, stream: TextIO) -> None:
+def _console_summary(
+    result: ControlledEvaluationResult, stream: TextIO, *, destination: Path
+) -> None:
     counts = {
         outcome.value: sum(
             observation.outcome is outcome for observation in result.observations
@@ -158,8 +179,8 @@ def _console_summary(result: ControlledEvaluationResult, stream: TextIO) -> None
         for outcome in ObservationOutcome
     }
     stream.write(
-        "phase6_evidence_saved "
-        f"path={EVIDENCE_PATH.as_posix()} calls={len(result.observations)} "
+        "controlled_evaluation_evidence_saved "
+        f"path={destination.as_posix()} calls={len(result.observations)} "
         f"response={counts['response']} malformed={counts['malformed']} "
         f"timeout={counts['timeout']} provider_error={counts['provider_error']}\n"
     )
@@ -172,17 +193,19 @@ def persist_then_summarize(
     stream: TextIO = sys.stdout,
 ) -> None:
     _write_evidence(result, destination)
-    _console_summary(result, stream)
+    _console_summary(result, stream, destination=destination)
 
 
-def _request_payload(scenario: EvaluationScenario) -> bytes:
+def _request_payload(
+    scenario: EvaluationScenario, *, configuration: ControlledEvaluationConfiguration
+) -> bytes:
     canonical = {
         "locale": scenario.locale,
         "headline": scenario.expected_headline,
         "body": scenario.expected_body,
     }
     request = {
-        "model": MODEL_ID,
+        "model": configuration.model_id,
         "store": False,
         "instructions": _INSTRUCTIONS,
         "input": json.dumps(canonical, ensure_ascii=False, separators=(",", ":")),
@@ -227,18 +250,21 @@ def _usage(response: Mapping[str, Any]) -> tuple[int, int]:
 def _observation(
     scenario: EvaluationScenario,
     transport: EvaluationTransport,
+    *,
+    configuration: ControlledEvaluationConfiguration,
 ) -> tuple[ProviderObservation, int, int]:
     started = time.monotonic()
     try:
         result = transport.post(
-            _request_payload(scenario), timeout_seconds=TIMEOUT_SECONDS
+            _request_payload(scenario, configuration=configuration),
+            timeout_seconds=TIMEOUT_SECONDS,
         )
     except TimeoutError:
         latency = min(round((time.monotonic() - started) * 1_000), 60_000)
         return (
             ProviderObservation(
                 provider_id=PROVIDER_ID,
-                model_id=MODEL_ID,
+                model_id=configuration.model_id,
                 scenario_id=scenario.scenario_id,
                 outcome=ObservationOutcome.TIMEOUT,
                 latency_ms=latency,
@@ -251,7 +277,7 @@ def _observation(
         return (
             ProviderObservation(
                 provider_id=PROVIDER_ID,
-                model_id=MODEL_ID,
+                model_id=configuration.model_id,
                 scenario_id=scenario.scenario_id,
                 outcome=ObservationOutcome.PROVIDER_ERROR,
                 latency_ms=latency,
@@ -264,7 +290,7 @@ def _observation(
         return (
             ProviderObservation(
                 provider_id=PROVIDER_ID,
-                model_id=MODEL_ID,
+                model_id=configuration.model_id,
                 scenario_id=scenario.scenario_id,
                 outcome=ObservationOutcome.TIMEOUT,
                 latency_ms=latency,
@@ -276,7 +302,7 @@ def _observation(
         return (
             ProviderObservation(
                 provider_id=PROVIDER_ID,
-                model_id=MODEL_ID,
+                model_id=configuration.model_id,
                 scenario_id=scenario.scenario_id,
                 outcome=ObservationOutcome.PROVIDER_ERROR,
                 latency_ms=latency,
@@ -300,7 +326,7 @@ def _observation(
         body = parsed["body"]
         observation = ProviderObservation(
             provider_id=PROVIDER_ID,
-            model_id=MODEL_ID,
+            model_id=configuration.model_id,
             scenario_id=scenario.scenario_id,
             outcome=ObservationOutcome.RESPONSE,
             latency_ms=latency,
@@ -314,7 +340,7 @@ def _observation(
         return (
             ProviderObservation(
                 provider_id=PROVIDER_ID,
-                model_id=MODEL_ID,
+                model_id=configuration.model_id,
                 scenario_id=scenario.scenario_id,
                 outcome=ObservationOutcome.MALFORMED,
                 latency_ms=latency,
@@ -324,8 +350,11 @@ def _observation(
         )
 
 
-def run_controlled_evaluation(
-    transport: EvaluationTransport, *, evaluated_on: date
+def run_configured_evaluation(
+    configuration: ControlledEvaluationConfiguration,
+    transport: EvaluationTransport,
+    *,
+    evaluated_on: date,
 ) -> ControlledEvaluationResult:
     if len(MERCHANT_ACK_EVALUATION_CORPUS) != MAX_CALLS:
         raise RuntimeError("controlled evaluation corpus must contain exactly 20 items")
@@ -333,13 +362,15 @@ def run_controlled_evaluation(
     input_tokens = 0
     output_tokens = 0
     for scenario in MERCHANT_ACK_EVALUATION_CORPUS:
-        observation, used_input, used_output = _observation(scenario, transport)
+        observation, used_input, used_output = _observation(
+            scenario, transport, configuration=configuration
+        )
         observations.append(observation)
         input_tokens += used_input
         output_tokens += used_output
     profile = CandidateTechnicalProfile(
         provider_id=PROVIDER_ID,
-        model_id=MODEL_ID,
+        model_id=configuration.model_id,
         exact_model_version_pinned=True,
         server_side_only=True,
         mobile_credentials_absent=True,
@@ -351,8 +382,12 @@ def run_controlled_evaluation(
         production_disabled=True,
         automatic_retry_disabled=True,
         automatic_failover_absent=True,
-        input_price_usd_per_million_tokens=INPUT_PRICE_USD_PER_MILLION,
-        output_price_usd_per_million_tokens=OUTPUT_PRICE_USD_PER_MILLION,
+        input_price_usd_per_million_tokens=(
+            configuration.input_price_usd_per_million
+        ),
+        output_price_usd_per_million_tokens=(
+            configuration.output_price_usd_per_million
+        ),
         documented_rate_limit="Account tier is not verified by Phase 6.",
         lifecycle_risk="Pinned snapshot lifecycle remains subject to provider deprecation.",
     )
@@ -367,12 +402,12 @@ def run_controlled_evaluation(
         assumed_output_tokens=output_tokens // MAX_CALLS,
     )
     cost = (
-        input_tokens * INPUT_PRICE_USD_PER_MILLION
-        + output_tokens * OUTPUT_PRICE_USD_PER_MILLION
+        input_tokens * configuration.input_price_usd_per_million
+        + output_tokens * configuration.output_price_usd_per_million
     ) / 1_000_000
     return ControlledEvaluationResult(
         provider_id=PROVIDER_ID,
-        model_id=MODEL_ID,
+        model_id=configuration.model_id,
         corpus_version=CORPUS_VERSION,
         evaluated_on=evaluated_on,
         observations=frozen_observations,
@@ -380,6 +415,15 @@ def run_controlled_evaluation(
         input_tokens=input_tokens,
         output_tokens=output_tokens,
         estimated_cost_usd=cost,
+    )
+
+
+def run_controlled_evaluation(
+    transport: EvaluationTransport, *, evaluated_on: date
+) -> ControlledEvaluationResult:
+    """Preserve the post-merge-locked Phase 6 execution contract."""
+    return run_configured_evaluation(
+        PHASE_6_CONFIGURATION, transport, evaluated_on=evaluated_on
     )
 
 
