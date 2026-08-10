@@ -39,6 +39,7 @@ htmlcov/
 # Runtime output and local data
 *.log
 logs/
+artifacts/intelligence/phase6/*.json
 *.sqlite
 *.sqlite3
 *.db
