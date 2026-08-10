@@ -41,6 +41,7 @@ htmlcov/
 logs/
 artifacts/intelligence/phase6/*.json
 artifacts/intelligence/phase7/*.json
+artifacts/intelligence/phase8/*.json
 *.sqlite
 *.sqlite3
 *.db
