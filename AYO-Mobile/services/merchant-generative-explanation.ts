@@ -31,10 +31,18 @@ export class MerchantGenerativeExplanationService implements MerchantGenerativeE
   }
 
   private send(request: MerchantGenerativeExplanationRequest, token: string, signal?: AbortSignal) {
+    const semantics = Object.freeze({
+      promptVersion: request.promptVersion,
+      locale: request.locale,
+      recommendation: request.recommendation,
+      reason: request.reason,
+      userActionAvailable: request.userActionAvailable,
+      tone: request.tone,
+    });
     return boundedFetch(this.request, `${this.baseUrl}/mobile/merchant-intelligence/generative-explanation`, {
       method: 'POST',
       headers: { Accept: 'application/json', Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(request),
+      body: JSON.stringify(semantics),
       signal,
     }, 3_000);
   }

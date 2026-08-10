@@ -1,4 +1,5 @@
 import asyncio
+from pathlib import Path
 from typing import cast
 from uuid import uuid4
 
@@ -14,9 +15,12 @@ from BACKEND.main import (
     MerchantGenerativeExplanationActivation,
     create_app,
 )
+from BACKEND.merchant_intelligence.canonical_language import (
+    canonical_merchant_intelligence_language,
+)
 from BACKEND.merchant_intelligence.generative import (
     MerchantGenerativeExplanationApplication,
-    MerchantGenerativeExplanationRequest,
+    MerchantGenerativeExplanationHttpRequest,
     MerchantGenerativeExplanationResponse,
     MerchantGenerativeExplanationUnavailable,
 )
@@ -41,9 +45,6 @@ def command(**changes):
         "locale": "en",
         "recommendation": "acknowledge_arrival",
         "reason": "ACK_ALLOWED_BY_CAPABILITY",
-        "deterministicHeadline": "Courier has arrived",
-        "deterministicBody": "You can acknowledge the courier's arrival now.",
-        "deterministicActionLabel": "Acknowledge arrival",
         "userActionAvailable": True,
         "tone": "informative",
     }
@@ -54,11 +55,13 @@ def command(**changes):
 class Provider:
     def __init__(self):
         self.calls = 0
+        self.requests = []
         self.failure: Exception | None = None
         self.wait = False
 
     async def generate_merchant_explanation(self, request):
         self.calls += 1
+        self.requests.append(request)
         if self.wait:
             await asyncio.Event().wait()
         if self.failure:
@@ -155,9 +158,15 @@ def test_authenticated_bounded_request_executes_once_and_preserves_exact_text():
     assert response.json() == {
         "locale": "en",
         "headline": "Courier has arrived",
-        "body": "You can acknowledge the courier's arrival now.",
+        "body": "You can acknowledge the courier’s arrival now.",
     }
     assert provider.calls == limiter.calls == 1
+    assert provider.requests[0].deterministic_headline == "Courier has arrived"
+    assert (
+        provider.requests[0].deterministic_body
+        == "You can acknowledge the courier’s arrival now."
+    )
+    assert provider.requests[0].deterministic_action_label == "Acknowledge arrival"
 
 
 def test_anonymous_and_rate_limited_requests_never_reach_provider():
@@ -200,6 +209,13 @@ def test_anonymous_and_rate_limited_requests_never_reach_provider():
         {"customerPhone": "+251900000000"},
         {"location": {"lat": 1}},
         {"payment": "cash"},
+        {"deterministicHeadline": "Arbitrary bounded prose"},
+        {"deterministicBody": "Send this arbitrary text to the model."},
+        {"deterministicActionLabel": "Wrong action"},
+        {
+            "deterministicHeadline": "መልእክተኛው ደርሷል",
+            "deterministicBody": "የመልእክተኛውን መድረስ አሁን ማረጋገጥ ይችላሉ።",
+        },
     ],
 )
 def test_generic_proxy_identifiers_and_private_fields_are_rejected(extra):
@@ -220,15 +236,11 @@ def test_generic_proxy_identifiers_and_private_fields_are_rejected(extra):
         {"promptVersion": "future"},
         {"reason": "ACK_CONFIRMED"},
         {"userActionAvailable": False},
-        {"deterministicActionLabel": None},
-        {"deterministicHeadline": " bad"},
-        {"deterministicBody": "bad\ntext"},
         {"tone": "positive"},
         {
             "recommendation": "no_action",
             "reason": "NO_CURRENT_ACK_ACTION",
             "userActionAvailable": False,
-            "deterministicActionLabel": None,
         },
     ],
 )
@@ -281,7 +293,7 @@ def test_timeout_is_bounded_and_cancellation_propagates():
         app = MerchantGenerativeExplanationApplication(
             provider, Limiter(), timeout_seconds=0.01
         )
-        request = MerchantGenerativeExplanationRequest.model_validate(command())
+        request = MerchantGenerativeExplanationHttpRequest.model_validate(command())
         with pytest.raises(MerchantGenerativeExplanationUnavailable):
             await app.explain(subject(), request)
         task = asyncio.create_task(
@@ -306,3 +318,172 @@ def test_oversized_body_is_rejected_before_provider():
     )
     assert response.status_code == 413
     assert provider.calls == 0
+
+
+@pytest.mark.parametrize(
+    ("locale", "reason", "headline", "body", "action_label"),
+    [
+        (
+            "en",
+            "ACK_ALLOWED_BY_CAPABILITY",
+            "Courier has arrived",
+            "You can acknowledge the courier’s arrival now.",
+            "Acknowledge arrival",
+        ),
+        (
+            "en",
+            "ACK_IN_PROGRESS",
+            "Acknowledging arrival",
+            "AYO is confirming your acknowledgement.",
+            None,
+        ),
+        (
+            "en",
+            "ACK_CONFIRMED",
+            "Arrival acknowledged",
+            "The courier’s arrival has been confirmed.",
+            None,
+        ),
+        (
+            "en",
+            "ACK_RESULT_UNCERTAIN_RECONCILIATION_AVAILABLE",
+            "Confirmation not clear yet",
+            "AYO could not confirm the result. You can check the current status.",
+            "Check status",
+        ),
+        (
+            "en",
+            "ACK_RECONCILIATION_IN_PROGRESS",
+            "Checking status",
+            "AYO is checking the latest acknowledgement status.",
+            None,
+        ),
+        (
+            "en",
+            "ACK_SAME_ATTEMPT_RETRY_AVAILABLE",
+            "Try acknowledgement again",
+            "You can retry the same acknowledgement safely.",
+            "Try again",
+        ),
+        (
+            "en",
+            "ACK_RETRY_ALLOWED_BY_CAPABILITY",
+            "Try again",
+            "The previous acknowledgement did not complete. You can try again.",
+            "Try again",
+        ),
+        (
+            "en",
+            "ACK_RESULT_UNCERTAIN_NO_CURRENT_ACTION",
+            "Confirmation not clear yet",
+            "AYO could not confirm the result. No action is available right now.",
+            None,
+        ),
+        (
+            "en",
+            "ACK_SAME_ATTEMPT_RETRY_NOT_CURRENTLY_ALLOWED",
+            "Action not available right now",
+            "The acknowledgement cannot be retried safely right now.",
+            None,
+        ),
+        (
+            "en",
+            "ACK_REJECTED_NO_CURRENT_ACTION",
+            "Action not available right now",
+            "The arrival acknowledgement did not complete, and no action is available right now.",
+            None,
+        ),
+        (
+            "am",
+            "ACK_ALLOWED_BY_CAPABILITY",
+            "መልእክተኛው ደርሷል",
+            "የመልእክተኛውን መድረስ አሁን ማረጋገጥ ይችላሉ።",
+            "መድረሱን አረጋግጥ",
+        ),
+        ("am", "ACK_IN_PROGRESS", "መድረሱ እየተረጋገጠ ነው", "AYO ማረጋገጫዎን እያረጋገጠ ነው።", None),
+        ("am", "ACK_CONFIRMED", "መድረሱ ተረጋግጧል", "የመልእክተኛው መድረስ ተረጋግጧል።", None),
+        (
+            "am",
+            "ACK_RESULT_UNCERTAIN_RECONCILIATION_AVAILABLE",
+            "ማረጋገጫው ገና ግልጽ አይደለም",
+            "AYO ውጤቱን ማረጋገጥ አልቻለም። የአሁኑን ሁኔታ ማየት ይችላሉ።",
+            "ሁኔታውን ይመልከቱ",
+        ),
+        (
+            "am",
+            "ACK_RECONCILIATION_IN_PROGRESS",
+            "ሁኔታው እየታየ ነው",
+            "AYO የቅርብ ጊዜውን የማረጋገጫ ሁኔታ እያየ ነው።",
+            None,
+        ),
+        (
+            "am",
+            "ACK_SAME_ATTEMPT_RETRY_AVAILABLE",
+            "ማረጋገጫውን እንደገና ይሞክሩ",
+            "ይኸውን ማረጋገጫ በደህና እንደገና መሞከር ይችላሉ።",
+            "እንደገና ሞክር",
+        ),
+        (
+            "am",
+            "ACK_RETRY_ALLOWED_BY_CAPABILITY",
+            "እንደገና ይሞክሩ",
+            "የቀድሞው ማረጋገጫ አልተጠናቀቀም። እንደገና መሞከር ይችላሉ።",
+            "እንደገና ሞክር",
+        ),
+        (
+            "am",
+            "ACK_RESULT_UNCERTAIN_NO_CURRENT_ACTION",
+            "ማረጋገጫው ገና ግልጽ አይደለም",
+            "AYO ውጤቱን ማረጋገጥ አልቻለም። አሁን የሚገኝ እርምጃ የለም።",
+            None,
+        ),
+        (
+            "am",
+            "ACK_SAME_ATTEMPT_RETRY_NOT_CURRENTLY_ALLOWED",
+            "እርምጃው አሁን አይገኝም",
+            "ማረጋገጫውን አሁን በደህና እንደገና መሞከር አይቻልም።",
+            None,
+        ),
+        (
+            "am",
+            "ACK_REJECTED_NO_CURRENT_ACTION",
+            "እርምጃው አሁን አይገኝም",
+            "የመድረስ ማረጋገጫው አልተጠናቀቀም፣ እና አሁን የሚገኝ እርምጃ የለም።",
+            None,
+        ),
+    ],
+)
+def test_server_canonical_language_matches_locked_phase_two_copy(
+    locale, reason, headline, body, action_label
+):
+    language = canonical_merchant_intelligence_language(locale, reason)
+    assert (language.headline, language.body, language.action_label) == (
+        headline,
+        body,
+        action_label,
+    )
+
+
+def test_server_canonical_text_is_present_in_locked_mobile_phase_two_contract():
+    mobile = Path(
+        "AYO-Mobile/localization/merchant-operational-intelligence.ts"
+    ).read_text(encoding="utf-8")
+    reasons = (
+        "ACK_ALLOWED_BY_CAPABILITY",
+        "ACK_IN_PROGRESS",
+        "ACK_CONFIRMED",
+        "ACK_RESULT_UNCERTAIN_RECONCILIATION_AVAILABLE",
+        "ACK_RECONCILIATION_IN_PROGRESS",
+        "ACK_SAME_ATTEMPT_RETRY_AVAILABLE",
+        "ACK_RETRY_ALLOWED_BY_CAPABILITY",
+        "ACK_RESULT_UNCERTAIN_NO_CURRENT_ACTION",
+        "ACK_SAME_ATTEMPT_RETRY_NOT_CURRENTLY_ALLOWED",
+        "ACK_REJECTED_NO_CURRENT_ACTION",
+    )
+    for locale in ("en", "am"):
+        for reason in reasons:
+            language = canonical_merchant_intelligence_language(locale, reason)
+            assert language.headline in mobile
+            assert language.body in mobile
+            if language.action_label is not None:
+                assert language.action_label in mobile

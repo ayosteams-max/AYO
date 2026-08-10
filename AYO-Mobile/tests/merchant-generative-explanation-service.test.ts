@@ -39,8 +39,17 @@ test('adapter calls only the authenticated bounded AYO endpoint with exact Phase
   assert.equal(call?.init?.method, 'POST');
   assert.equal(call?.init?.signal instanceof AbortSignal, true);
   assert.equal((call?.init?.headers as Record<string, string>).Authorization, 'Bearer mobile-token');
-  assert.deepEqual(JSON.parse(String(call?.init?.body)), request);
-  assert.deepEqual(Object.keys(JSON.parse(String(call?.init?.body))).sort(), Object.keys(request).sort());
+  assert.deepEqual(JSON.parse(String(call?.init?.body)), {
+    promptVersion: request.promptVersion,
+    locale: request.locale,
+    recommendation: request.recommendation,
+    reason: request.reason,
+    userActionAvailable: request.userActionAvailable,
+    tone: request.tone,
+  });
+  assert.equal(String(call?.init?.body).includes(request.deterministicHeadline), false);
+  assert.equal(String(call?.init?.body).includes(request.deterministicBody), false);
+  assert.equal(String(call?.init?.body).includes(request.deterministicActionLabel ?? ''), false);
   for (const prohibited of ['merchantId', 'orderId', 'pickupId', 'messages', 'model', 'provider', 'tools', 'secret', 'attemptId', 'idempotencyKey']) {
     assert.equal(String(call?.init?.body).includes(prohibited), false);
   }

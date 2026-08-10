@@ -5,8 +5,8 @@ from BACKEND.authorization.enforcement import AuthorizationRoute, permission_req
 from BACKEND.identity.models import IdentityType
 from BACKEND.merchant_intelligence.generative import (
     MerchantGenerativeExplanationApplication,
+    MerchantGenerativeExplanationHttpRequest,
     MerchantGenerativeExplanationRateLimited,
-    MerchantGenerativeExplanationRequest,
     MerchantGenerativeExplanationResponse,
     MerchantGenerativeExplanationUnavailable,
 )
@@ -38,7 +38,7 @@ def create_merchant_intelligence_router(
         "merchant_orders.read_own", resource_type="merchant_intelligence"
     )
     async def explain(
-        command: MerchantGenerativeExplanationRequest, request: Request
+        command: MerchantGenerativeExplanationHttpRequest, request: Request
     ) -> MerchantGenerativeExplanationResponse:
         try:
             return await application.explain(_subject(request), command)

@@ -61,45 +61,38 @@ _SEMANTICS: dict[str, tuple[str, bool, str]] = {
 }
 
 
-class MerchantGenerativeExplanationRequest(BaseModel):
+class MerchantGenerativeExplanationHttpRequest(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     prompt_version: PromptVersion = Field(alias="promptVersion")
     locale: Locale
     recommendation: Recommendation
     reason: Reason
-    deterministic_headline: str = Field(
-        alias="deterministicHeadline", min_length=1, max_length=80
-    )
-    deterministic_body: str = Field(
-        alias="deterministicBody", min_length=1, max_length=240
-    )
-    deterministic_action_label: str | None = Field(
-        default=None, alias="deterministicActionLabel", min_length=1, max_length=64
-    )
     user_action_available: bool = Field(alias="userActionAvailable")
     tone: Tone
 
     @model_validator(mode="after")
-    def bounded_semantics(self) -> "MerchantGenerativeExplanationRequest":
+    def bounded_semantics(self) -> "MerchantGenerativeExplanationHttpRequest":
         expected = _SEMANTICS[self.reason]
         if expected != (self.recommendation, self.user_action_available, self.tone):
             raise ValueError("incoherent merchant intelligence semantics")
-        for value in (
-            self.deterministic_headline,
-            self.deterministic_body,
-            self.deterministic_action_label,
-        ):
-            if value is not None and (
-                value != value.strip()
-                or any(
-                    ord(character) < 32 or ord(character) == 127 for character in value
-                )
-            ):
-                raise ValueError("deterministic text is not canonical")
-        if self.user_action_available != (self.deterministic_action_label is not None):
-            raise ValueError("action label does not match actionability")
         return self
+
+
+class MerchantGenerativeExplanationRequest(BaseModel):
+    """Server-owned provider input; clients cannot construct deterministic prose."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    prompt_version: PromptVersion
+    locale: Locale
+    recommendation: Recommendation
+    reason: Reason
+    deterministic_headline: str = Field(min_length=1, max_length=80)
+    deterministic_body: str = Field(min_length=1, max_length=240)
+    deterministic_action_label: str | None = Field(default=None, max_length=64)
+    user_action_available: bool
+    tone: Tone
 
 
 class MerchantGenerativeExplanationResponse(BaseModel):
@@ -156,13 +149,33 @@ class MerchantGenerativeExplanationApplication:
     async def explain(
         self,
         subject: AuthorizationSubject,
-        request: MerchantGenerativeExplanationRequest,
+        request: MerchantGenerativeExplanationHttpRequest,
     ) -> MerchantGenerativeExplanationResponse:
+        from BACKEND.merchant_intelligence.canonical_language import (
+            canonical_merchant_intelligence_language,
+        )
+
+        language = canonical_merchant_intelligence_language(
+            request.locale, request.reason
+        )
+        provider_request = MerchantGenerativeExplanationRequest(
+            prompt_version=request.prompt_version,
+            locale=request.locale,
+            recommendation=request.recommendation,
+            reason=request.reason,
+            deterministic_headline=language.headline,
+            deterministic_body=language.body,
+            deterministic_action_label=language.action_label,
+            user_action_available=request.user_action_available,
+            tone=request.tone,
+        )
         if not self._rate_limiter.allow(subject):
             raise MerchantGenerativeExplanationRateLimited
         try:
             async with asyncio.timeout(self._timeout_seconds):
-                response = await self._provider.generate_merchant_explanation(request)
+                response = await self._provider.generate_merchant_explanation(
+                    provider_request
+                )
         except asyncio.CancelledError:
             raise
         except Exception as error:
@@ -172,9 +185,9 @@ class MerchantGenerativeExplanationApplication:
         except Exception as error:
             raise MerchantGenerativeExplanationUnavailable from error
         if (
-            validated.locale != request.locale
-            or validated.headline != request.deterministic_headline
-            or validated.body != request.deterministic_body
+            validated.locale != provider_request.locale
+            or validated.headline != provider_request.deterministic_headline
+            or validated.body != provider_request.deterministic_body
         ):
             raise MerchantGenerativeExplanationUnavailable
         return validated
