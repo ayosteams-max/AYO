@@ -303,10 +303,33 @@ class EvaluationReport(BaseModel):
     model_id: ModelId
     corpus_version: CorpusVersion
     evaluated_on: date
+    valid_until: date | None
     gates: tuple[GateResult, ...]
     metrics: ComparativeMetrics
     eligible_for_admission_recommendation: bool
     lifecycle_state: Literal["evaluated"] = "evaluated"
+
+    @model_validator(mode="after")
+    def gate_integrity(self) -> EvaluationReport:
+        gate_names = [item.gate for item in self.gates]
+        if len(gate_names) != len(set(gate_names)) or set(gate_names) != set(GateName):
+            raise ValueError(
+                "evaluation report must contain every hard gate exactly once"
+            )
+        gates_met = all(item.status is GateStatus.MET for item in self.gates)
+        if self.eligible_for_admission_recommendation != gates_met:
+            raise ValueError(
+                "evaluation eligibility must equal the complete hard-gate result"
+            )
+        if gates_met and self.valid_until is None:
+            raise ValueError("eligible evaluation requires a validity boundary")
+        if (
+            gates_met
+            and self.valid_until is not None
+            and self.valid_until < self.evaluated_on
+        ):
+            raise ValueError("eligible evaluation is already stale")
+        return self
 
 
 _MANDATORY_POLICY_CATEGORIES = (
@@ -557,11 +580,17 @@ def evaluate_offline_candidate(
         projected_usd_per_1m=None if per_call is None else per_call * 1_000_000,
     )
     eligible = all(gate.status is GateStatus.MET for gate in gates)
+    current_policy = [item for item in mandatory if item is not None]
     return EvaluationReport(
         provider_id=profile.provider_id,
         model_id=profile.model_id,
         corpus_version="merchant_ack_corpus_v1",
         evaluated_on=evaluated_on,
+        valid_until=(
+            min(item.valid_until for item in current_policy)
+            if len(current_policy) == len(_MANDATORY_POLICY_CATEGORIES)
+            else None
+        ),
         gates=tuple(gates),
         metrics=metrics,
         eligible_for_admission_recommendation=eligible,
@@ -585,20 +614,85 @@ class ManualGovernanceRecord(BaseModel):
     recorded_by: str = Field(min_length=2, max_length=120)
     recorded_on: date
     evidence_reference: str = Field(min_length=1, max_length=240)
+    evaluation_report: EvaluationReport | None = None
+    prior_record: ManualGovernanceRecord | None = None
     founder_approval_reference: str | None = Field(default=None, max_length=240)
     production_approved: bool = False
 
     @model_validator(mode="after")
     def manual_boundaries(self) -> ManualGovernanceRecord:
+        if self.production_approved:
+            raise ValueError("Phase 5 cannot approve production")
         if (
             self.state
             in {
-                GovernanceLifecycle.FOUNDER_APPROVED,
-                GovernanceLifecycle.ELIGIBLE_FOR_PREPRODUCTION_ACTIVATION,
+                GovernanceLifecycle.UNASSESSED,
+                GovernanceLifecycle.EVALUATED,
+                GovernanceLifecycle.ADMISSION_RECOMMENDED,
             }
-            and not self.founder_approval_reference
+            and self.founder_approval_reference is not None
         ):
-            raise ValueError("Founder approval reference is required")
-        if self.production_approved:
-            raise ValueError("Phase 5 cannot approve production")
+            raise ValueError("Founder approval evidence belongs only to Founder states")
+        if self.state is GovernanceLifecycle.UNASSESSED:
+            if self.evaluation_report is not None or self.prior_record is not None:
+                raise ValueError("unassessed state cannot carry evaluation progression")
+            return self
+
+        report = self.evaluation_report
+        if report is None:
+            raise ValueError("evaluated governance state requires an evaluation report")
+        if (self.provider_id, self.model_id) != (report.provider_id, report.model_id):
+            raise ValueError("governance and evaluation identities must match")
+        if report.corpus_version != "merchant_ack_corpus_v1":
+            raise ValueError("governance requires the current canonical corpus")
+        if self.recorded_on < report.evaluated_on:
+            raise ValueError("governance cannot precede its evaluation")
+
+        expected_prior = {
+            GovernanceLifecycle.EVALUATED: None,
+            GovernanceLifecycle.ADMISSION_RECOMMENDED: GovernanceLifecycle.EVALUATED,
+            GovernanceLifecycle.FOUNDER_APPROVED: GovernanceLifecycle.ADMISSION_RECOMMENDED,
+            GovernanceLifecycle.ELIGIBLE_FOR_PREPRODUCTION_ACTIVATION: GovernanceLifecycle.FOUNDER_APPROVED,
+        }[self.state]
+        if expected_prior is None:
+            if self.prior_record is not None:
+                raise ValueError("evaluated state cannot skip or repeat progression")
+        else:
+            prior = self.prior_record
+            if prior is None or prior.state is not expected_prior:
+                raise ValueError(
+                    "governance requires the immediately preceding manual state"
+                )
+            if prior.recorded_on > self.recorded_on:
+                raise ValueError("governance progression dates must be monotonic")
+            if prior.evaluation_report != report:
+                raise ValueError(
+                    "governance progression must retain the exact evaluation"
+                )
+            if (prior.provider_id, prior.model_id) != (self.provider_id, self.model_id):
+                raise ValueError("governance progression identity changed")
+
+        if self.state is not GovernanceLifecycle.EVALUATED:
+            gates_met = (
+                len(report.gates) == len(GateName)
+                and {item.gate for item in report.gates} == set(GateName)
+                and all(item.status is GateStatus.MET for item in report.gates)
+            )
+            if not report.eligible_for_admission_recommendation or not gates_met:
+                raise ValueError("advanced governance requires an eligible evaluation")
+            if report.valid_until is None or self.recorded_on > report.valid_until:
+                raise ValueError("qualifying evaluation evidence is stale")
+        if self.state in {
+            GovernanceLifecycle.FOUNDER_APPROVED,
+            GovernanceLifecycle.ELIGIBLE_FOR_PREPRODUCTION_ACTIVATION,
+        }:
+            if not self.founder_approval_reference:
+                raise ValueError("Founder approval reference is required")
+            if (
+                self.prior_record is not None
+                and self.prior_record.founder_approval_reference is not None
+                and self.founder_approval_reference
+                != self.prior_record.founder_approval_reference
+            ):
+                raise ValueError("Founder approval evidence changed")
         return self

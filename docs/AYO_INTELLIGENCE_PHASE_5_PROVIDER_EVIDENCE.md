@@ -37,7 +37,7 @@ No candidate is recommended, admitted, activated, or production-approved. No liv
 - Technical hard gates include server-only use, no mobile credentials, no client prose, structured output, an exact pinned model version, two-second p95 latency, reliability, exact preservation, locale adherence, tools disabled, stateless operation, provider-neutral edge integration, no automatic retry/failover, and production disabled.
 - Native Amharic approval requires dated, named human review for every Amharic scenario. Machine results cannot create that evidence.
 - Median/p95/p99 latency, success/failure rates, exactness, locale adherence, documented rate limits, lifecycle risk, and token-cost projections are comparative metrics only. They never override a hard-gate failure. No AYO cost ceiling has been invented.
-- `EVALUATED`, `ADMISSION_RECOMMENDED`, `FOUNDER_APPROVED`, and `ELIGIBLE_FOR_PREPRODUCTION_ACTIVATION` remain separate manual records. Eligibility is not activation, and activation is not production approval.
+- `EVALUATED`, `ADMISSION_RECOMMENDED`, `FOUNDER_APPROVED`, and `ELIGIBLE_FOR_PREPRODUCTION_ACTIVATION` remain separate manual records. Each advanced record embeds the exact qualifying evaluation and its immediate predecessor; recommendation requires all gates met within the evidence-validity window, and Founder states require explicit Founder evidence. Eligibility is not activation, and activation is not production approval.
 
 ## Risk and edge-case register
 

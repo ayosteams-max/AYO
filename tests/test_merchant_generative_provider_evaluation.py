@@ -9,6 +9,7 @@ from pydantic import ValidationError
 from BACKEND.merchant_intelligence.provider_evaluation import (
     MERCHANT_ACK_EVALUATION_CORPUS,
     CandidateTechnicalProfile,
+    EvaluationReport,
     EvidenceApplicability,
     EvidenceCategory,
     EvidenceConclusion,
@@ -134,6 +135,31 @@ def report(**changes: object):
 
 def gate(result, name: GateName):
     return next(item for item in result.gates if item.gate is name)
+
+
+def evaluated_record(result: EvaluationReport) -> ManualGovernanceRecord:
+    return ManualGovernanceRecord(
+        provider_id=result.provider_id,
+        model_id=result.model_id,
+        state=GovernanceLifecycle.EVALUATED,
+        recorded_by="Technical evaluator",
+        recorded_on=result.evaluated_on,
+        evidence_reference="immutable-evaluation-report-v1",
+        evaluation_report=result,
+    )
+
+
+def recommended_record(result: EvaluationReport) -> ManualGovernanceRecord:
+    return ManualGovernanceRecord(
+        provider_id=result.provider_id,
+        model_id=result.model_id,
+        state=GovernanceLifecycle.ADMISSION_RECOMMENDED,
+        recorded_by="CTO reviewer",
+        recorded_on=result.evaluated_on,
+        evidence_reference="manual-admission-recommendation-v1",
+        evaluation_report=result,
+        prior_record=evaluated_record(result),
+    )
 
 
 def test_corpus_is_fixed_complete_bilingual_and_privacy_minimal():
@@ -331,27 +357,277 @@ def test_candidate_and_model_evidence_cannot_collide_or_substitute():
         )
 
 
-def test_evaluation_has_no_automatic_governance_transition_or_production_approval():
-    assert report().lifecycle_state == "evaluated"
+def ineligible_reports() -> tuple[EvaluationReport, ...]:
+    privacy = list(policy())
+    privacy[0] = privacy[0].model_copy(
+        update={"conclusion": EvidenceConclusion.DOES_NOT_SATISFY}
+    )
+    missing_retention = tuple(
+        item for item in policy() if item.category is not EvidenceCategory.RETENTION
+    )
+    slow = list(observations())
+    slow[-2:] = [item.model_copy(update={"latency_ms": 2_001}) for item in slow[-2:]]
+    timeout = list(observations())
+    timeout[0] = timeout[0].model_copy(update={"outcome": ObservationOutcome.TIMEOUT})
+    changed = list(observations())
+    changed[0] = changed[0].model_copy(update={"body": "Changed wording"})
+    return (
+        report(policy_evidence=tuple(privacy)),
+        report(policy_evidence=missing_retention),
+        report(evaluated_on=date(2026, 9, 10)),
+        report(observations=tuple(slow)),
+        report(observations=tuple(timeout)),
+        report(observations=tuple(changed)),
+        report(amharic_reviews=()),
+        report(profile=profile(production_disabled=False)),
+    )
+
+
+@pytest.mark.parametrize("result", ineligible_reports())
+def test_failed_or_unknown_hard_gate_cannot_be_manually_recommended(result):
+    evaluated = evaluated_record(result)
+    with pytest.raises(
+        ValidationError, match="eligible evaluation|eligibility must equal"
+    ):
+        ManualGovernanceRecord(
+            provider_id=result.provider_id,
+            model_id=result.model_id,
+            state=GovernanceLifecycle.ADMISSION_RECOMMENDED,
+            recorded_by="CTO reviewer",
+            recorded_on=result.evaluated_on,
+            evidence_reference="manual-admission-recommendation-v1",
+            evaluation_report=result,
+            prior_record=evaluated,
+        )
+
+
+def test_eligible_evaluation_requires_a_separate_manual_recommendation():
+    result = report()
+    assert result.eligible_for_admission_recommendation is True
+    evaluated = evaluated_record(result)
+    assert evaluated.state is GovernanceLifecycle.EVALUATED
+    recommended = recommended_record(result)
+    assert recommended.state is GovernanceLifecycle.ADMISSION_RECOMMENDED
+    assert (
+        recommended.prior_record is evaluated or recommended.prior_record == evaluated
+    )
+    with pytest.raises(ValidationError, match="belongs only to Founder states"):
+        ManualGovernanceRecord.model_validate(
+            {
+                **recommended.model_dump(),
+                "founder_approval_reference": "premature-founder-evidence",
+            }
+        )
+
+
+def test_governance_binds_provider_model_corpus_and_evaluation_date():
+    result = report()
+    with pytest.raises(ValidationError, match="identities must match"):
+        ManualGovernanceRecord(
+            provider_id="different_provider",
+            model_id=result.model_id,
+            state=GovernanceLifecycle.EVALUATED,
+            recorded_by="Technical evaluator",
+            recorded_on=TODAY,
+            evidence_reference="evaluation-v1",
+            evaluation_report=result,
+        )
+    with pytest.raises(ValidationError, match="identities must match"):
+        ManualGovernanceRecord(
+            provider_id=result.provider_id,
+            model_id="different-model",
+            state=GovernanceLifecycle.EVALUATED,
+            recorded_by="Technical evaluator",
+            recorded_on=TODAY,
+            evidence_reference="evaluation-v1",
+            evaluation_report=result,
+        )
+    other_corpus = EvaluationReport.model_validate(
+        {**result.model_dump(), "corpus_version": "merchant_ack_corpus_v2"}
+    )
+    with pytest.raises(ValidationError, match="current canonical corpus"):
+        ManualGovernanceRecord(
+            provider_id=result.provider_id,
+            model_id=result.model_id,
+            state=GovernanceLifecycle.EVALUATED,
+            recorded_by="Technical evaluator",
+            recorded_on=TODAY,
+            evidence_reference="evaluation-v2",
+            evaluation_report=other_corpus,
+        )
+    with pytest.raises(ValidationError, match="cannot precede"):
+        ManualGovernanceRecord(
+            provider_id=result.provider_id,
+            model_id=result.model_id,
+            state=GovernanceLifecycle.EVALUATED,
+            recorded_by="Technical evaluator",
+            recorded_on=date(2026, 8, 9),
+            evidence_reference="evaluation-v1",
+            evaluation_report=result,
+        )
+
+
+def test_advanced_states_require_exact_manual_predecessors_and_founder_evidence():
+    result = report()
+    recommendation = recommended_record(result)
     with pytest.raises(ValidationError, match="Founder approval"):
         ManualGovernanceRecord(
             provider_id=PROVIDER,
             model_id=MODEL,
             state=GovernanceLifecycle.FOUNDER_APPROVED,
-            recorded_by="CTO reviewer",
+            recorded_by="Founder",
             recorded_on=TODAY,
-            evidence_reference="offline-report-v1",
+            evidence_reference="founder-decision-v1",
+            evaluation_report=result,
+            prior_record=recommendation,
         )
-    with pytest.raises(ValidationError, match="cannot approve production"):
+    founder = ManualGovernanceRecord(
+        provider_id=PROVIDER,
+        model_id=MODEL,
+        state=GovernanceLifecycle.FOUNDER_APPROVED,
+        recorded_by="Ibrahim Hambentu Shibiru",
+        recorded_on=TODAY,
+        evidence_reference="founder-decision-v1",
+        evaluation_report=result,
+        prior_record=recommendation,
+        founder_approval_reference="founder-approval-v1",
+    )
+    eligible = ManualGovernanceRecord(
+        provider_id=PROVIDER,
+        model_id=MODEL,
+        state=GovernanceLifecycle.ELIGIBLE_FOR_PREPRODUCTION_ACTIVATION,
+        recorded_by="CTO reviewer",
+        recorded_on=TODAY,
+        evidence_reference="preproduction-eligibility-v1",
+        evaluation_report=result,
+        prior_record=founder,
+        founder_approval_reference="founder-approval-v1",
+    )
+    assert eligible.state is GovernanceLifecycle.ELIGIBLE_FOR_PREPRODUCTION_ACTIVATION
+    assert not hasattr(eligible, "activate")
+    with pytest.raises(ValidationError, match="immediately preceding"):
         ManualGovernanceRecord(
             provider_id=PROVIDER,
             model_id=MODEL,
             state=GovernanceLifecycle.ELIGIBLE_FOR_PREPRODUCTION_ACTIVATION,
             recorded_by="CTO reviewer",
             recorded_on=TODAY,
-            evidence_reference="offline-report-v1",
-            founder_approval_reference="founder-record-v1",
+            evidence_reference="skipped-founder-v1",
+            evaluation_report=result,
+            prior_record=recommendation,
+            founder_approval_reference="founder-approval-v1",
+        )
+
+
+def test_advanced_governance_rejects_stale_or_different_evaluation_and_production():
+    result = report()
+    with pytest.raises(ValidationError, match="stale"):
+        ManualGovernanceRecord(
+            provider_id=PROVIDER,
+            model_id=MODEL,
+            state=GovernanceLifecycle.ADMISSION_RECOMMENDED,
+            recorded_by="CTO reviewer",
+            recorded_on=date(2026, 9, 10),
+            evidence_reference="late-recommendation-v1",
+            evaluation_report=result,
+            prior_record=evaluated_record(result),
+        )
+    other = EvaluationReport.model_validate(
+        {**result.model_dump(), "model_id": "synthetic-model-v2"}
+    )
+    with pytest.raises(ValidationError, match="identities must match|exact evaluation"):
+        ManualGovernanceRecord(
+            provider_id=PROVIDER,
+            model_id=MODEL,
+            state=GovernanceLifecycle.ADMISSION_RECOMMENDED,
+            recorded_by="CTO reviewer",
+            recorded_on=TODAY,
+            evidence_reference="mixed-evaluation-v1",
+            evaluation_report=result,
+            prior_record=evaluated_record(other).model_copy(
+                update={"provider_id": PROVIDER, "model_id": MODEL}
+            ),
+        )
+    with pytest.raises(ValidationError, match="cannot approve production"):
+        ManualGovernanceRecord(
+            provider_id=PROVIDER,
+            model_id=MODEL,
+            state=GovernanceLifecycle.UNASSESSED,
+            recorded_by="CTO reviewer",
+            recorded_on=TODAY,
+            evidence_reference="no-production-v1",
             production_approved=True,
+        )
+
+
+def test_founder_and_preproduction_states_cannot_use_an_ineligible_report():
+    result = report(amharic_reviews=())
+    evaluated = evaluated_record(result)
+    forged_recommendation = ManualGovernanceRecord.model_construct(
+        provider_id=PROVIDER,
+        model_id=MODEL,
+        state=GovernanceLifecycle.ADMISSION_RECOMMENDED,
+        recorded_by="forged recommendation",
+        recorded_on=TODAY,
+        evidence_reference="forged-recommendation",
+        evaluation_report=result,
+        prior_record=evaluated,
+        founder_approval_reference=None,
+        production_approved=False,
+    )
+    with pytest.raises(ValidationError, match="eligible evaluation"):
+        ManualGovernanceRecord(
+            provider_id=PROVIDER,
+            model_id=MODEL,
+            state=GovernanceLifecycle.FOUNDER_APPROVED,
+            recorded_by="Founder",
+            recorded_on=TODAY,
+            evidence_reference="founder-decision-v1",
+            evaluation_report=result,
+            prior_record=forged_recommendation,
+            founder_approval_reference="founder-approval-v1",
+        )
+    forged_founder = ManualGovernanceRecord.model_construct(
+        provider_id=PROVIDER,
+        model_id=MODEL,
+        state=GovernanceLifecycle.FOUNDER_APPROVED,
+        recorded_by="forged founder",
+        recorded_on=TODAY,
+        evidence_reference="forged-founder",
+        evaluation_report=result,
+        prior_record=forged_recommendation,
+        founder_approval_reference="founder-approval-v1",
+        production_approved=False,
+    )
+    with pytest.raises(ValidationError, match="eligible evaluation"):
+        ManualGovernanceRecord(
+            provider_id=PROVIDER,
+            model_id=MODEL,
+            state=GovernanceLifecycle.ELIGIBLE_FOR_PREPRODUCTION_ACTIVATION,
+            recorded_by="CTO reviewer",
+            recorded_on=TODAY,
+            evidence_reference="preproduction-eligibility-v1",
+            evaluation_report=result,
+            prior_record=forged_founder,
+            founder_approval_reference="founder-approval-v1",
+        )
+
+
+def test_caller_cannot_override_failed_gate_with_an_eligibility_boolean():
+    failed = report(amharic_reviews=())
+    forged = failed.model_copy(update={"eligible_for_admission_recommendation": True})
+    with pytest.raises(
+        ValidationError, match="eligible evaluation|eligibility must equal"
+    ):
+        ManualGovernanceRecord(
+            provider_id=PROVIDER,
+            model_id=MODEL,
+            state=GovernanceLifecycle.ADMISSION_RECOMMENDED,
+            recorded_by="CTO reviewer",
+            recorded_on=TODAY,
+            evidence_reference="forged-eligibility-v1",
+            evaluation_report=forged,
+            prior_record=evaluated_record(forged),
         )
 
 
