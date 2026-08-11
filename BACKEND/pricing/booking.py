@@ -1,6 +1,8 @@
+import hashlib
 from datetime import datetime, timedelta
 from uuid import UUID
 
+from BACKEND.authorization.contracts import AuthorizationSubject
 from BACKEND.booking.models import BookingQuote
 from BACKEND.persistence.composition import PostgresRepositoryComposition
 from BACKEND.pricing.application import PricingApplication
@@ -43,3 +45,50 @@ class BookingPricingApplication:
                 breakdown=calculate(policy, metrics),
                 expires_at=at + timedelta(seconds=self._quote_ttl_seconds),
             )
+
+    def establish_canonical_lineage(
+        self,
+        *,
+        subject: AuthorizationSubject,
+        ride_request_id: UUID,
+        policy_id: UUID,
+        metrics: RouteMetrics,
+        idempotency_key: str,
+        correlation_id: UUID,
+        causation_id: UUID,
+        at: datetime,
+    ):
+        pricing = PricingApplication(
+            self._composition,
+            maximum_metrics_age_seconds=self._maximum_metrics_age_seconds,
+            estimate_ttl_seconds=self._quote_ttl_seconds,
+        )
+        key_digest = hashlib.sha256(idempotency_key.encode()).hexdigest()
+        estimate = pricing.estimate(
+            subject,
+            ride_request_id=ride_request_id,
+            policy_id=policy_id,
+            metrics=metrics,
+            idempotency_key=f"booking-estimate-{key_digest}",
+            correlation_id=correlation_id,
+            causation_id=causation_id,
+            at=at,
+        )
+        acceptance = pricing.accept(
+            subject,
+            estimate.estimate_id,
+            idempotency_key=f"booking-acceptance-{key_digest}",
+            at=at,
+        )
+        payload = ":".join(
+            (
+                str(ride_request_id),
+                str(estimate.estimate_id),
+                str(acceptance.acceptance_id),
+                str(estimate.policy_id),
+                estimate.policy_version,
+                str(acceptance.accepted_amount_minor),
+                acceptance.currency,
+            )
+        )
+        return estimate, acceptance, hashlib.sha256(payload.encode()).hexdigest()

@@ -42,8 +42,15 @@ class ImmediateHandoffService:
         if not 16 <= len(idempotency_key) <= 128:
             raise ValueError("Idempotency key length is invalid")
         at = at.astimezone(UTC)
+        with self._composition.unit_of_work() as unit:
+            pricing = unit.handoff_dispatch.accepted_pricing_lineage(
+                ride_request_id, at=at, require_current=False
+            )
+        if pricing is None:
+            raise HandoffConflict("dispatch.accepted_pricing_required")
         digest = sha256(
-            f"{ride_request_id}:{correlation_id}:{causation_id}".encode()
+            f"{ride_request_id}:{correlation_id}:{causation_id}:"
+            f"{pricing['pricing_lineage_hash']}".encode()
         ).hexdigest()
         candidate_id = uuid4()
         with self._composition.unit_of_work() as unit:
@@ -57,7 +64,11 @@ class ImmediateHandoffService:
             )
             existing = unit.handoff_dispatch.get_handoff(canonical)
             if existing is not None:
+                if existing.pricing_lineage_hash != pricing["pricing_lineage_hash"]:
+                    raise HandoffConflict("dispatch.accepted_pricing_required")
                 return existing
+            if at >= pricing["expires_at"]:
+                raise HandoffConflict("dispatch.accepted_pricing_required")
             source = unit.handoff_dispatch.ready_source(ride_request_id)
             if source is None:
                 raise HandoffConflict("Ride request is not validated for dispatch")
@@ -78,6 +89,11 @@ class ImmediateHandoffService:
                 ride_request_version=source["version"],
                 ride_policy_version=source["validation_policy_version"],
                 dispatch_policy_version=self._policy_version,
+                fare_estimate_id=pricing["fare_estimate_id"],
+                estimate_acceptance_id=pricing["estimate_acceptance_id"],
+                pricing_policy_id=pricing["policy_id"],
+                pricing_policy_version=pricing["policy_version"],
+                pricing_lineage_hash=pricing["pricing_lineage_hash"],
                 created_at=at,
                 expires_at=source["expires_at"],
                 correlation_id=correlation_id,
@@ -93,7 +109,13 @@ class ImmediateHandoffService:
         at = at.astimezone(UTC)
         with self._composition.unit_of_work() as unit:
             handoff = unit.handoff_dispatch.get_handoff(handoff_id)
-            if handoff is None or handoff.expires_at <= at:
+            if (
+                handoff is None
+                or handoff.expires_at <= at
+                or not unit.handoff_dispatch.handoff_pricing_lineage_current(
+                    handoff, at=at
+                )
+            ):
                 raise HandoffConflict("Handoff unavailable")
             authoritative = [
                 item

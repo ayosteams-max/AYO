@@ -161,6 +161,10 @@ class PostTripRecord(BaseModel):
     package_id: UUID
     state: PostTripState
     cash_state: CashSettlementState | None
+    cash_evidence_state: str | None = Field(
+        default=None,
+        pattern=r"^(awaiting_confirmations|partially_confirmed|collection_corroborated|cash_settlement_review)$",
+    )
     financial_breakdown: FinancialBreakdown
     ledger_journal_id: UUID | None = None
     wallet_entry_id: UUID | None = None

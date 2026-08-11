@@ -17,8 +17,8 @@ from BACKEND.persistence.migrations import (
 def test_migration_history_has_one_expected_head() -> None:
     script = ScriptDirectory.from_config(alembic_config())
 
-    assert script.get_heads() == ["20260806_0058"]
-    assert expected_schema_revision() == "20260806_0058"
+    assert script.get_heads() == ["20260811_0059"]
+    assert expected_schema_revision() == "20260811_0059"
 
 
 def test_mobile_context_migration_changes_only_the_courier_lookup_index() -> None:

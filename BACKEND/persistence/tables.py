@@ -2510,6 +2510,17 @@ booking_confirmations = Table(
         unique=True,
     ),
     Column(
+        "fare_estimate_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.fare_estimates.estimate_id"),
+    ),
+    Column(
+        "estimate_acceptance_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.fare_estimate_acceptances.acceptance_id"),
+    ),
+    Column("pricing_lineage_hash", String(64)),
+    Column(
         "rider_identity_id",
         UUID(as_uuid=True),
         ForeignKey("ayo.identities.identity_id"),
@@ -2674,6 +2685,23 @@ immediate_dispatch_handoffs = Table(
     Column("ride_request_version", Integer, nullable=False),
     Column("ride_policy_version", String(63), nullable=False),
     Column("dispatch_policy_version", String(63), nullable=False),
+    Column(
+        "fare_estimate_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.fare_estimates.estimate_id"),
+    ),
+    Column(
+        "estimate_acceptance_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.fare_estimate_acceptances.acceptance_id"),
+    ),
+    Column(
+        "pricing_policy_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.pricing_policies.policy_id"),
+    ),
+    Column("pricing_policy_version", String(63)),
+    Column("pricing_lineage_hash", String(64)),
     Column("state", String(24), nullable=False),
     Column("version", Integer, nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
@@ -4489,6 +4517,7 @@ post_trip_records = Table(
     ),
     Column("state", String(32), nullable=False),
     Column("cash_state", String(32)),
+    Column("cash_evidence_state", String(32)),
     Column(
         "financial_breakdown", JSONB().with_variant(JSON(), "sqlite"), nullable=False
     ),
@@ -4561,6 +4590,84 @@ trip_cash_confirmations = Table(
         "idempotency_key_hash",
         name="uq_cash_confirmation_idempotency",
     ),
+    schema=AYO_SCHEMA,
+)
+
+trip_cash_collection_evidence = Table(
+    "trip_cash_collection_evidence",
+    metadata,
+    Column("evidence_id", UUID(as_uuid=True), primary_key=True),
+    Column(
+        "ride_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.active_rides.ride_id"),
+        nullable=False,
+        unique=True,
+    ),
+    Column(
+        "fare_calculation_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.fare_calculations.calculation_id"),
+        nullable=False,
+    ),
+    Column("state", String(32), nullable=False),
+    Column("payload", JSONB().with_variant(JSON(), "sqlite"), nullable=False),
+    Column("evidence_hash", String(64), nullable=False),
+    Column("recorded_at", DateTime(timezone=True), nullable=False),
+    schema=AYO_SCHEMA,
+)
+
+cash_accounting_policies = Table(
+    "cash_accounting_policies",
+    metadata,
+    Column("accounting_policy_id", UUID(as_uuid=True), primary_key=True),
+    Column("accounting_policy_version", String(63), nullable=False, unique=True),
+    Column("environment", String(24), nullable=False),
+    Column("accounting_model", String(32), nullable=False),
+    Column("payload", JSONB().with_variant(JSON(), "sqlite"), nullable=False),
+    Column("policy_evidence_hash", String(64), nullable=False),
+    schema=AYO_SCHEMA,
+)
+
+trip_cash_accounting_records = Table(
+    "trip_cash_accounting_records",
+    metadata,
+    Column(
+        "ride_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.active_rides.ride_id"),
+        primary_key=True,
+    ),
+    Column(
+        "evidence_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.trip_cash_collection_evidence.evidence_id"),
+        nullable=False,
+    ),
+    Column("instruction_id", UUID(as_uuid=True), nullable=False, unique=True),
+    Column(
+        "accounting_policy_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.cash_accounting_policies.accounting_policy_id"),
+        nullable=False,
+    ),
+    Column("accounting_policy_version", String(63), nullable=False),
+    Column("state", String(32), nullable=False),
+    Column("reconciliation_state", String(24), nullable=False),
+    Column(
+        "ledger_journal_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.ledger_journals.journal_id"),
+    ),
+    Column(
+        "clearing_journal_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.ledger_journals.journal_id"),
+    ),
+    Column("reconciliation_evidence_hash", String(64)),
+    Column("payload", JSONB().with_variant(JSON(), "sqlite"), nullable=False),
+    Column("version", Integer, nullable=False),
+    CheckConstraint("version > 0", name="cash_accounting_record_positive_version"),
     schema=AYO_SCHEMA,
 )
 

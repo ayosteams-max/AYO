@@ -36,6 +36,11 @@ class DispatchHandoff(BaseModel):
     ride_request_version: int = Field(ge=1)
     ride_policy_version: str
     dispatch_policy_version: str
+    fare_estimate_id: UUID | None = None
+    estimate_acceptance_id: UUID | None = None
+    pricing_policy_id: UUID | None = None
+    pricing_policy_version: str | None = None
+    pricing_lineage_hash: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
     state: HandoffState = HandoffState.SEARCHING
     version: int = Field(default=1, ge=1)
     created_at: datetime
@@ -57,6 +62,17 @@ class DispatchHandoff(BaseModel):
     def valid_window(self) -> "DispatchHandoff":
         if self.expires_at <= self.created_at:
             raise ValueError("Handoff expiry must follow creation")
+        lineage = (
+            self.fare_estimate_id,
+            self.estimate_acceptance_id,
+            self.pricing_policy_id,
+            self.pricing_policy_version,
+            self.pricing_lineage_hash,
+        )
+        if any(value is not None for value in lineage) and not all(
+            value is not None for value in lineage
+        ):
+            raise ValueError("Accepted pricing lineage must be complete")
         return self
 
 
