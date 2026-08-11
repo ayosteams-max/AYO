@@ -465,6 +465,10 @@ class CashAccountingLedgerApplication:
             try:
                 entries = tuple(
                     LedgerEntry(
+                        entry_id=uuid5(
+                            NAMESPACE_URL,
+                            f"ayo:cash-accounting-entry:{instruction.instruction_id}:{index}",
+                        ),
                         account_id=self._account_ids[line.account_code],
                         side=line.side,
                         amount_minor=line.amount_minor,
@@ -510,7 +514,10 @@ class CashAccountingLedgerApplication:
                 recorded_at=at,
                 correlation_id=correlation_id,
                 causation_id=instruction.instruction_id,
-                audit_reference=uuid4(),
+                audit_reference=uuid5(
+                    NAMESPACE_URL,
+                    f"ayo:cash-accounting-audit:{instruction.instruction_id}",
+                ),
             )
             canonical_journal_id = unit.ledger.reserve_idempotency(
                 actor_id=subject.identity_id,
@@ -668,6 +675,11 @@ class CashReconciliationApplication:
                 predecessor_ledger_journal_id=original.journal_id,
                 entries=(
                     LedgerEntry(
+                        entry_id=uuid5(
+                            NAMESPACE_URL,
+                            "ayo:cash-reconciliation-entry:"
+                            f"{stored_evidence.reconciliation_evidence_id}:1",
+                        ),
                         account_id=clearing_id,
                         side=LedgerEntrySide.DEBIT,
                         amount_minor=item.platform_claim_minor,
@@ -675,6 +687,11 @@ class CashReconciliationApplication:
                         line_index=1,
                     ),
                     LedgerEntry(
+                        entry_id=uuid5(
+                            NAMESPACE_URL,
+                            "ayo:cash-reconciliation-entry:"
+                            f"{stored_evidence.reconciliation_evidence_id}:2",
+                        ),
                         account_id=receivable_id,
                         side=LedgerEntrySide.CREDIT,
                         amount_minor=item.platform_claim_minor,

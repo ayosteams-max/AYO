@@ -343,6 +343,7 @@ class FakeCashPostTripRepository:
         self.record = record
         self.accounting_policy = accounting_policy
         self.reconciliation_evidence = None
+        self.fail_update_once = False
 
     def cash_accounting_record(self, ride_id):
         return self.record if self.record.ride_id == ride_id else None
@@ -364,6 +365,9 @@ class FakeCashPostTripRepository:
         return item
 
     def update_cash_accounting_record(self, item, *, expected_version):
+        if self.fail_update_once:
+            self.fail_update_once = False
+            raise PostTripConflict("simulated_state_update_failure")
         if self.record.version != expected_version:
             raise PostTripConflict("stale_cash_accounting_record")
         self.record = item.model_copy(update={"version": expected_version + 1})
@@ -547,6 +551,26 @@ def test_reconciliation_posts_obligation_bound_journal_and_replays_once():
     assert journal.predecessor_ledger_journal_id == item.original_accounting_journal_id
     assert journal.business_event_id == item.reconciliation_evidence_id
     assert post_trip.reconciliation_evidence == item
+
+
+def test_reconciliation_recovers_exact_journal_after_state_update_failure():
+    application, subject, item, post_trip, ledger = reconciliation_fixture()
+    post_trip.fail_update_once = True
+    with pytest.raises(PostTripConflict, match="simulated_state_update_failure"):
+        application.clear(
+            subject,
+            evidence=item,
+            idempotency_key="cash-reconciliation-recovery",
+            expected_version=1,
+        )
+    recovered = application.clear(
+        subject,
+        evidence=item,
+        idempotency_key="cash-reconciliation-recovery",
+        expected_version=1,
+    )
+    assert recovered.reconciliation_state is CashReconciliationState.CLEARED
+    assert ledger.post_count == 1
 
 
 def test_reconciliation_rejects_missing_permission_and_unrelated_journal():
