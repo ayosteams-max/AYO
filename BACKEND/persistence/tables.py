@@ -2512,12 +2512,20 @@ booking_confirmations = Table(
     Column(
         "fare_estimate_id",
         UUID(as_uuid=True),
-        ForeignKey("ayo.fare_estimates.estimate_id"),
+        ForeignKey(
+            "ayo.fare_estimates.estimate_id",
+            name="fk_booking_confirmation_fare_estimate",
+            use_alter=True,
+        ),
     ),
     Column(
         "estimate_acceptance_id",
         UUID(as_uuid=True),
-        ForeignKey("ayo.fare_estimate_acceptances.acceptance_id"),
+        ForeignKey(
+            "ayo.fare_estimate_acceptances.acceptance_id",
+            name="fk_booking_confirmation_estimate_acceptance",
+            use_alter=True,
+        ),
     ),
     Column("pricing_lineage_hash", String(64)),
     Column(
@@ -2688,17 +2696,29 @@ immediate_dispatch_handoffs = Table(
     Column(
         "fare_estimate_id",
         UUID(as_uuid=True),
-        ForeignKey("ayo.fare_estimates.estimate_id"),
+        ForeignKey(
+            "ayo.fare_estimates.estimate_id",
+            name="fk_handoff_fare_estimate",
+            use_alter=True,
+        ),
     ),
     Column(
         "estimate_acceptance_id",
         UUID(as_uuid=True),
-        ForeignKey("ayo.fare_estimate_acceptances.acceptance_id"),
+        ForeignKey(
+            "ayo.fare_estimate_acceptances.acceptance_id",
+            name="fk_handoff_estimate_acceptance",
+            use_alter=True,
+        ),
     ),
     Column(
         "pricing_policy_id",
         UUID(as_uuid=True),
-        ForeignKey("ayo.pricing_policies.policy_id"),
+        ForeignKey(
+            "ayo.pricing_policies.policy_id",
+            name="fk_handoff_pricing_policy",
+            use_alter=True,
+        ),
     ),
     Column("pricing_policy_version", String(63)),
     Column("pricing_lineage_hash", String(64)),

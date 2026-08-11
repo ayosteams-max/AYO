@@ -4,6 +4,8 @@ from unittest.mock import MagicMock
 
 import pytest
 from alembic.script import ScriptDirectory
+from sqlalchemy.dialects import postgresql
+from sqlalchemy.schema import CreateTable
 
 from BACKEND.persistence.migrations import (
     MigrationLockTimeout,
@@ -12,6 +14,10 @@ from BACKEND.persistence.migrations import (
     alembic_config,
     expected_schema_revision,
 )
+from BACKEND.persistence.tables import (
+    booking_confirmations,
+    immediate_dispatch_handoffs,
+)
 
 
 def test_migration_history_has_one_expected_head() -> None:
@@ -19,6 +25,44 @@ def test_migration_history_has_one_expected_head() -> None:
 
     assert script.get_heads() == ["20260811_0059"]
     assert expected_schema_revision() == "20260811_0059"
+
+
+def test_late_pricing_lineage_foreign_keys_are_added_by_migration_0059() -> None:
+    expected_targets = {
+        "booking_confirmations": {
+            "ayo.fare_estimates": "fk_booking_confirmation_fare_estimate",
+            "ayo.fare_estimate_acceptances": (
+                "fk_booking_confirmation_estimate_acceptance"
+            ),
+        },
+        "immediate_dispatch_handoffs": {
+            "ayo.fare_estimates": "fk_handoff_fare_estimate",
+            "ayo.fare_estimate_acceptances": "fk_handoff_estimate_acceptance",
+            "ayo.pricing_policies": "fk_handoff_pricing_policy",
+        },
+    }
+
+    for table in (booking_confirmations, immediate_dispatch_handoffs):
+        pricing_constraints = {
+            constraint
+            for constraint in table.foreign_key_constraints
+            if constraint.referred_table.fullname in expected_targets[table.name]
+        }
+        assert {
+            constraint.referred_table.fullname for constraint in pricing_constraints
+        } == set(expected_targets[table.name])
+        assert all(constraint.use_alter for constraint in pricing_constraints)
+        assert {
+            constraint.referred_table.fullname: constraint.name
+            for constraint in pricing_constraints
+        } == expected_targets[table.name]
+
+        historical_create_sql = str(
+            CreateTable(table).compile(dialect=postgresql.dialect())
+        )
+        assert "REFERENCES ayo.fare_estimates" not in historical_create_sql
+        assert "REFERENCES ayo.fare_estimate_acceptances" not in historical_create_sql
+        assert "REFERENCES ayo.pricing_policies" not in historical_create_sql
 
 
 def test_mobile_context_migration_changes_only_the_courier_lookup_index() -> None:
