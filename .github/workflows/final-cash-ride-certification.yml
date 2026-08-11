@@ -85,13 +85,29 @@ jobs:
         working-directory: product
         env:
           AYO_DATABASE_URL: postgresql+psycopg://ayo_certification:ephemeral-certification-only@localhost:5432/ayo_cash_ride_certification
+          AYO_DATABASE_SSL_MODE: disable
           AYO_TEST_DATABASE_URL: postgresql+psycopg://ayo_certification:ephemeral-certification-only@localhost:5432/ayo_cash_ride_certification
+          PYTHONPATH: .
         shell: bash
         run: |
           set -euo pipefail
           echo '::add-mask::ephemeral-certification-only'
-          uv run alembic upgrade head >/dev/null
-          test "$(uv run alembic current | sed -n 's/^\([0-9_]*\).*/\1/p')" = "20260811_0059"
+          uv run --locked python database/migrate.py
+          uv run --locked python - <<'PY'
+          from BACKEND.persistence.config import DatabaseSettings
+          from BACKEND.persistence.engine import create_postgres_engine
+          from BACKEND.persistence.migrations import SchemaVersionReadinessChecker
+
+          engine = create_postgres_engine(
+              DatabaseSettings(application_name="ayo-final-cash-ride-certification")
+          )
+          try:
+              readiness = SchemaVersionReadinessChecker(engine).check()
+          finally:
+              engine.dispose()
+          if not readiness.ready or readiness.current_revision != "20260811_0059":
+              raise SystemExit("Certification database did not reach exact migration head")
+          PY
 
       - name: Record sanitized PostgreSQL identity
         id: database
