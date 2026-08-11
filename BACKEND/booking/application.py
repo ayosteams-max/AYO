@@ -282,11 +282,29 @@ class BookingApplication:
         )
         if ride.state is not RideRequestState.READY_FOR_DISPATCH:
             raise BookingConflict("booking_validation_failed")
+        try:
+            estimate, acceptance, lineage_hash = (
+                self._pricing.establish_canonical_lineage(
+                    subject=subject,
+                    ride_request_id=ride.request_id,
+                    policy_id=self._pricing_policy_id,
+                    metrics=preview.route.metrics,
+                    idempotency_key=command.idempotency_key,
+                    correlation_id=ride.request_id,
+                    causation_id=preview.evidence_id,
+                    at=at,
+                )
+            )
+        except (RuntimeError, ValueError) as error:
+            raise BookingConflict("canonical_pricing_unavailable") from error
         confirmation = BookingConfirmation(
             evidence_id=preview.evidence_id,
             evidence_hash=preview.evidence_hash,
             quote_id=preview.quote.quote_id,
             ride_request_id=ride.request_id,
+            fare_estimate_id=estimate.estimate_id,
+            estimate_acceptance_id=acceptance.acceptance_id,
+            pricing_lineage_hash=lineage_hash,
             rider_identity_id=subject.identity_id,
             idempotency_key_hash=key_hash,
             confirmed_at=at,

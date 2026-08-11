@@ -3,10 +3,11 @@ from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import func, insert, select
 
 from BACKEND.audit.models import ActorType
 from BACKEND.authorization.contracts import AuthorizationSubject
+from BACKEND.booking.models import BookingConfirmation
 from BACKEND.dispatch.handoff import EligibleDriverInput, HandoffState
 from BACKEND.dispatch.handoff_service import ImmediateHandoffService
 from BACKEND.driver_trust.models import (
@@ -22,9 +23,12 @@ from BACKEND.localization.models import LanguagePackManifest, TextDirection
 from BACKEND.localization.service import LocalizationService
 from BACKEND.persistence.handoff_dispatch_repository import HandoffConflict
 from BACKEND.persistence.tables import (
+    booking_route_evidence,
     immediate_dispatch_assignments,
     immediate_dispatch_outbox,
 )
+from BACKEND.pricing.application import PricingApplication
+from BACKEND.pricing.models import DataQuality, PricingPolicy, RouteMetrics
 from BACKEND.ride_request.application import (
     CreateRideRequestCommand,
     RideRequestApplication,
@@ -78,7 +82,7 @@ def ready_request(composition):
     )
     cmd = CreateRideRequestCommand(
         client_request_id=uuid4(),
-        idempotency_key="ready-request-001",
+        idempotency_key=f"ready-request-{rider.identity_id}",
         pickup=PickupDefinition(
             coordinate=Coordinate(latitude=9, longitude=38.7),
             source=LocationSource.RIDER_SELECTED,
@@ -95,9 +99,133 @@ def ready_request(composition):
         ),
         consent_policy_version="consent.v1",
     )
-    return RideRequestApplication(composition, POLICY).create(
+    request = RideRequestApplication(composition, POLICY).create(
         subject=subject, command=cmd, at=NOW
-    ), subject
+    )
+    with composition.unit_of_work() as unit:
+        authoritative_zone = unit.ride_requests.find_zone(
+            latitude=9, longitude=38.7, at=NOW
+        )
+    assert authoritative_zone is not None
+    assert authoritative_zone.zone_id == request.service_zone_id
+    makers = []
+    with composition.unit_of_work() as unit:
+        for _ in range(3):
+            makers.append(
+                unit.identities.create(
+                    Identity(
+                        identity_type=IdentityType.STAFF,
+                        status=AccountStatus.ACTIVE,
+                        created_at=NOW,
+                        updated_at=NOW,
+                    )
+                )
+            )
+    operators = [
+        AuthorizationSubject(
+            identity_id=item.identity_id,
+            identity_type=IdentityType.STAFF,
+            actor_type=ActorType.STAFF,
+        )
+        for item in makers
+    ]
+    pricing = PricingApplication(composition)
+    policy = pricing.create_policy(
+        operators[0],
+        PricingPolicy(
+            policy_version=f"pricing.synthetic.{request.request_id.hex[:12]}",
+            service_zone_id=request.service_zone_id,
+            service_type="immediate_standard",
+            currency="ETB",
+            base_fare_minor=100,
+            distance_rate_per_km_minor=10,
+            time_rate_per_minute_minor=5,
+            minimum_fare_minor=100,
+            commission_basis_points=0,
+            rounding_increment_minor=1,
+            effective_from=NOW - timedelta(days=1),
+            made_by_identity_id=operators[0].identity_id,
+            created_at=NOW,
+        ),
+    )
+    policy = pricing.approve_policy(operators[1], policy.policy_id, at=NOW)
+    policy = pricing.publish_policy(operators[2], policy.policy_id, at=NOW)
+    metrics = RouteMetrics(
+        distance_meters=2000,
+        duration_seconds=600,
+        observed_at=NOW,
+        provider_id="approved_synthetic",
+        provider_version="route.synthetic.v1",
+        distance_source="approved_synthetic",
+        duration_source="approved_synthetic",
+        provenance_reference=f"route-{request.request_id}",
+        data_quality=DataQuality.APPROVED_SYNTHETIC,
+    )
+    estimate = pricing.estimate(
+        subject,
+        ride_request_id=request.request_id,
+        policy_id=policy.policy_id,
+        metrics=metrics,
+        idempotency_key=f"estimate-{request.request_id}",
+        correlation_id=request.request_id,
+        causation_id=request.request_id,
+        at=NOW,
+    )
+    acceptance = pricing.accept(
+        subject,
+        estimate.estimate_id,
+        idempotency_key=f"acceptance-{request.request_id}",
+        at=NOW,
+    )
+    evidence_id = uuid4()
+    lineage_payload = ":".join(
+        (
+            str(request.request_id),
+            str(estimate.estimate_id),
+            str(acceptance.acceptance_id),
+            str(estimate.policy_id),
+            estimate.policy_version,
+            str(acceptance.accepted_amount_minor),
+            acceptance.currency,
+        )
+    )
+    import hashlib
+
+    with composition.unit_of_work() as unit:
+        unit.connection.execute(
+            insert(booking_route_evidence).values(
+                evidence_id=evidence_id,
+                booking_session_hash="a" * 64,
+                rider_identity_id=rider.identity_id,
+                pickup_payload={},
+                destination_payload={},
+                service_zone_id=request.service_zone_id,
+                service_zone_version=authoritative_zone.version,
+                service_type="immediate_standard",
+                route_payload={},
+                quote_payload={},
+                evidence_hash="b" * 64,
+                created_at=NOW,
+                expires_at=NOW + timedelta(minutes=10),
+            )
+        )
+        unit.booking.add_confirmation(
+            BookingConfirmation(
+                evidence_id=evidence_id,
+                evidence_hash="b" * 64,
+                quote_id=uuid4(),
+                ride_request_id=request.request_id,
+                fare_estimate_id=estimate.estimate_id,
+                estimate_acceptance_id=acceptance.acceptance_id,
+                pricing_lineage_hash=hashlib.sha256(
+                    lineage_payload.encode()
+                ).hexdigest(),
+                rider_identity_id=rider.identity_id,
+                idempotency_key_hash="c" * 64,
+                confirmed_at=NOW,
+            )
+        )
+    return request, subject
 
 
 def eligible_driver(composition, cost=20):
@@ -198,6 +326,23 @@ def test_handoff_minimizes_data_and_fastest_authoritative_driver_wins(
             .all()
         )
     assert all("note" not in str(x) and "destination" not in str(x) for x in payloads)
+
+
+def test_expired_accepted_pricing_cannot_enter_dispatch(postgres_composition) -> None:
+    request, _ = ready_request(postgres_composition)
+    service = ImmediateHandoffService(
+        postgres_composition, policy_version="dispatch.v1"
+    )
+
+    with pytest.raises(HandoffConflict, match="dispatch.accepted_pricing_required"):
+        service.receive(
+            ride_request_id=request.request_id,
+            service_actor_id=uuid4(),
+            idempotency_key="handoff-expired-pricing-001",
+            correlation_id=uuid4(),
+            causation_id=uuid4(),
+            at=NOW + timedelta(minutes=11),
+        )
 
 
 def test_duplicate_acceptance_returns_one_assignment_and_changed_replay_fails(

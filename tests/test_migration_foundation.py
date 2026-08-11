@@ -3,7 +3,11 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
+import sqlalchemy as sa
 from alembic.script import ScriptDirectory
+from sqlalchemy.dialects import postgresql
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.schema import CreateTable
 
 from BACKEND.persistence.migrations import (
     MigrationLockTimeout,
@@ -12,13 +16,91 @@ from BACKEND.persistence.migrations import (
     alembic_config,
     expected_schema_revision,
 )
+from BACKEND.persistence.tables import (
+    booking_confirmations,
+    immediate_dispatch_handoffs,
+)
 
 
 def test_migration_history_has_one_expected_head() -> None:
     script = ScriptDirectory.from_config(alembic_config())
 
-    assert script.get_heads() == ["20260806_0058"]
-    assert expected_schema_revision() == "20260806_0058"
+    assert script.get_heads() == ["20260811_0059"]
+    assert expected_schema_revision() == "20260811_0059"
+
+
+def test_late_pricing_lineage_foreign_keys_are_added_by_migration_0059() -> None:
+    expected_targets = {
+        "booking_confirmations": {
+            "ayo.fare_estimates": "fk_booking_confirmation_fare_estimate",
+            "ayo.fare_estimate_acceptances": (
+                "fk_booking_confirmation_estimate_acceptance"
+            ),
+        },
+        "immediate_dispatch_handoffs": {
+            "ayo.fare_estimates": "fk_handoff_fare_estimate",
+            "ayo.fare_estimate_acceptances": "fk_handoff_estimate_acceptance",
+            "ayo.pricing_policies": "fk_handoff_pricing_policy",
+        },
+    }
+
+    for table in (booking_confirmations, immediate_dispatch_handoffs):
+        pricing_constraints = {
+            constraint
+            for constraint in table.foreign_key_constraints
+            if constraint.referred_table.fullname in expected_targets[table.name]
+        }
+        assert {
+            constraint.referred_table.fullname for constraint in pricing_constraints
+        } == set(expected_targets[table.name])
+        assert all(constraint.use_alter for constraint in pricing_constraints)
+        assert {
+            constraint.referred_table.fullname: constraint.name
+            for constraint in pricing_constraints
+        } == expected_targets[table.name]
+
+        historical_create_sql = str(
+            CreateTable(table).compile(dialect=postgresql.dialect())
+        )
+        assert "REFERENCES ayo.fare_estimates" not in historical_create_sql
+        assert "REFERENCES ayo.fare_estimate_acceptances" not in historical_create_sql
+        assert "REFERENCES ayo.pricing_policies" not in historical_create_sql
+
+
+def test_migration_0059_adds_absent_columns_and_rejects_incompatible_leaks(
+    monkeypatch,
+) -> None:
+    path = (
+        Path(__file__).parents[1]
+        / "database/migrations/versions/20260811_0059_cash_ride_certification_repair.py"
+    )
+    spec = importlib.util.spec_from_file_location("cash_ride_repair_0059", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    inspector = MagicMock()
+    add_column = MagicMock()
+    monkeypatch.setattr(module.sa, "inspect", lambda _bind: inspector)
+    monkeypatch.setattr(module.op, "get_bind", MagicMock())
+    monkeypatch.setattr(module.op, "add_column", add_column)
+    expected = (sa.Column("fare_estimate_id", sa.UUID()),)
+
+    inspector.get_columns.return_value = []
+    module._ensure_nullable_columns("immediate_dispatch_handoffs", expected)
+    add_column.assert_called_once()
+
+    add_column.reset_mock()
+    inspector.get_columns.return_value = [
+        {"name": "fare_estimate_id", "type": UUID(), "nullable": True}
+    ]
+    module._ensure_nullable_columns("immediate_dispatch_handoffs", expected)
+    add_column.assert_not_called()
+
+    inspector.get_columns.return_value = [
+        {"name": "fare_estimate_id", "type": UUID(), "nullable": False}
+    ]
+    with pytest.raises(RuntimeError, match="incompatible existing column"):
+        module._ensure_nullable_columns("immediate_dispatch_handoffs", expected)
 
 
 def test_mobile_context_migration_changes_only_the_courier_lookup_index() -> None:

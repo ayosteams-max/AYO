@@ -14,10 +14,13 @@ from BACKEND.dispatch.handoff import (
     HandoffState,
 )
 from BACKEND.persistence.tables import (
+    booking_confirmations,
     canonical_ride_requests,
     driver_eligibility_decisions,
     driver_vehicle_authorizations,
     driver_vehicles,
+    fare_estimate_acceptances,
+    fare_estimates,
     immediate_dispatch_assignments,
     immediate_dispatch_candidate_sets,
     immediate_dispatch_events,
@@ -71,6 +74,91 @@ class PostgresHandoffDispatchRepository:
             .one_or_none()
         )
         return None if row is None else dict(row)
+
+    def accepted_pricing_lineage(
+        self, ride_request_id: UUID, *, at: datetime, require_current: bool = True
+    ) -> dict[str, Any] | None:
+        row = (
+            self._connection.execute(
+                select(
+                    booking_confirmations.c.rider_identity_id,
+                    booking_confirmations.c.fare_estimate_id,
+                    booking_confirmations.c.estimate_acceptance_id,
+                    booking_confirmations.c.pricing_lineage_hash,
+                    fare_estimates.c.policy_id,
+                    fare_estimates.c.policy_version,
+                    fare_estimates.c.rider_identity_id.label("estimate_rider_id"),
+                    fare_estimates.c.breakdown,
+                    fare_estimates.c.expires_at,
+                    fare_estimate_acceptances.c.accepted_at,
+                    fare_estimate_acceptances.c.rider_identity_id.label(
+                        "acceptance_rider_id"
+                    ),
+                    fare_estimate_acceptances.c.accepted_policy_version,
+                    fare_estimate_acceptances.c.accepted_amount_minor,
+                    fare_estimate_acceptances.c.currency,
+                )
+                .join(
+                    fare_estimates,
+                    fare_estimates.c.estimate_id
+                    == booking_confirmations.c.fare_estimate_id,
+                )
+                .join(
+                    fare_estimate_acceptances,
+                    fare_estimate_acceptances.c.acceptance_id
+                    == booking_confirmations.c.estimate_acceptance_id,
+                )
+                .where(
+                    booking_confirmations.c.ride_request_id == ride_request_id,
+                    fare_estimates.c.ride_request_id == ride_request_id,
+                    fare_estimate_acceptances.c.estimate_id
+                    == fare_estimates.c.estimate_id,
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if (
+            row is None
+            or row["accepted_at"] >= row["expires_at"]
+            or (require_current and at >= row["expires_at"])
+        ):
+            return None
+        breakdown = row["breakdown"]
+        if (
+            row["rider_identity_id"] != row["estimate_rider_id"]
+            or row["rider_identity_id"] != row["acceptance_rider_id"]
+            or row["accepted_policy_version"] != row["policy_version"]
+            or row["accepted_amount_minor"] != breakdown.get("rider_total_minor")
+            or row["currency"] != breakdown.get("currency")
+        ):
+            return None
+        payload = ":".join(
+            (
+                str(ride_request_id),
+                str(row["fare_estimate_id"]),
+                str(row["estimate_acceptance_id"]),
+                str(row["policy_id"]),
+                row["policy_version"],
+                str(row["accepted_amount_minor"]),
+                row["currency"],
+            )
+        )
+        if sha256(payload.encode()).hexdigest() != row["pricing_lineage_hash"]:
+            return None
+        return dict(row)
+
+    def handoff_pricing_lineage_current(
+        self, handoff: DispatchHandoff, *, at: datetime
+    ) -> bool:
+        lineage = self.accepted_pricing_lineage(handoff.ride_request_id, at=at)
+        return lineage is not None and (
+            lineage["fare_estimate_id"] == handoff.fare_estimate_id
+            and lineage["estimate_acceptance_id"] == handoff.estimate_acceptance_id
+            and lineage["policy_id"] == handoff.pricing_policy_id
+            and lineage["policy_version"] == handoff.pricing_policy_version
+            and lineage["pricing_lineage_hash"] == handoff.pricing_lineage_hash
+        )
 
     def reserve_idempotency(
         self,

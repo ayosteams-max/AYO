@@ -12,6 +12,11 @@ from BACKEND.ledger.models import (
     LedgerJournal,
     LedgerTraceability,
 )
+from BACKEND.post_trip.cash_accounting import (
+    CashAccountingRecord,
+    CashCollectionEvidence,
+    CashEvidenceState,
+)
 from BACKEND.post_trip.engine import (
     PostTripConflict,
     assert_rating_allowed,
@@ -103,6 +108,7 @@ class PostTripApplication:
                 "cash_state": None
                 if record.cash_state is None
                 else record.cash_state.value,
+                "cash_evidence_state": record.cash_evidence_state,
                 "pickup": ride.pickup_place_id,
                 "destination": ride.destination_place_id,
                 "distance_meters": package.route.summary.get("distance_meters"),
@@ -274,6 +280,46 @@ class PostTripApplication:
                 "cash_settled",
                 "cash_settlement_review",
             }:
+                by_role = {item.actor_role: item for item in confirmations}
+                evidence_state = (
+                    CashEvidenceState.COLLECTION_CORROBORATED
+                    if updated.cash_state.value == "cash_settled"
+                    else CashEvidenceState.CASH_SETTLEMENT_REVIEW
+                )
+                unit.post_trip.add_cash_collection_evidence(
+                    CashCollectionEvidence(
+                        ride_id=ride_id,
+                        rider_identity_id=ride.rider_id,
+                        driver_identity_id=ride.driver_id,
+                        fare_calculation_id=(
+                            updated.financial_breakdown.fare_calculation_id
+                        ),
+                        gross_cash_reported_minor=(
+                            updated.financial_breakdown.gross_fare_minor
+                        ),
+                        state=evidence_state,
+                        evidence_policy_version="cash.collection.v1",
+                        rider_confirmation_id=by_role["rider"].confirmation_id,
+                        driver_confirmation_id=by_role["driver"].confirmation_id,
+                        evidence_hash=canonical_hash(
+                            {
+                                "ride_id": ride_id,
+                                "fare_calculation_id": updated.financial_breakdown.fare_calculation_id,
+                                "gross_cash_reported_minor": updated.financial_breakdown.gross_fare_minor,
+                                "state": evidence_state.value,
+                                "confirmations": [
+                                    item.model_dump(mode="json")
+                                    for item in confirmations
+                                ],
+                            }
+                        ),
+                        recorded_at=at,
+                    )
+                )
+            if updated.cash_state is not None and updated.cash_state.value in {
+                "cash_settled",
+                "cash_settlement_review",
+            }:
                 unit.post_trip.notification_intent(
                     ride_id=ride_id,
                     event_type=f"trip.{updated.cash_state.value}",
@@ -374,6 +420,11 @@ class PostTripApplication:
                 or ride.assignment_id is None
             ):
                 raise PostTripConflict("post_trip_not_ready")
+            if (
+                package.payment_method is PaymentMethod.CASH
+                and unit.post_trip.cash_collection_evidence(ride_id) is not None
+            ):
+                raise PostTripConflict("cash_accounting_policy_required")
             if record.state.value in {"settled", "archived"}:
                 return record
             assert_settlement_ready(package.payment_method, record.cash_state)
@@ -462,6 +513,63 @@ class PostTripApplication:
                 ride_id, at=at, expected_version=settled.version
             )
 
+    def issue_cash_accounting_receipts(
+        self,
+        subject: AuthorizationSubject,
+        *,
+        ride_id: UUID,
+        at: datetime,
+    ) -> PostTripRecord:
+        self._service(subject)
+        with self._composition.unit_of_work() as unit:
+            ride = unit.active_rides.get(ride_id)
+            record = unit.post_trip.get(ride_id, lock=True)
+            package = unit.post_trip.package_for_ride(ride_id)
+            accounting = unit.post_trip.cash_accounting_record(ride_id)
+            if (
+                ride is None
+                or ride.driver_id is None
+                or record is None
+                or package is None
+                or package.payment_method is not PaymentMethod.CASH
+                or accounting is None
+                or accounting.state.value != "accounting_posted"
+                or accounting.ledger_journal_id is None
+            ):
+                raise PostTripConflict("cash_accounting_receipt_not_ready")
+            if (
+                record.rider_receipt_id is not None
+                and record.driver_receipt_id is not None
+            ):
+                return record
+            rider_receipt = unit.post_trip.add_receipt(
+                self._receipt(
+                    ride,
+                    record,
+                    "rider_receipt",
+                    ride.rider_id,
+                    at,
+                    cash_accounting=accounting,
+                )
+            )
+            driver_receipt = unit.post_trip.add_receipt(
+                self._receipt(
+                    ride,
+                    record,
+                    "driver_settlement_summary",
+                    ride.driver_id,
+                    at,
+                    cash_accounting=accounting,
+                )
+            )
+            return unit.post_trip.mark_cash_accounting_evidenced(
+                ride_id,
+                journal_id=accounting.ledger_journal_id,
+                rider_receipt_id=rider_receipt.receipt_id,
+                driver_receipt_id=driver_receipt.receipt_id,
+                expected_version=record.version,
+            )
+
     def _entries(self, b: FinancialBreakdown) -> tuple[LedgerEntry, ...]:
         debit_total = (
             b.gross_fare_minor + b.incentives_minor + max(b.adjustments_minor, 0)
@@ -527,7 +635,14 @@ class PostTripApplication:
         )
 
     def _receipt(
-        self, ride: Any, record: PostTripRecord, kind: str, owner: UUID, at: datetime
+        self,
+        ride: Any,
+        record: PostTripRecord,
+        kind: str,
+        owner: UUID,
+        at: datetime,
+        *,
+        cash_accounting: CashAccountingRecord | None = None,
     ) -> Receipt:
         payload = {
             "trip_id": str(ride.ride_id),
@@ -542,6 +657,14 @@ class PostTripApplication:
             "legal_entity": self._receipt_policy.legal_entity,
             "regulatory_information": self._receipt_policy.required_regulatory_information,
         }
+        if cash_accounting is not None:
+            payload.update(
+                {
+                    "cash_accounting_state": cash_accounting.state.value,
+                    "cash_reconciliation_state": cash_accounting.reconciliation_state.value,
+                    "cash_remittance_cleared": False,
+                }
+            )
         return Receipt(
             receipt_number=f"AYO-RIDE-{str(ride.ride_id).replace('-', '').upper()[:16]}-{'R' if kind == 'rider_receipt' else 'D'}",
             ride_id=ride.ride_id,

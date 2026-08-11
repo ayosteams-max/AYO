@@ -2,8 +2,9 @@ from datetime import datetime
 from typing import Protocol
 from uuid import UUID
 
+from BACKEND.authorization.contracts import AuthorizationSubject
 from BACKEND.booking.models import BookingQuote, PlaceCandidate, ProviderRouteEvidence
-from BACKEND.pricing.models import RouteMetrics
+from BACKEND.pricing.models import EstimateAcceptance, FareEstimate, RouteMetrics
 from BACKEND.ride_request.models import Coordinate
 
 
@@ -26,6 +27,19 @@ class BookingPricingAuthority(Protocol):
         metrics: RouteMetrics,
         at: datetime,
     ) -> BookingQuote: ...
+
+    def establish_canonical_lineage(
+        self,
+        *,
+        subject: AuthorizationSubject,
+        ride_request_id: UUID,
+        policy_id: UUID,
+        metrics: RouteMetrics,
+        idempotency_key: str,
+        correlation_id: UUID,
+        causation_id: UUID,
+        at: datetime,
+    ) -> tuple[FareEstimate, EstimateAcceptance, str]: ...
 
 
 class BookingDispatchStarter(Protocol):

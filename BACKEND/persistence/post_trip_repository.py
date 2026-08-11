@@ -3,13 +3,23 @@ from uuid import UUID, uuid4
 from sqlalchemy import Connection, insert, select, update
 
 from BACKEND.persistence.tables import (
+    cash_accounting_policies,
+    cash_reconciliation_evidence,
     post_trip_outbox,
     post_trip_records,
     preference_signals,
+    trip_cash_accounting_records,
+    trip_cash_collection_evidence,
     trip_cash_confirmations,
     trip_evidence_packages,
     trip_ratings,
     trip_receipts,
+)
+from BACKEND.post_trip.cash_accounting import (
+    CashAccountingPolicy,
+    CashAccountingRecord,
+    CashCollectionEvidence,
+    CashReconciliationEvidence,
 )
 from BACKEND.post_trip.engine import PostTripConflict
 from BACKEND.post_trip.models import (
@@ -64,6 +74,11 @@ class PostgresPostTripRepository:
             cash_state=CashSettlementState.AWAITING_CONFIRMATIONS
             if package.payment_method.value == "cash"
             else None,
+            cash_evidence_state=(
+                "awaiting_confirmations"
+                if package.payment_method.value == "cash"
+                else None
+            ),
             financial_breakdown=breakdown,
             version=1,
         )
@@ -115,16 +130,174 @@ class PostgresPostTripRepository:
         ).mappings()
         return tuple(CashConfirmation.model_validate(dict(row)) for row in rows)
 
+    def add_cash_collection_evidence(
+        self, item: CashCollectionEvidence
+    ) -> CashCollectionEvidence:
+        existing = self.cash_collection_evidence(item.ride_id)
+        if existing is not None:
+            if existing.evidence_hash != item.evidence_hash:
+                raise PostTripConflict("cash_collection_evidence_conflict")
+            return existing
+        self._connection.execute(
+            insert(trip_cash_collection_evidence).values(
+                evidence_id=item.evidence_id,
+                ride_id=item.ride_id,
+                fare_calculation_id=item.fare_calculation_id,
+                state=item.state.value,
+                payload=item.model_dump(mode="json"),
+                evidence_hash=item.evidence_hash,
+                recorded_at=item.recorded_at,
+            )
+        )
+        return item
+
+    def cash_collection_evidence(self, ride_id: UUID) -> CashCollectionEvidence | None:
+        payload = self._connection.execute(
+            select(trip_cash_collection_evidence.c.payload).where(
+                trip_cash_collection_evidence.c.ride_id == ride_id
+            )
+        ).scalar_one_or_none()
+        return (
+            None if payload is None else CashCollectionEvidence.model_validate(payload)
+        )
+
+    def add_cash_accounting_policy(
+        self, item: CashAccountingPolicy
+    ) -> CashAccountingPolicy:
+        self._connection.execute(
+            insert(cash_accounting_policies).values(
+                accounting_policy_id=item.accounting_policy_id,
+                accounting_policy_version=item.accounting_policy_version,
+                environment=item.environment.value,
+                accounting_model=item.accounting_model.value,
+                payload=item.model_dump(mode="json"),
+                policy_evidence_hash=item.policy_evidence_hash,
+            )
+        )
+        return item
+
+    def cash_accounting_policy(self, policy_id: UUID) -> CashAccountingPolicy | None:
+        payload = self._connection.execute(
+            select(cash_accounting_policies.c.payload).where(
+                cash_accounting_policies.c.accounting_policy_id == policy_id
+            )
+        ).scalar_one_or_none()
+        return None if payload is None else CashAccountingPolicy.model_validate(payload)
+
+    def add_cash_accounting_record(
+        self, item: CashAccountingRecord
+    ) -> CashAccountingRecord:
+        existing = self.cash_accounting_record(item.ride_id)
+        if existing is not None:
+            if existing.instruction_id != item.instruction_id:
+                raise PostTripConflict("cash_accounting_record_conflict")
+            return existing
+        self._connection.execute(
+            insert(trip_cash_accounting_records).values(
+                ride_id=item.ride_id,
+                evidence_id=item.evidence_id,
+                instruction_id=item.instruction_id,
+                accounting_policy_id=item.accounting_policy_id,
+                accounting_policy_version=item.accounting_policy_version,
+                state=item.state.value,
+                reconciliation_state=item.reconciliation_state.value,
+                ledger_journal_id=item.ledger_journal_id,
+                clearing_journal_id=item.clearing_journal_id,
+                reconciliation_evidence_hash=item.reconciliation_evidence_hash,
+                payload=item.model_dump(mode="json"),
+                version=item.version,
+            )
+        )
+        return item
+
+    def cash_accounting_record(self, ride_id: UUID) -> CashAccountingRecord | None:
+        payload = self._connection.execute(
+            select(trip_cash_accounting_records.c.payload).where(
+                trip_cash_accounting_records.c.ride_id == ride_id
+            )
+        ).scalar_one_or_none()
+        return None if payload is None else CashAccountingRecord.model_validate(payload)
+
+    def update_cash_accounting_record(
+        self, item: CashAccountingRecord, *, expected_version: int
+    ) -> CashAccountingRecord:
+        changed = item.model_copy(update={"version": expected_version + 1})
+        result = self._connection.execute(
+            update(trip_cash_accounting_records)
+            .where(
+                trip_cash_accounting_records.c.ride_id == item.ride_id,
+                trip_cash_accounting_records.c.version == expected_version,
+            )
+            .values(
+                state=changed.state.value,
+                reconciliation_state=changed.reconciliation_state.value,
+                ledger_journal_id=changed.ledger_journal_id,
+                clearing_journal_id=changed.clearing_journal_id,
+                reconciliation_evidence_hash=changed.reconciliation_evidence_hash,
+                payload=changed.model_dump(mode="json"),
+                version=changed.version,
+            )
+        )
+        if result.rowcount != 1:
+            raise PostTripConflict("stale_cash_accounting_record")
+        return changed
+
+    def add_cash_reconciliation_evidence(
+        self, item: CashReconciliationEvidence
+    ) -> CashReconciliationEvidence:
+        existing = self.cash_reconciliation_evidence(item.ride_id)
+        if existing is not None:
+            if existing != item:
+                raise PostTripConflict("cash_reconciliation_evidence_conflict")
+            return existing
+        self._connection.execute(
+            insert(cash_reconciliation_evidence).values(
+                reconciliation_evidence_id=item.reconciliation_evidence_id,
+                ride_id=item.ride_id,
+                accounting_instruction_id=item.accounting_instruction_id,
+                accounting_policy_id=item.accounting_policy_id,
+                original_accounting_journal_id=item.original_accounting_journal_id,
+                evidence_hash=item.evidence_hash,
+                payload=item.model_dump(mode="json"),
+                occurred_at=item.occurred_at,
+            )
+        )
+        return item
+
+    def cash_reconciliation_evidence(
+        self, ride_id: UUID
+    ) -> CashReconciliationEvidence | None:
+        payload = self._connection.execute(
+            select(cash_reconciliation_evidence.c.payload).where(
+                cash_reconciliation_evidence.c.ride_id == ride_id
+            )
+        ).scalar_one_or_none()
+        return (
+            None
+            if payload is None
+            else CashReconciliationEvidence.model_validate(payload)
+        )
+
     def update_cash_state(
         self, ride_id: UUID, state: str, expected_version: int
     ) -> PostTripRecord:
+        evidence_state = {
+            "awaiting_confirmations": "awaiting_confirmations",
+            "partially_confirmed": "partially_confirmed",
+            "cash_settled": "collection_corroborated",
+            "cash_settlement_review": "cash_settlement_review",
+        }[state]
         result = self._connection.execute(
             update(post_trip_records)
             .where(
                 post_trip_records.c.ride_id == ride_id,
                 post_trip_records.c.version == expected_version,
             )
-            .values(cash_state=state, version=expected_version + 1)
+            .values(
+                cash_state=state,
+                cash_evidence_state=evidence_state,
+                version=expected_version + 1,
+            )
         )
         if result.rowcount != 1:
             raise PostTripConflict("stale_post_trip_record")
@@ -249,6 +422,36 @@ class PostgresPostTripRepository:
                 state=PostTripState.SETTLED.value,
                 ledger_journal_id=journal_id,
                 wallet_entry_id=wallet_entry_id,
+                rider_receipt_id=rider_receipt_id,
+                driver_receipt_id=driver_receipt_id,
+                version=expected_version + 1,
+            )
+        )
+        if result.rowcount != 1:
+            raise PostTripConflict("stale_post_trip_record")
+        record = self.get(ride_id)
+        if record is None:
+            raise PostTripConflict("post_trip_record_missing")
+        return record
+
+    def mark_cash_accounting_evidenced(
+        self,
+        ride_id: UUID,
+        *,
+        journal_id: UUID,
+        rider_receipt_id: UUID,
+        driver_receipt_id: UUID,
+        expected_version: int,
+    ) -> PostTripRecord:
+        result = self._connection.execute(
+            update(post_trip_records)
+            .where(
+                post_trip_records.c.ride_id == ride_id,
+                post_trip_records.c.state == PostTripState.AWAITING_SETTLEMENT.value,
+                post_trip_records.c.version == expected_version,
+            )
+            .values(
+                ledger_journal_id=journal_id,
                 rider_receipt_id=rider_receipt_id,
                 driver_receipt_id=driver_receipt_id,
                 version=expected_version + 1,

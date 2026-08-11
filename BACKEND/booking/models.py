@@ -134,9 +134,25 @@ class BookingConfirmation(BaseModel):
     evidence_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
     quote_id: UUID
     ride_request_id: UUID
+    fare_estimate_id: UUID | None = None
+    estimate_acceptance_id: UUID | None = None
+    pricing_lineage_hash: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
     rider_identity_id: UUID
     idempotency_key_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
     confirmed_at: datetime
+
+    @model_validator(mode="after")
+    def canonical_pricing_lineage(self) -> "BookingConfirmation":
+        values = (
+            self.fare_estimate_id,
+            self.estimate_acceptance_id,
+            self.pricing_lineage_hash,
+        )
+        if any(value is not None for value in values) and not all(
+            value is not None for value in values
+        ):
+            raise ValueError("Canonical pricing lineage must be complete")
+        return self
 
     @field_validator("confirmed_at")
     @classmethod

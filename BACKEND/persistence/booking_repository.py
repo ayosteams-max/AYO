@@ -103,6 +103,9 @@ class PostgresBookingRepository:
             or existing.idempotency_key_hash != item.idempotency_key_hash
             or existing.ride_request_id != item.ride_request_id
             or existing.evidence_hash != item.evidence_hash
+            or existing.fare_estimate_id != item.fare_estimate_id
+            or existing.estimate_acceptance_id != item.estimate_acceptance_id
+            or existing.pricing_lineage_hash != item.pricing_lineage_hash
         ):
             raise BookingConflict("idempotency_conflict")
         return existing

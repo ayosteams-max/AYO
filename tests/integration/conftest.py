@@ -36,6 +36,8 @@ from BACKEND.persistence.tables import (
     canonical_pickups,
     canonical_ride_requests,
     canonical_subjects,
+    cash_accounting_policies,
+    cash_reconciliation_evidence,
     consequence_suppression_decisions,
     credential_verifiers,
     customer_emergency_contacts,
@@ -166,6 +168,8 @@ from BACKEND.persistence.tables import (
     support_case_messages,
     support_cases,
     token_families,
+    trip_cash_accounting_records,
+    trip_cash_collection_evidence,
     waiting_policy_snapshots,
     waiting_session_events,
     waiting_sessions,
@@ -320,6 +324,10 @@ def clean_postgres_tables(postgres_engine):
         connection.execute(delete(refund_decisions))
         connection.execute(delete(refund_idempotency))
         connection.execute(delete(refund_requests))
+        connection.execute(delete(cash_reconciliation_evidence))
+        connection.execute(delete(trip_cash_accounting_records))
+        connection.execute(delete(trip_cash_collection_evidence))
+        connection.execute(delete(cash_accounting_policies))
         connection.execute(delete(ledger_outbox))
         connection.execute(delete(ledger_events))
         connection.execute(delete(ledger_entries))
@@ -333,14 +341,6 @@ def clean_postgres_tables(postgres_engine):
         connection.execute(delete(payment_attempts))
         connection.execute(delete(payment_idempotency))
         connection.execute(delete(payment_intents))
-        connection.execute(delete(pricing_outbox))
-        connection.execute(delete(pricing_events))
-        connection.execute(delete(pricing_calculation_components))
-        connection.execute(delete(fare_calculations))
-        connection.execute(delete(fare_estimate_acceptances))
-        connection.execute(delete(fare_estimates))
-        connection.execute(delete(pricing_idempotency))
-        connection.execute(delete(pricing_policies))
         connection.execute(delete(immediate_dispatch_outbox))
         connection.execute(delete(worker_capability_sessions))
         connection.execute(delete(immediate_dispatch_events))
@@ -349,9 +349,17 @@ def clean_postgres_tables(postgres_engine):
         connection.execute(delete(immediate_dispatch_candidate_sets))
         connection.execute(delete(immediate_dispatch_idempotency))
         connection.execute(delete(immediate_dispatch_handoffs))
+        connection.execute(delete(booking_confirmations))
+        connection.execute(delete(pricing_outbox))
+        connection.execute(delete(pricing_events))
+        connection.execute(delete(pricing_calculation_components))
+        connection.execute(delete(fare_calculations))
+        connection.execute(delete(fare_estimate_acceptances))
+        connection.execute(delete(fare_estimates))
+        connection.execute(delete(pricing_idempotency))
+        connection.execute(delete(pricing_policies))
         connection.execute(delete(localization_preferences))
         connection.execute(delete(localization_pack_manifests))
-        connection.execute(delete(booking_confirmations))
         connection.execute(delete(canonical_ride_requests))
         connection.execute(delete(canonical_destinations))
         connection.execute(delete(canonical_pickups))
