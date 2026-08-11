@@ -82,7 +82,7 @@ def ready_request(composition):
     )
     cmd = CreateRideRequestCommand(
         client_request_id=uuid4(),
-        idempotency_key="ready-request-001",
+        idempotency_key=f"ready-request-{rider.identity_id}",
         pickup=PickupDefinition(
             coordinate=Coordinate(latitude=9, longitude=38.7),
             source=LocationSource.RIDER_SELECTED,
