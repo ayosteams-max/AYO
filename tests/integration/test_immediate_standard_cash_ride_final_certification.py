@@ -127,7 +127,7 @@ def test_one_authoritative_immediate_standard_cash_ride(postgres_composition):
     lifecycle = ActiveRideLifecycleApplication(postgres_composition.unit_of_work)
     ride = lifecycle.start_from_assignment(assignment_id, now=NOW)
     with postgres_composition.unit_of_work() as unit:
-        request = unit.ride_requests.get_by_id(ride.ride_request_id)
+        request = unit.ride_requests.get(ride.ride_request_id)
         confirmation = unit.booking.get_confirmation_for_ride_request(
             request.request_id
         )
