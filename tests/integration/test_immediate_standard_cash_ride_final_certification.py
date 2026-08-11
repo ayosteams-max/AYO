@@ -132,12 +132,23 @@ def test_one_authoritative_immediate_standard_cash_ride(postgres_composition):
             request.request_id
         )
         estimate = unit.pricing.get_estimate(confirmation.fare_estimate_id)
-        acceptance = unit.pricing.get_acceptance(confirmation.estimate_acceptance_id)
+        acceptance = unit.pricing.get_acceptance_for_estimate(
+            confirmation.fare_estimate_id
+        )
         handoff = unit.handoff_dispatch.get_handoff(ride.dispatch_handoff_id)
         assert unit.identities.get(rider.identity_id).status is AccountStatus.ACTIVE
         assert unit.identities.get(driver.identity_id).status is AccountStatus.ACTIVE
+    assert estimate is not None
+    assert acceptance is not None
+    assert estimate.ride_request_id == request.request_id
+    assert estimate.rider_identity_id == rider.identity_id
     assert request.service_zone_id == estimate.service_zone_id
+    assert acceptance.acceptance_id == confirmation.estimate_acceptance_id
     assert acceptance.estimate_id == estimate.estimate_id
+    assert acceptance.rider_identity_id == rider.identity_id
+    assert acceptance.accepted_policy_version == estimate.policy_version
+    assert acceptance.currency == estimate.breakdown.currency
+    assert acceptance.accepted_amount_minor == estimate.breakdown.rider_total_minor
     assert handoff.pricing_lineage_hash == confirmation.pricing_lineage_hash
 
     service_identity, service = _service(postgres_composition)
