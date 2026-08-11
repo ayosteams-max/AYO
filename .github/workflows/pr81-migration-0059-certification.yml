@@ -37,8 +37,8 @@ jobs:
       PGPORT: "5432"
       PGUSER: pr81_certifier
       PGPASSWORD: pr81-${{ github.run_id }}-${{ github.run_attempt }}
-      PR81_APPROVED_SHA: c63d3ed8748be381dead9f6e0ff6eadcb367d755
-      PR81_APPROVED_TREE: b1c19771487f406a5bcbce0f584b04f1d2a1e706
+      PR81_APPROVED_SHA: 51f419d468cc522e5d29611282554a92bad1c664
+      PR81_APPROVED_TREE: 994d7f507da6cfd2bf449f665c6c8c87475de88a
     steps:
       - name: Check out temporary certification infrastructure
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -52,7 +52,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-          ref: c63d3ed8748be381dead9f6e0ff6eadcb367d755
+          ref: 51f419d468cc522e5d29611282554a92bad1c664
           path: candidate
 
       - name: Check out exact genuine-0058 predecessor
