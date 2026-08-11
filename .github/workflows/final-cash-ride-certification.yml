@@ -87,11 +87,28 @@ jobs:
           AYO_DATABASE_URL: postgresql+psycopg://ayo_certification:ephemeral-certification-only@localhost:5432/ayo_cash_ride_certification
           AYO_DATABASE_SSL_MODE: disable
           AYO_TEST_DATABASE_URL: postgresql+psycopg://ayo_certification:ephemeral-certification-only@localhost:5432/ayo_cash_ride_certification
+          PGPASSWORD: ephemeral-certification-only
           PYTHONPATH: .
         shell: bash
         run: |
           set -euo pipefail
           echo '::add-mask::ephemeral-certification-only'
+          pg=(psql -v ON_ERROR_STOP=1 -h localhost -U ayo_certification -d ayo_cash_ride_certification)
+          postgres_version=$("${pg[@]}" -Atc "show server_version")
+          postgis_version=$("${pg[@]}" -Atc "select postgis_lib_version()")
+          [[ "$postgres_version" == 17.* ]]
+          [[ "$postgis_version" == 3.5* ]]
+          role_count=$("${pg[@]}" -Atc "select count(*) from pg_roles where rolname = 'ayo_runtime'")
+          if [[ "$role_count" == "0" ]]; then
+            "${pg[@]}" -c "CREATE ROLE ayo_runtime NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE" >/dev/null
+          elif [[ "$role_count" != "1" ]]; then
+            echo "Unexpected ayo_runtime role inventory" >&2
+            exit 1
+          fi
+          role_security=$("${pg[@]}" -Atc \
+            "select rolcanlogin || '|' || rolsuper || '|' || rolcreatedb || '|' || rolcreaterole from pg_roles where rolname = 'ayo_runtime'")
+          test "$role_security" = "false|false|false|false"
+          echo "Disposable PostgreSQL: $postgres_version; PostGIS: $postgis_version; ayo_runtime: NOLOGIN/NOSUPERUSER/NOCREATEDB/NOCREATEROLE"
           uv run --locked python database/migrate.py
           uv run --locked python - <<'PY'
           from BACKEND.persistence.config import DatabaseSettings
