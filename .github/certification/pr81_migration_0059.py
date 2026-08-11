@@ -16,8 +16,8 @@ from alembic import command
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import URL, Engine
 
-APPROVED_SHA = "a3d3f5cbe346b2910fbbc616f75b3f36f5c1098d"
-APPROVED_TREE = "4b3127cd444b0052194409ee2997c425657b869c"
+APPROVED_SHA = "c63d3ed8748be381dead9f6e0ff6eadcb367d755"
+APPROVED_TREE = "b1c19771487f406a5bcbce0f584b04f1d2a1e706"
 REVISION_0058 = "20260806_0058"
 REVISION_0059 = "20260811_0059"
 DATABASES = ("pr81_fresh", "pr81_genuine_0058")
