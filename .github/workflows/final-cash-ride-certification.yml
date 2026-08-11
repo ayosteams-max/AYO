@@ -45,6 +45,7 @@ jobs:
           mapfile -t changed < <(git diff --name-only "$PRODUCT_SHA" HEAD | sort)
           expected=(
             .github/workflows/final-cash-ride-certification.yml
+            tests/integration/conftest.py
             tests/integration/test_immediate_standard_cash_ride_final_certification.py
           )
           test "${changed[*]}" = "${expected[*]}"
@@ -78,6 +79,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          cp tests/integration/conftest.py product/tests/integration/
           cp tests/integration/test_immediate_standard_cash_ride_final_certification.py \
             product/tests/integration/
 
