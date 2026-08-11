@@ -460,7 +460,7 @@ def test_one_authoritative_immediate_standard_cash_ride(postgres_composition):
     assert calculation.ride_id == ride.ride_id
 
     policy = CashAccountingPolicy(
-        accounting_policy_version="NON_PRODUCTION.CERTIFICATION_ONLY.agent.v1",
+        accounting_policy_version="non_production.certification_only.agent.v1",
         accounting_model=CashAccountingModel.AGENT_NET_REMITTANCE,
         currency="ETB",
         effective_from=NOW - timedelta(days=1),

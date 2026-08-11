@@ -112,6 +112,8 @@ from BACKEND.persistence.tables import (
     persistence_domain_events,
     persistence_idempotency_records,
     persistence_outbox,
+    post_trip_outbox,
+    post_trip_records,
     pricing_calculation_components,
     pricing_events,
     pricing_idempotency,
@@ -170,6 +172,9 @@ from BACKEND.persistence.tables import (
     token_families,
     trip_cash_accounting_records,
     trip_cash_collection_evidence,
+    trip_cash_confirmations,
+    trip_evidence_packages,
+    trip_receipts,
     waiting_policy_snapshots,
     waiting_session_events,
     waiting_sessions,
@@ -324,9 +329,14 @@ def clean_postgres_tables(postgres_engine):
         connection.execute(delete(refund_decisions))
         connection.execute(delete(refund_idempotency))
         connection.execute(delete(refund_requests))
+        connection.execute(delete(post_trip_outbox))
+        connection.execute(delete(post_trip_records))
+        connection.execute(delete(trip_receipts))
         connection.execute(delete(cash_reconciliation_evidence))
         connection.execute(delete(trip_cash_accounting_records))
         connection.execute(delete(trip_cash_collection_evidence))
+        connection.execute(delete(trip_cash_confirmations))
+        connection.execute(delete(trip_evidence_packages))
         connection.execute(delete(cash_accounting_policies))
         connection.execute(delete(ledger_outbox))
         connection.execute(delete(ledger_events))
