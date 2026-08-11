@@ -322,6 +322,23 @@ def test_handoff_minimizes_data_and_fastest_authoritative_driver_wins(
     assert all("note" not in str(x) and "destination" not in str(x) for x in payloads)
 
 
+def test_expired_accepted_pricing_cannot_enter_dispatch(postgres_composition) -> None:
+    request, _ = ready_request(postgres_composition)
+    service = ImmediateHandoffService(
+        postgres_composition, policy_version="dispatch.v1"
+    )
+
+    with pytest.raises(HandoffConflict, match="dispatch.accepted_pricing_required"):
+        service.receive(
+            ride_request_id=request.request_id,
+            service_actor_id=uuid4(),
+            idempotency_key="handoff-expired-pricing-001",
+            correlation_id=uuid4(),
+            causation_id=uuid4(),
+            at=NOW + timedelta(minutes=11),
+        )
+
+
 def test_duplicate_acceptance_returns_one_assignment_and_changed_replay_fails(
     postgres_composition,
 ) -> None:

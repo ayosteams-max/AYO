@@ -3,8 +3,10 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
+import sqlalchemy as sa
 from alembic.script import ScriptDirectory
 from sqlalchemy.dialects import postgresql
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.schema import CreateTable
 
 from BACKEND.persistence.migrations import (
@@ -63,6 +65,42 @@ def test_late_pricing_lineage_foreign_keys_are_added_by_migration_0059() -> None
         assert "REFERENCES ayo.fare_estimates" not in historical_create_sql
         assert "REFERENCES ayo.fare_estimate_acceptances" not in historical_create_sql
         assert "REFERENCES ayo.pricing_policies" not in historical_create_sql
+
+
+def test_migration_0059_adds_absent_columns_and_rejects_incompatible_leaks(
+    monkeypatch,
+) -> None:
+    path = (
+        Path(__file__).parents[1]
+        / "database/migrations/versions/20260811_0059_cash_ride_certification_repair.py"
+    )
+    spec = importlib.util.spec_from_file_location("cash_ride_repair_0059", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    inspector = MagicMock()
+    add_column = MagicMock()
+    monkeypatch.setattr(module.sa, "inspect", lambda _bind: inspector)
+    monkeypatch.setattr(module.op, "get_bind", MagicMock())
+    monkeypatch.setattr(module.op, "add_column", add_column)
+    expected = (sa.Column("fare_estimate_id", sa.UUID()),)
+
+    inspector.get_columns.return_value = []
+    module._ensure_nullable_columns("immediate_dispatch_handoffs", expected)
+    add_column.assert_called_once()
+
+    add_column.reset_mock()
+    inspector.get_columns.return_value = [
+        {"name": "fare_estimate_id", "type": UUID(), "nullable": True}
+    ]
+    module._ensure_nullable_columns("immediate_dispatch_handoffs", expected)
+    add_column.assert_not_called()
+
+    inspector.get_columns.return_value = [
+        {"name": "fare_estimate_id", "type": UUID(), "nullable": False}
+    ]
+    with pytest.raises(RuntimeError, match="incompatible existing column"):
+        module._ensure_nullable_columns("immediate_dispatch_handoffs", expected)
 
 
 def test_mobile_context_migration_changes_only_the_courier_lookup_index() -> None:

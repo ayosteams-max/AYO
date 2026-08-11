@@ -31,8 +31,8 @@ from tests.integration.test_dispatch_handoff_localization import (
 )
 
 pytestmark = [pytest.mark.integration, pytest.mark.authorization]
-# Stay inside the imported synthetic ride request's 15-minute validity window.
-NOW = datetime(2026, 7, 16, 0, 5, tzinfo=UTC)
+# Stay inside both the imported ride request and accepted-pricing validity windows.
+NOW = datetime(2026, 7, 16, 0, 4, tzinfo=UTC)
 
 
 class Supply:

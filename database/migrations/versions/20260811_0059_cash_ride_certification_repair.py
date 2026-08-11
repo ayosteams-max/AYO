@@ -15,6 +15,158 @@ down_revision: str | Sequence[str] | None = "20260806_0058"
 branch_labels = None
 depends_on = None
 
+AYO_SCHEMA = "ayo"
+
+
+def _type_signature(column_type: sa.types.TypeEngine) -> tuple[str, int | None]:
+    if isinstance(column_type, sa.Uuid):
+        return ("uuid", None)
+    if isinstance(column_type, sa.String):
+        return ("string", column_type.length)
+    return (column_type.__class__.__name__.lower(), None)
+
+
+def _ensure_nullable_columns(
+    table_name: str,
+    columns: Sequence[sa.Column],
+) -> None:
+    inspector = sa.inspect(op.get_bind())
+    existing = {
+        column["name"]: column
+        for column in inspector.get_columns(table_name, schema=AYO_SCHEMA)
+    }
+    for column in columns:
+        current = existing.get(column.name)
+        if current is None:
+            op.add_column(table_name, column, schema=AYO_SCHEMA)
+            continue
+        expected_type = _type_signature(column.type)
+        actual_type = _type_signature(current["type"])
+        if actual_type != expected_type or current["nullable"] is not True:
+            raise RuntimeError(
+                "Migration 0059 found incompatible existing column "
+                f"{AYO_SCHEMA}.{table_name}.{column.name}: "
+                f"type={actual_type!r}, nullable={current['nullable']!r}; "
+                f"expected type={expected_type!r}, nullable=True"
+            )
+
+
+def _ensure_foreign_key(
+    *,
+    name: str,
+    source_table: str,
+    source_column: str,
+    target_table: str,
+    target_column: str,
+) -> None:
+    expected = {
+        "constrained_columns": [source_column],
+        "referred_schema": AYO_SCHEMA,
+        "referred_table": target_table,
+        "referred_columns": [target_column],
+    }
+    foreign_keys = sa.inspect(op.get_bind()).get_foreign_keys(
+        source_table, schema=AYO_SCHEMA
+    )
+    named = [foreign_key for foreign_key in foreign_keys if foreign_key["name"] == name]
+    same_column = [
+        foreign_key
+        for foreign_key in foreign_keys
+        if foreign_key["constrained_columns"] == [source_column]
+    ]
+    if named:
+        if len(named) != 1 or any(
+            named[0].get(key) != value for key, value in expected.items()
+        ):
+            raise RuntimeError(f"Migration 0059 found incompatible foreign key {name}")
+        if len(same_column) != 1:
+            raise RuntimeError(
+                "Migration 0059 found duplicate foreign keys for "
+                f"{AYO_SCHEMA}.{source_table}.{source_column}"
+            )
+        return
+    if same_column:
+        raise RuntimeError(
+            "Migration 0059 found an unexpected foreign key for "
+            f"{AYO_SCHEMA}.{source_table}.{source_column}"
+        )
+    op.create_foreign_key(
+        name,
+        source_table,
+        target_table,
+        [source_column],
+        [target_column],
+        source_schema=AYO_SCHEMA,
+        referent_schema=AYO_SCHEMA,
+    )
+
+
+def _ensure_unique_constraint(*, name: str, table_name: str, column_name: str) -> None:
+    constraints = sa.inspect(op.get_bind()).get_unique_constraints(
+        table_name, schema=AYO_SCHEMA
+    )
+    named = [constraint for constraint in constraints if constraint["name"] == name]
+    same_columns = [
+        constraint
+        for constraint in constraints
+        if constraint["column_names"] == [column_name]
+    ]
+    if named:
+        if len(named) != 1 or named[0]["column_names"] != [column_name]:
+            raise RuntimeError(
+                f"Migration 0059 found incompatible unique constraint {name}"
+            )
+        if len(same_columns) != 1:
+            raise RuntimeError(
+                "Migration 0059 found duplicate uniqueness constraints for "
+                f"{AYO_SCHEMA}.{table_name}.{column_name}"
+            )
+        return
+    if same_columns:
+        raise RuntimeError(
+            "Migration 0059 found an unexpected uniqueness constraint for "
+            f"{AYO_SCHEMA}.{table_name}.{column_name}"
+        )
+    op.create_unique_constraint(
+        name,
+        table_name,
+        [column_name],
+        schema=AYO_SCHEMA,
+    )
+
+
+def _normalize_check_sql(value: str) -> str:
+    return "".join(value.lower().split())
+
+
+def _ensure_check_constraint(*, name: str, table_name: str, condition: str) -> None:
+    constraints = sa.inspect(op.get_bind()).get_check_constraints(
+        table_name, schema=AYO_SCHEMA
+    )
+    named = [constraint for constraint in constraints if constraint["name"] == name]
+    expected_sql = _normalize_check_sql(condition)
+    same_expression = [
+        constraint
+        for constraint in constraints
+        if _normalize_check_sql(constraint["sqltext"]) == expected_sql
+    ]
+    if named:
+        if len(named) != 1 or _normalize_check_sql(named[0]["sqltext"]) != expected_sql:
+            raise RuntimeError(
+                f"Migration 0059 found incompatible check constraint {name}"
+            )
+        if len(same_expression) != 1:
+            raise RuntimeError(
+                f"Migration 0059 found duplicate check constraint {name}"
+            )
+        return
+    if same_expression:
+        raise RuntimeError(
+            "Migration 0059 found an unexpectedly named equivalent check "
+            f"constraint on {AYO_SCHEMA}.{table_name}"
+        )
+    op.create_check_constraint(name, table_name, condition, schema=AYO_SCHEMA)
+
 
 def upgrade() -> None:
     op.add_column(
@@ -22,61 +174,48 @@ def upgrade() -> None:
         sa.Column("cash_evidence_state", sa.String(32)),
         schema="ayo",
     )
-    for name in ("fare_estimate_id", "estimate_acceptance_id"):
-        op.add_column("booking_confirmations", sa.Column(name, sa.UUID()), schema="ayo")
-    op.add_column(
+    _ensure_nullable_columns(
         "booking_confirmations",
-        sa.Column("pricing_lineage_hash", sa.String(64)),
-        schema="ayo",
+        (
+            sa.Column("fare_estimate_id", sa.UUID()),
+            sa.Column("estimate_acceptance_id", sa.UUID()),
+            sa.Column("pricing_lineage_hash", sa.String(64)),
+        ),
     )
-    op.create_foreign_key(
-        "fk_booking_confirmation_fare_estimate",
-        "booking_confirmations",
-        "fare_estimates",
-        ["fare_estimate_id"],
-        ["estimate_id"],
-        source_schema="ayo",
-        referent_schema="ayo",
+    _ensure_foreign_key(
+        name="fk_booking_confirmation_fare_estimate",
+        source_table="booking_confirmations",
+        source_column="fare_estimate_id",
+        target_table="fare_estimates",
+        target_column="estimate_id",
     )
-    op.create_foreign_key(
-        "fk_booking_confirmation_estimate_acceptance",
-        "booking_confirmations",
-        "fare_estimate_acceptances",
-        ["estimate_acceptance_id"],
-        ["acceptance_id"],
-        source_schema="ayo",
-        referent_schema="ayo",
+    _ensure_foreign_key(
+        name="fk_booking_confirmation_estimate_acceptance",
+        source_table="booking_confirmations",
+        source_column="estimate_acceptance_id",
+        target_table="fare_estimate_acceptances",
+        target_column="acceptance_id",
     )
-    op.create_unique_constraint(
-        "uq_booking_confirmation_fare_estimate",
-        "booking_confirmations",
-        ["fare_estimate_id"],
-        schema="ayo",
+    _ensure_unique_constraint(
+        name="uq_booking_confirmation_fare_estimate",
+        table_name="booking_confirmations",
+        column_name="fare_estimate_id",
     )
-    op.create_unique_constraint(
-        "uq_booking_confirmation_estimate_acceptance",
-        "booking_confirmations",
-        ["estimate_acceptance_id"],
-        schema="ayo",
+    _ensure_unique_constraint(
+        name="uq_booking_confirmation_estimate_acceptance",
+        table_name="booking_confirmations",
+        column_name="estimate_acceptance_id",
     )
 
-    for name in (
-        "fare_estimate_id",
-        "estimate_acceptance_id",
-        "pricing_policy_id",
-    ):
-        op.add_column(
-            "immediate_dispatch_handoffs", sa.Column(name, sa.UUID()), schema="ayo"
-        )
-    op.add_column(
+    _ensure_nullable_columns(
         "immediate_dispatch_handoffs",
-        sa.Column("pricing_policy_version", sa.String(63)),
-        schema="ayo",
-    )
-    op.add_column(
-        "immediate_dispatch_handoffs",
-        sa.Column("pricing_lineage_hash", sa.String(64)),
-        schema="ayo",
+        (
+            sa.Column("fare_estimate_id", sa.UUID()),
+            sa.Column("estimate_acceptance_id", sa.UUID()),
+            sa.Column("pricing_policy_id", sa.UUID()),
+            sa.Column("pricing_policy_version", sa.String(63)),
+            sa.Column("pricing_lineage_hash", sa.String(64)),
+        ),
     )
     for constraint, column, table, target in (
         (
@@ -98,21 +237,18 @@ def upgrade() -> None:
             "policy_id",
         ),
     ):
-        op.create_foreign_key(
-            constraint,
-            "immediate_dispatch_handoffs",
-            table,
-            [column],
-            [target],
-            source_schema="ayo",
-            referent_schema="ayo",
+        _ensure_foreign_key(
+            name=constraint,
+            source_table="immediate_dispatch_handoffs",
+            source_column=column,
+            target_table=table,
+            target_column=target,
         )
-    op.create_check_constraint(
-        "handoff_pricing_lineage_complete",
-        "immediate_dispatch_handoffs",
-        "(fare_estimate_id IS NULL AND estimate_acceptance_id IS NULL AND pricing_policy_id IS NULL AND pricing_policy_version IS NULL AND pricing_lineage_hash IS NULL) OR "
+    _ensure_check_constraint(
+        name="handoff_pricing_lineage_complete",
+        table_name="immediate_dispatch_handoffs",
+        condition="(fare_estimate_id IS NULL AND estimate_acceptance_id IS NULL AND pricing_policy_id IS NULL AND pricing_policy_version IS NULL AND pricing_lineage_hash IS NULL) OR "
         "(fare_estimate_id IS NOT NULL AND estimate_acceptance_id IS NOT NULL AND pricing_policy_id IS NOT NULL AND pricing_policy_version IS NOT NULL AND pricing_lineage_hash IS NOT NULL)",
-        schema="ayo",
     )
 
     op.create_table(

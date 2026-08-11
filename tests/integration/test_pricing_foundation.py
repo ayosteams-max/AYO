@@ -475,6 +475,13 @@ def test_estimate_event_failure_rolls_back_pricing_state(
     request, rider = ready_request(postgres_composition)
     app = PricingApplication(postgres_composition)
     policy = published_policy(app, request.service_zone_id)
+    with postgres_composition.unit_of_work() as unit:
+        baseline_estimates = unit.connection.execute(
+            select(func.count()).select_from(fare_estimates)
+        ).scalar_one()
+        baseline_outbox = unit.connection.execute(
+            select(func.count()).select_from(pricing_outbox)
+        ).scalar_one()
 
     def fail_event(*args, **kwargs):
         raise RuntimeError("audit unavailable")
@@ -496,13 +503,13 @@ def test_estimate_event_failure_rolls_back_pricing_state(
             unit.connection.execute(
                 select(func.count()).select_from(fare_estimates)
             ).scalar_one()
-            == 0
+            == baseline_estimates
         )
         assert (
             unit.connection.execute(
                 select(func.count()).select_from(pricing_outbox)
             ).scalar_one()
-            == 0
+            == baseline_outbox
         )
 
 
@@ -545,6 +552,12 @@ def test_concurrent_final_calculation_is_single_and_outbox_atomic(
     ride_request_id = ride.ride_request_id
     with postgres_composition.unit_of_work() as unit:
         source = unit.pricing.ride_request_source(ride_request_id)
+        baseline_events = unit.connection.execute(
+            select(func.count()).select_from(pricing_events)
+        ).scalar_one()
+        baseline_outbox = unit.connection.execute(
+            select(func.count()).select_from(pricing_outbox)
+        ).scalar_one()
     assert source is not None
     app = PricingApplication(postgres_composition)
     policy = published_policy(app, source["service_zone_id"])
@@ -661,11 +674,11 @@ def test_concurrent_final_calculation_is_single_and_outbox_atomic(
             unit.connection.execute(
                 select(func.count()).select_from(pricing_events)
             ).scalar_one()
-            == 5
+            == baseline_events + 5
         )
         assert (
             unit.connection.execute(
                 select(func.count()).select_from(pricing_outbox)
             ).scalar_one()
-            == 5
+            == baseline_outbox + 5
         )

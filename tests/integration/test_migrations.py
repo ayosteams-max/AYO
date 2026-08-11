@@ -140,6 +140,44 @@ def test_upgrade_empty_database_matches_metadata_and_postgresql_17(
         set(inspect(postgres_engine).get_table_names(schema=AYO_SCHEMA))
         == expected_tables
     )
+    inspector = inspect(postgres_engine)
+    expected_pricing_foreign_keys = {
+        "booking_confirmations": {
+            "fk_booking_confirmation_fare_estimate",
+            "fk_booking_confirmation_estimate_acceptance",
+        },
+        "immediate_dispatch_handoffs": {
+            "fk_handoff_fare_estimate",
+            "fk_handoff_estimate_acceptance",
+            "fk_handoff_pricing_policy",
+        },
+    }
+    for table_name, expected_names in expected_pricing_foreign_keys.items():
+        foreign_key_names = [
+            foreign_key["name"]
+            for foreign_key in inspector.get_foreign_keys(table_name, schema=AYO_SCHEMA)
+            if foreign_key["name"] in expected_names
+        ]
+        assert set(foreign_key_names) == expected_names
+        assert len(foreign_key_names) == len(expected_names)
+
+    booking_unique_names = {
+        constraint["name"]
+        for constraint in inspector.get_unique_constraints(
+            "booking_confirmations", schema=AYO_SCHEMA
+        )
+    }
+    assert {
+        "uq_booking_confirmation_fare_estimate",
+        "uq_booking_confirmation_estimate_acceptance",
+    } <= booking_unique_names
+    handoff_check_names = {
+        constraint["name"]
+        for constraint in inspector.get_check_constraints(
+            "immediate_dispatch_handoffs", schema=AYO_SCHEMA
+        )
+    }
+    assert "handoff_pricing_lineage_complete" in handoff_check_names
     # Retained as review context; parity authority is SQLAlchemy metadata above.
     _historical_inventory = {
         "active_rides",
