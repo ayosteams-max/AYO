@@ -37,6 +37,7 @@ from BACKEND.persistence.tables import (
     canonical_ride_requests,
     canonical_subjects,
     cash_accounting_policies,
+    cash_reconciliation_evidence,
     consequence_suppression_decisions,
     credential_verifiers,
     customer_emergency_contacts,
@@ -323,6 +324,7 @@ def clean_postgres_tables(postgres_engine):
         connection.execute(delete(refund_decisions))
         connection.execute(delete(refund_idempotency))
         connection.execute(delete(refund_requests))
+        connection.execute(delete(cash_reconciliation_evidence))
         connection.execute(delete(trip_cash_accounting_records))
         connection.execute(delete(trip_cash_collection_evidence))
         connection.execute(delete(cash_accounting_policies))

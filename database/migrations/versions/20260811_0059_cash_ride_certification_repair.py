@@ -191,9 +191,38 @@ def upgrade() -> None:
         ),
         schema="ayo",
     )
+    op.create_table(
+        "cash_reconciliation_evidence",
+        sa.Column("reconciliation_evidence_id", sa.UUID(), primary_key=True),
+        sa.Column(
+            "ride_id",
+            sa.UUID(),
+            sa.ForeignKey("ayo.trip_cash_accounting_records.ride_id"),
+            nullable=False,
+            unique=True,
+        ),
+        sa.Column("accounting_instruction_id", sa.UUID(), nullable=False),
+        sa.Column(
+            "accounting_policy_id",
+            sa.UUID(),
+            sa.ForeignKey("ayo.cash_accounting_policies.accounting_policy_id"),
+            nullable=False,
+        ),
+        sa.Column(
+            "original_accounting_journal_id",
+            sa.UUID(),
+            sa.ForeignKey("ayo.ledger_journals.journal_id"),
+            nullable=False,
+        ),
+        sa.Column("evidence_hash", sa.String(64), nullable=False, unique=True),
+        sa.Column("payload", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+        sa.Column("occurred_at", sa.DateTime(timezone=True), nullable=False),
+        schema="ayo",
+    )
 
 
 def downgrade() -> None:
+    op.drop_table("cash_reconciliation_evidence", schema="ayo")
     op.drop_table("trip_cash_accounting_records", schema="ayo")
     op.drop_table("cash_accounting_policies", schema="ayo")
     op.drop_table("trip_cash_collection_evidence", schema="ayo")

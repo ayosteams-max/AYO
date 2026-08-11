@@ -50,7 +50,8 @@ class SupportRideEvidenceProjection(BaseModel):
     cash_evidence_state: str | None
     cash_accounting_state: str | None
     cash_reconciliation_state: str | None
-    ledger_journal_id: UUID | None
+    cash_accounting_journal_id: UUID | None
+    cash_reconciliation_journal_id: UUID | None
     rider_receipt_available: bool
     driver_receipt_available: bool
     reason_codes: tuple[str, ...] = ()
@@ -196,9 +197,12 @@ class SupportRideEvidenceApplication:
                     cash_reconciliation_state=None
                     if accounting is None
                     else accounting.reconciliation_state.value,
-                    ledger_journal_id=None
-                    if record is None
-                    else record.ledger_journal_id,
+                    cash_accounting_journal_id=None
+                    if accounting is None
+                    else accounting.ledger_journal_id,
+                    cash_reconciliation_journal_id=None
+                    if accounting is None
+                    else accounting.clearing_journal_id,
                     rider_receipt_available=record is not None
                     and record.rider_receipt_id is not None,
                     driver_receipt_available=record is not None

@@ -125,6 +125,7 @@ PERMISSION_REGISTRY = MappingProxyType(
         "post_trip.cash.confirm": "Confirm own cash paid or received evidence.",
         "post_trip.rating.create": "Submit one private rating for a completed owned trip.",
         "post_trip.internal.finalize": "Finalize and settle an authoritative completed trip.",
+        "cash.reconciliation.execute": "Clear a cash obligation from authorized remittance evidence.",
         "merchant.register_own": "Create a merchant profile owned by the authenticated identity.",
         "merchant.manage_own": "Manage an owned merchant profile, branches, verification and catalogue.",
         "merchant.dashboard.read_own": "Read the minimized dashboard for an owned merchant profile.",

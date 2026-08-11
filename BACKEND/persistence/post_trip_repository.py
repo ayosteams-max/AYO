@@ -4,6 +4,7 @@ from sqlalchemy import Connection, insert, select, update
 
 from BACKEND.persistence.tables import (
     cash_accounting_policies,
+    cash_reconciliation_evidence,
     post_trip_outbox,
     post_trip_records,
     preference_signals,
@@ -18,6 +19,7 @@ from BACKEND.post_trip.cash_accounting import (
     CashAccountingPolicy,
     CashAccountingRecord,
     CashCollectionEvidence,
+    CashReconciliationEvidence,
 )
 from BACKEND.post_trip.engine import PostTripConflict
 from BACKEND.post_trip.models import (
@@ -239,6 +241,42 @@ class PostgresPostTripRepository:
         if result.rowcount != 1:
             raise PostTripConflict("stale_cash_accounting_record")
         return changed
+
+    def add_cash_reconciliation_evidence(
+        self, item: CashReconciliationEvidence
+    ) -> CashReconciliationEvidence:
+        existing = self.cash_reconciliation_evidence(item.ride_id)
+        if existing is not None:
+            if existing != item:
+                raise PostTripConflict("cash_reconciliation_evidence_conflict")
+            return existing
+        self._connection.execute(
+            insert(cash_reconciliation_evidence).values(
+                reconciliation_evidence_id=item.reconciliation_evidence_id,
+                ride_id=item.ride_id,
+                accounting_instruction_id=item.accounting_instruction_id,
+                accounting_policy_id=item.accounting_policy_id,
+                original_accounting_journal_id=item.original_accounting_journal_id,
+                evidence_hash=item.evidence_hash,
+                payload=item.model_dump(mode="json"),
+                occurred_at=item.occurred_at,
+            )
+        )
+        return item
+
+    def cash_reconciliation_evidence(
+        self, ride_id: UUID
+    ) -> CashReconciliationEvidence | None:
+        payload = self._connection.execute(
+            select(cash_reconciliation_evidence.c.payload).where(
+                cash_reconciliation_evidence.c.ride_id == ride_id
+            )
+        ).scalar_one_or_none()
+        return (
+            None
+            if payload is None
+            else CashReconciliationEvidence.model_validate(payload)
+        )
 
     def update_cash_state(
         self, ride_id: UUID, state: str, expected_version: int

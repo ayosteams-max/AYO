@@ -32,6 +32,10 @@ Synthetic principal and agent fixtures are non-production architecture tests. Pr
 
 Ledger remains the sole posting authority. Corrections and write-offs use linked compensating journals. Collection does not prove clearing; accounting posting does not prove remittance. Reconciliation requires distinct authorized evidence and a clearing journal.
 
+The accounting-post application accepts only canonical identifiers and operation idempotency. It reloads calculation, collection evidence and policy, derives the complete instruction under trusted composition-owned production mode and posts only those server-derived lines. Callers cannot provide amounts, model economics, hashes or journal lines.
+
+Reconciliation uses immutable obligation-bound evidence, `cash.reconciliation.execute`, expected record version and a policy-mapped clearing account. The application constructs the clearing journal itself, binds it to the original cash-accounting journal and complete ride/pricing trace, and advances to `cleared` only after an exact immutable journal exists. An arbitrary existing journal cannot clear an obligation.
+
 ## Support ride evidence
 
 `SupportRideEvidenceProjection` is assembled at read time from authoritative repositories. It is bound to an authenticated staff/service subject, `support.trip.read_limited`, an authorized matching case/queue, a declared purpose and step-up for finance, fraud, safety or legal queues. Every allowed and denied query is audited.
@@ -46,7 +50,7 @@ Recovery reloads immutable lineage before continuing. Matching replay returns th
 
 ## Persistence
 
-Migration `20260811_0059` is additive and reversible before activation. It adds nullable compatibility lineage columns to Booking and Dispatch, explicit cash evidence/policy/accounting records and no Support materialization. Historical financial evidence is never destructively deleted by an operational rollback.
+Migration `20260811_0059` is additive and reversible before activation. It adds nullable compatibility lineage columns to Booking and Dispatch, explicit cash evidence/policy/accounting records, immutable reconciliation evidence and no Support materialization. Historical financial evidence is never destructively deleted by an operational rollback.
 
 ## Smart City boundary and exclusions
 

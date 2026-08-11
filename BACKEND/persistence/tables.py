@@ -4671,6 +4671,36 @@ trip_cash_accounting_records = Table(
     schema=AYO_SCHEMA,
 )
 
+cash_reconciliation_evidence = Table(
+    "cash_reconciliation_evidence",
+    metadata,
+    Column("reconciliation_evidence_id", UUID(as_uuid=True), primary_key=True),
+    Column(
+        "ride_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.trip_cash_accounting_records.ride_id"),
+        nullable=False,
+        unique=True,
+    ),
+    Column("accounting_instruction_id", UUID(as_uuid=True), nullable=False),
+    Column(
+        "accounting_policy_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.cash_accounting_policies.accounting_policy_id"),
+        nullable=False,
+    ),
+    Column(
+        "original_accounting_journal_id",
+        UUID(as_uuid=True),
+        ForeignKey("ayo.ledger_journals.journal_id"),
+        nullable=False,
+    ),
+    Column("evidence_hash", String(64), nullable=False, unique=True),
+    Column("payload", JSONB().with_variant(JSON(), "sqlite"), nullable=False),
+    Column("occurred_at", DateTime(timezone=True), nullable=False),
+    schema=AYO_SCHEMA,
+)
+
 trip_ratings = Table(
     "trip_ratings",
     metadata,
