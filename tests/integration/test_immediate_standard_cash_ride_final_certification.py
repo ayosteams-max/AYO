@@ -524,7 +524,7 @@ def test_one_authoritative_immediate_standard_cash_ride(postgres_composition):
         platform_claim_minor=accounting.platform_claim_minor,
         currency="ETB",
         evidence_type="manual_remittance",
-        source_classification="synthetic_certification",
+        source_classification="synthetic",
         authorized_actor_id=service.identity_id,
         occurred_at=NOW,
         correlation_id=ride.ride_id,
