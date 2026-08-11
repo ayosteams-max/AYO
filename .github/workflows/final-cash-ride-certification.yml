@@ -1,0 +1,194 @@
+name: TEMPORARY Final Cash Ride Certification
+
+on:
+  push:
+    branches:
+      - agent/final-cash-ride-certification
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  certify:
+    name: PostgreSQL 17/PostGIS 3.5 authoritative cash ride
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgis/postgis:17-3.5
+        env:
+          POSTGRES_USER: ayo_certification
+          POSTGRES_PASSWORD: ephemeral-certification-only
+          POSTGRES_DB: ayo_cash_ride_certification
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ayo_certification -d ayo_cash_ride_certification"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    steps:
+      - name: Check out certification infrastructure
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Fail closed on infrastructure scope or product drift
+        shell: bash
+        run: |
+          set -euo pipefail
+          PRODUCT_SHA=10d31018783bb11f05a8dc3ed789ac3e3d92970e
+          PRODUCT_TREE=9af140f205ec9db38a1680ffe062fd6c63a27d56
+          test "$(git rev-parse "${PRODUCT_SHA}^{tree}")" = "$PRODUCT_TREE"
+          mapfile -t changed < <(git diff --name-only "$PRODUCT_SHA" HEAD | sort)
+          expected=(
+            .github/workflows/final-cash-ride-certification.yml
+            tests/integration/test_immediate_standard_cash_ride_final_certification.py
+          )
+          test "${changed[*]}" = "${expected[*]}"
+          git diff --quiet "$PRODUCT_SHA" HEAD -- BACKEND alembic.ini pyproject.toml uv.lock
+
+      - name: Check out exact authoritative product main
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: 10d31018783bb11f05a8dc3ed789ac3e3d92970e
+          path: product
+
+      - name: Bind exact product SHA and tree
+        working-directory: product
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "10d31018783bb11f05a8dc3ed789ac3e3d92970e"
+          test "$(git rev-parse HEAD^{tree})" = "9af140f205ec9db38a1680ffe062fd6c63a27d56"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@557e51de59eb14aaaba2ed9621916900a91d50c6 # v6.6.1
+        with:
+          version: "0.8.14"
+          enable-cache: false
+
+      - name: Install locked dependencies
+        working-directory: product
+        run: uv sync --locked --all-extras
+
+      - name: Add governed test-only harness to exact product checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp tests/integration/test_immediate_standard_cash_ride_final_certification.py \
+            product/tests/integration/
+
+      - name: Initialize disposable canonical database
+        working-directory: product
+        env:
+          AYO_DATABASE_URL: postgresql+psycopg://ayo_certification:ephemeral-certification-only@localhost:5432/ayo_cash_ride_certification
+          AYO_TEST_DATABASE_URL: postgresql+psycopg://ayo_certification:ephemeral-certification-only@localhost:5432/ayo_cash_ride_certification
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '::add-mask::ephemeral-certification-only'
+          uv run alembic upgrade head >/dev/null
+          test "$(uv run alembic current | sed -n 's/^\([0-9_]*\).*/\1/p')" = "20260811_0059"
+
+      - name: Record sanitized PostgreSQL identity
+        id: database
+        env:
+          PGPASSWORD: ephemeral-certification-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '::add-mask::ephemeral-certification-only'
+          pg_version=$(psql -h localhost -U ayo_certification -d ayo_cash_ride_certification -Atc "show server_version")
+          postgis_version=$(psql -h localhost -U ayo_certification -d ayo_cash_ride_certification -Atc "select postgis_lib_version()")
+          echo "postgresql=$pg_version" >> "$GITHUB_OUTPUT"
+          echo "postgis=$postgis_version" >> "$GITHUB_OUTPUT"
+
+      - name: Execute bounded positive and negative certification set
+        working-directory: product
+        env:
+          AYO_TEST_DATABASE_URL: postgresql+psycopg://ayo_certification:ephemeral-certification-only@localhost:5432/ayo_cash_ride_certification
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '::add-mask::ephemeral-certification-only'
+          uv run pytest --no-cov -q --junitxml=final-cash-ride-certification.xml \
+            tests/integration/test_immediate_standard_cash_ride_final_certification.py \
+            tests/integration/test_ride_request_foundation.py::test_non_rider_cannot_create \
+            tests/integration/test_authorization_foundation.py::test_expired_assignment_and_suspended_identity_are_denied \
+            tests/integration/test_dispatch_handoff_localization.py::test_expired_accepted_pricing_cannot_enter_dispatch \
+            tests/integration/test_dispatch_handoff_localization.py::test_cancellation_wins_before_acceptance_and_unvalidated_handoff_fails \
+            tests/integration/test_pricing_foundation.py::test_pricing_repository_rejects_forged_and_cross_ride_lineage \
+            tests/integration/test_pricing_foundation.py::test_expiry_cross_rider_and_unpublished_policy_fail_closed \
+            tests/integration/test_pricing_foundation.py::test_final_requires_completed_matching_canonical_ride \
+            tests/integration/test_active_ride_api.py::test_caller_identity_and_unknown_fields_are_rejected \
+            tests/test_cash_ride_certification_repair.py::test_accounting_post_api_rejects_caller_economic_instruction_fields \
+            tests/test_cash_ride_certification_repair.py::test_reconciliation_rejects_missing_permission_and_unrelated_journal \
+            tests/test_cash_ride_certification_repair.py::test_dispatch_fails_before_idempotency_without_accepted_pricing \
+            tests/test_cash_ride_certification_repair.py::test_support_projection_schema_excludes_sensitive_raw_fields
+
+      - name: Produce sanitized certification evidence
+        if: always()
+        working-directory: product
+        env:
+          INFRA_SHA: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
+          POSTGRESQL_VERSION: ${{ steps.database.outputs.postgresql }}
+          POSTGIS_VERSION: ${{ steps.database.outputs.postgis }}
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, os, pathlib, xml.etree.ElementTree as ET
+          report = pathlib.Path("final-cash-ride-certification.xml")
+          tests = failures = errors = skipped = 0
+          if report.exists():
+              root = ET.parse(report).getroot()
+              suites = [root] if root.tag == "testsuite" else list(root)
+              tests = sum(int(s.get("tests", 0)) for s in suites)
+              failures = sum(int(s.get("failures", 0)) for s in suites)
+              errors = sum(int(s.get("errors", 0)) for s in suites)
+              skipped = sum(int(s.get("skipped", 0)) for s in suites)
+          evidence = {
+              "schema": "ayo.cash_ride_final_certification.v1",
+              "authoritative_product_sha": "10d31018783bb11f05a8dc3ed789ac3e3d92970e",
+              "authoritative_product_tree": "9af140f205ec9db38a1680ffe062fd6c63a27d56",
+              "certification_infrastructure_sha": os.environ["INFRA_SHA"],
+              "workflow_run_id": os.environ["RUN_ID"],
+              "postgresql_version": os.environ.get("POSTGRESQL_VERSION", "unknown"),
+              "postgis_version": os.environ.get("POSTGIS_VERSION", "unknown"),
+              "migration_revision": "20260811_0059",
+              "accounting_policy": "NON_PRODUCTION.CERTIFICATION_ONLY.agent.v1",
+              "synthetic_data_only": True,
+              "tests": {"total": tests, "failures": failures, "errors": errors, "skipped": skipped},
+              "passed": report.exists() and failures == errors == skipped == 0,
+              "checkpoints": [
+                  "authentication_authorization", "ride_request_authoritative_zone",
+                  "published_pricing_estimate_acceptance_booking", "dispatch_assignment",
+                  "active_ride_completed", "final_pricing_post_trip", "cash_evidence",
+                  "server_derived_non_production_accounting", "balanced_immutable_ledger",
+                  "obligation_bound_reconciliation", "receipts", "support_projection",
+                  "bounded_fail_closed_negative_set"
+              ],
+          }
+          pathlib.Path("final-cash-ride-certification.json").write_text(
+              json.dumps(evidence, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+          )
+          PY
+
+      - name: Enforce zero skips and successful evidence
+        working-directory: product
+        run: |
+          python -c "import json; e=json.load(open('final-cash-ride-certification.json')); assert e['passed']; assert e['tests']['skipped'] == 0"
+
+      - name: Upload sanitized governance evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: final-cash-ride-certification-${{ github.run_id }}
+          path: |
+            product/final-cash-ride-certification.json
+            product/final-cash-ride-certification.xml
+          if-no-files-found: error
+          retention-days: 30
