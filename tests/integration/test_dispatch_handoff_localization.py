@@ -102,6 +102,12 @@ def ready_request(composition):
     request = RideRequestApplication(composition, POLICY).create(
         subject=subject, command=cmd, at=NOW
     )
+    with composition.unit_of_work() as unit:
+        authoritative_zone = unit.ride_requests.find_zone(
+            latitude=9, longitude=38.7, at=NOW
+        )
+    assert authoritative_zone is not None
+    assert authoritative_zone.zone_id == request.service_zone_id
     makers = []
     with composition.unit_of_work() as unit:
         for _ in range(3):
@@ -128,7 +134,7 @@ def ready_request(composition):
         operators[0],
         PricingPolicy(
             policy_version=f"pricing.synthetic.{request.request_id.hex[:12]}",
-            service_zone_id=zone.zone_id,
+            service_zone_id=request.service_zone_id,
             service_type="immediate_standard",
             currency="ETB",
             base_fare_minor=100,
@@ -193,8 +199,8 @@ def ready_request(composition):
                 rider_identity_id=rider.identity_id,
                 pickup_payload={},
                 destination_payload={},
-                service_zone_id=zone.zone_id,
-                service_zone_version=zone.version,
+                service_zone_id=request.service_zone_id,
+                service_zone_version=authoritative_zone.version,
                 service_type="immediate_standard",
                 route_payload={},
                 quote_payload={},
