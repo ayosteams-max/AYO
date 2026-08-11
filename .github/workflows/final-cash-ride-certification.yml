@@ -194,7 +194,7 @@ jobs:
               "postgresql_version": os.environ.get("POSTGRESQL_VERSION", "unknown"),
               "postgis_version": os.environ.get("POSTGIS_VERSION", "unknown"),
               "migration_revision": "20260811_0059",
-              "accounting_policy": "NON_PRODUCTION.CERTIFICATION_ONLY.agent.v1",
+              "accounting_policy": "non_production.certification_only.agent.v1",
               "synthetic_data_only": True,
               "tests": {"total": tests, "failures": failures, "errors": errors, "skipped": skipped},
               "passed": report.exists() and failures == errors == skipped == 0,
