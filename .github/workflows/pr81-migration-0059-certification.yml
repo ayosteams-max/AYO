@@ -1,0 +1,150 @@
+name: PR81 Migration 0059 Certification (TEMPORARY)
+
+on:
+  push:
+    branches:
+      - agent/cash-ride-certification-repair
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr81-migration-0059-certification
+  cancel-in-progress: false
+
+jobs:
+  certify-approved-candidate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgis/postgis:17-3.5
+        env:
+          POSTGRES_DB: postgres
+          POSTGRES_USER: pr81_certifier
+          POSTGRES_PASSWORD: pr81-${{ github.run_id }}-${{ github.run_attempt }}
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U pr81_certifier -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DEBUG: "true"
+      PYTHONPATH: .
+      PGHOST: 127.0.0.1
+      PGPORT: "5432"
+      PGUSER: pr81_certifier
+      PGPASSWORD: pr81-${{ github.run_id }}-${{ github.run_attempt }}
+      PR81_APPROVED_SHA: a3d3f5cbe346b2910fbbc616f75b3f36f5c1098d
+      PR81_APPROVED_TREE: 4b3127cd444b0052194409ee2997c425657b869c
+    steps:
+      - name: Check out temporary certification infrastructure
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          path: certification-infra
+
+      - name: Check out exact approved product candidate
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: a3d3f5cbe346b2910fbbc616f75b3f36f5c1098d
+          path: candidate
+
+      - name: Check out exact genuine-0058 predecessor
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: 4849307b4a9d64b445d78925eb6c80ebd1b0dbee
+          path: predecessor
+
+      - name: Fail closed on candidate identity drift
+        working-directory: candidate
+        run: |
+          set -euo pipefail
+          actual_sha="$(git rev-parse HEAD)"
+          actual_tree="$(git rev-parse HEAD^{tree})"
+          test "$actual_sha" = "$PR81_APPROVED_SHA"
+          test "$actual_tree" = "$PR81_APPROVED_TREE"
+          test -z "$(git status --porcelain)"
+          echo "Approved product candidate identity: PASS"
+
+      - name: Fail closed on predecessor identity drift
+        working-directory: predecessor
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "4849307b4a9d64b445d78925eb6c80ebd1b0dbee"
+          test -z "$(git status --porcelain)"
+          echo "Genuine 0058 predecessor identity: PASS"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@6b9c6063abd6010835644d4c2e1bef4cf5cd0fca # v6.0.1
+        with:
+          version: "0.9.26"
+          enable-cache: false
+
+      - name: Install exact locked candidate dependencies
+        working-directory: candidate
+        run: uv sync --locked --all-groups
+
+      - name: Install exact locked predecessor dependencies
+        working-directory: predecessor
+        run: uv sync --locked --all-groups
+
+      - name: Mask ephemeral database credential
+        run: echo "::add-mask::$PGPASSWORD"
+
+      - name: Certify fresh and genuine-0058 migration paths
+        env:
+          PREDECESSOR_DATABASE_URL: postgresql+psycopg://pr81_certifier:${{ env.PGPASSWORD }}@127.0.0.1:5432/pr81_genuine_0058
+        run: |
+          cd candidate
+          uv run --locked python ../certification-infra/.github/certification/pr81_migration_0059.py prepare-predecessor-db
+          cd ../predecessor
+          PYTHONPATH=. AYO_DATABASE_URL="$PREDECESSOR_DATABASE_URL" AYO_DATABASE_SSL_MODE=disable uv run --locked python database/migrate.py
+          cd ../candidate
+          uv run --locked python ../certification-infra/.github/certification/pr81_migration_0059.py certify ../certification-evidence/pr81-migration-0059.json
+
+      - name: Run bounded candidate PostgreSQL certification tests
+        id: targeted_tests
+        working-directory: candidate
+        env:
+          AYO_TEST_DATABASE_URL: postgresql+psycopg://pr81_certifier:${{ env.PGPASSWORD }}@127.0.0.1:5432/pr81_fresh
+        run: |
+          set +e
+          uv run --locked pytest --no-cov -q --junitxml=../certification-evidence/targeted-tests.xml \
+            tests/integration/test_pricing_foundation.py \
+            tests/integration/test_dispatch_handoff_localization.py \
+            tests/integration/test_intelligent_driver_dispatch.py \
+            tests/test_cash_ride_certification_repair.py \
+            tests/test_authorization_contracts.py
+          status=$?
+          set -e
+          uv run --locked python ../certification-infra/.github/certification/pr81_migration_0059.py \
+            record-tests ../certification-evidence/pr81-migration-0059.json \
+            ../certification-evidence/targeted-tests.xml
+          exit "$status"
+
+      - name: Verify sanitized evidence
+        if: always()
+        working-directory: candidate
+        run: uv run --locked python ../certification-infra/.github/certification/pr81_migration_0059.py verify-evidence ../certification-evidence/pr81-migration-0059.json
+
+      - name: Upload sanitized certification evidence
+        if: always()
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: pr81-migration-0059-certification-${{ github.run_id }}
+          path: certification-evidence/pr81-migration-0059.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Drop disposable certification databases
+        if: always()
+        working-directory: candidate
+        run: uv run --locked python ../certification-infra/.github/certification/pr81_migration_0059.py cleanup
