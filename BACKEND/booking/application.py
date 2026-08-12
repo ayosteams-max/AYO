@@ -21,6 +21,7 @@ from BACKEND.identity.models import IdentityType
 from BACKEND.persistence.composition import PostgresRepositoryComposition
 from BACKEND.ride_request.application import (
     CreateRideRequestCommand,
+    RideRequestAccessDenied,
     RideRequestApplication,
 )
 from BACKEND.ride_request.models import (
@@ -78,6 +79,12 @@ class BookingApplication:
     @property
     def dispatch_enabled(self) -> bool:
         return self._dispatch is not None
+
+    @staticmethod
+    def _rider(subject: AuthorizationSubject) -> UUID:
+        if subject.identity_type is not IdentityType.RIDER:
+            raise BookingConflict("authentication_required")
+        return subject.identity_id
 
     def _start_dispatch(
         self, confirmation: BookingConfirmation, ride: RideRequest, *, at: datetime
@@ -313,3 +320,26 @@ class BookingApplication:
             stored = unit.booking.add_confirmation(confirmation)
         self._start_dispatch(stored, ride, at=at)
         return stored, ride
+
+    def recover_confirmation(
+        self,
+        *,
+        subject: AuthorizationSubject,
+        client_request_id: UUID,
+    ) -> tuple[BookingConfirmation, RideRequest]:
+        rider_id = self._rider(subject)
+        with self._composition.unit_of_work() as unit:
+            confirmation = unit.booking.get_confirmation_for_client_request(
+                rider_identity_id=rider_id,
+                client_request_id=client_request_id,
+            )
+        if confirmation is None:
+            raise BookingConflict("booking_confirmation_not_found")
+        try:
+            ride = self._ride_requests.get_owned(
+                subject=subject,
+                request_id=confirmation.ride_request_id,
+            )
+        except RideRequestAccessDenied as error:
+            raise BookingConflict("booking_confirmation_not_found") from error
+        return confirmation, ride

@@ -285,6 +285,28 @@ def eligible_driver(composition, cost=20):
     )
 
 
+def test_booking_confirmation_recovery_is_client_request_and_rider_scoped(
+    postgres_composition,
+) -> None:
+    request, subject = ready_request(postgres_composition)
+    with postgres_composition.unit_of_work() as unit:
+        recovered = unit.booking.get_confirmation_for_client_request(
+            rider_identity_id=subject.identity_id,
+            client_request_id=request.client_request_id,
+        )
+        cross_rider = unit.booking.get_confirmation_for_client_request(
+            rider_identity_id=uuid4(),
+            client_request_id=request.client_request_id,
+        )
+    assert recovered is not None
+    assert recovered.ride_request_id == request.request_id
+    assert recovered.rider_identity_id == subject.identity_id
+    assert recovered.fare_estimate_id is not None
+    assert recovered.estimate_acceptance_id is not None
+    assert recovered.pricing_lineage_hash is not None
+    assert cross_rider is None
+
+
 def test_handoff_minimizes_data_and_fastest_authoritative_driver_wins(
     postgres_composition,
 ) -> None:

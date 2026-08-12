@@ -16,8 +16,17 @@ from BACKEND.booking.application import (
     ConfirmBookingCommand,
     PreviewRouteCommand,
 )
-from BACKEND.booking.models import BookingConflict, PlaceCandidate, TollEvidenceState
-from BACKEND.ride_request.models import DestinationDefinition, PickupDefinition
+from BACKEND.booking.models import (
+    BookingConfirmation,
+    BookingConflict,
+    PlaceCandidate,
+    TollEvidenceState,
+)
+from BACKEND.ride_request.models import (
+    DestinationDefinition,
+    PickupDefinition,
+    RideRequest,
+)
 
 
 class RoutePreviewRequest(BaseModel):
@@ -70,9 +79,12 @@ class ConfirmBookingResponse(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
     confirmation_id: UUID
     ride_request_id: UUID
+    fare_estimate_id: UUID
+    estimate_acceptance_id: UUID
+    pricing_lineage_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
     state: str
     dispatch_started: bool = False
-    next_step: str = "waiting_for_driver"
+    next_step: str = "check_dispatch_status"
 
 
 def _public_error(error: Exception) -> HTTPException:
@@ -84,6 +96,7 @@ def _public_error(error: Exception) -> HTTPException:
         "service_area_unsupported",
         "route_evidence_unavailable",
         "route_evidence_not_found",
+        "booking_confirmation_not_found",
         "route_evidence_expired",
         "route_changed",
         "quote_expired",
@@ -100,6 +113,7 @@ def _public_error(error: Exception) -> HTTPException:
         "authentication_required": status.HTTP_401_UNAUTHORIZED,
         "access_denied": status.HTTP_403_FORBIDDEN,
         "route_evidence_not_found": status.HTTP_404_NOT_FOUND,
+        "booking_confirmation_not_found": status.HTTP_404_NOT_FOUND,
         "invalid_place_query": status.HTTP_422_UNPROCESSABLE_ENTITY,
         "unsupported_locale": status.HTTP_422_UNPROCESSABLE_ENTITY,
         "invalid_result_limit": status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -208,11 +222,50 @@ def create_booking_router(
             )
         except (BookingConflict, ValueError) as error:
             raise _public_error(error) from error
-        return ConfirmBookingResponse(
-            confirmation_id=item.confirmation_id,
-            ride_request_id=ride.request_id,
-            state=ride.state.value,
-            dispatch_started=getattr(application, "dispatch_enabled", False),
-        )
+        return _confirmation_response(application, item, ride)
+
+    @router.get(
+        "/confirmations/by-client-request/{client_request_id}",
+        response_model=ConfirmBookingResponse,
+    )
+    @permission_required(
+        "ride_request.read_own", resource_type="canonical_ride_request"
+    )
+    async def recover_confirmation(
+        client_request_id: UUID, request: Request
+    ) -> ConfirmBookingResponse:
+        subject = await subject_resolver.resolve(request)
+        if subject is None:
+            raise HTTPException(401, {"code": "authentication_required"})
+        try:
+            item, ride = application.recover_confirmation(
+                subject=subject,
+                client_request_id=client_request_id,
+            )
+        except (BookingConflict, ValueError) as error:
+            raise _public_error(error) from error
+        return _confirmation_response(application, item, ride)
 
     return router
+
+
+def _confirmation_response(
+    application: BookingApplication,
+    item: BookingConfirmation,
+    ride: RideRequest,
+) -> ConfirmBookingResponse:
+    if (
+        item.fare_estimate_id is None
+        or item.estimate_acceptance_id is None
+        or item.pricing_lineage_hash is None
+    ):
+        raise _public_error(BookingConflict("pricing_unavailable"))
+    return ConfirmBookingResponse(
+        confirmation_id=item.confirmation_id,
+        ride_request_id=ride.request_id,
+        fare_estimate_id=item.fare_estimate_id,
+        estimate_acceptance_id=item.estimate_acceptance_id,
+        pricing_lineage_hash=item.pricing_lineage_hash,
+        state=ride.state.value,
+        dispatch_started=getattr(application, "dispatch_enabled", False),
+    )

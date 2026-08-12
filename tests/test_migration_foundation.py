@@ -25,8 +25,8 @@ from BACKEND.persistence.tables import (
 def test_migration_history_has_one_expected_head() -> None:
     script = ScriptDirectory.from_config(alembic_config())
 
-    assert script.get_heads() == ["20260811_0059"]
-    assert expected_schema_revision() == "20260811_0059"
+    assert script.get_heads() == ["20260812_0060"]
+    assert expected_schema_revision() == "20260812_0060"
 
 
 def test_late_pricing_lineage_foreign_keys_are_added_by_migration_0059() -> None:
