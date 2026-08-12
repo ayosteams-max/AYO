@@ -2537,6 +2537,14 @@ booking_confirmations = Table(
     Column("idempotency_key_hash", String(64), nullable=False),
     Column("confirmed_at", DateTime(timezone=True), nullable=False),
     UniqueConstraint(
+        "fare_estimate_id",
+        name="uq_booking_confirmation_fare_estimate",
+    ),
+    UniqueConstraint(
+        "estimate_acceptance_id",
+        name="uq_booking_confirmation_estimate_acceptance",
+    ),
+    UniqueConstraint(
         "rider_identity_id",
         "idempotency_key_hash",
         name="uq_booking_confirmation_rider_key",

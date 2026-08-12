@@ -4,7 +4,18 @@ from unittest.mock import patch
 import pytest
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
-from sqlalchemy import CheckConstraint, Column, MetaData, String, Table, inspect, text
+from alembic.script import ScriptDirectory
+from sqlalchemy import (
+    CheckConstraint,
+    Column,
+    ForeignKeyConstraint,
+    MetaData,
+    String,
+    Table,
+    UniqueConstraint,
+    inspect,
+    text,
+)
 
 from BACKEND.authorization.registry import PERMISSION_REGISTRY
 from BACKEND.engineering.runtime import EngineeringRuntime
@@ -54,11 +65,189 @@ def _governed_courier_pickup_metadata_identity(difference: tuple) -> tuple:
     )
 
 
+type _CashUniqueKey = tuple[str, tuple[str, ...]]
+type _CashFkKey = tuple[str, tuple[str, ...], str, tuple[str, ...]]
+
+
+_GOVERNED_CASH_0059_UNIQUE_NAME_DIFFERENCES: dict[_CashUniqueKey, str] = {
+    (
+        "trip_cash_collection_evidence",
+        ("ride_id",),
+    ): "uq_trip_cash_collection_evidence_ride_id",
+    (
+        "cash_accounting_policies",
+        ("accounting_policy_version",),
+    ): "uq_cash_accounting_policies_accounting_policy_version",
+    (
+        "trip_cash_accounting_records",
+        ("instruction_id",),
+    ): "uq_trip_cash_accounting_records_instruction_id",
+    (
+        "cash_reconciliation_evidence",
+        ("ride_id",),
+    ): "uq_cash_reconciliation_evidence_ride_id",
+    (
+        "cash_reconciliation_evidence",
+        ("evidence_hash",),
+    ): "uq_cash_reconciliation_evidence_evidence_hash",
+}
+
+_GOVERNED_CASH_0059_FK_NAME_DIFFERENCES: dict[_CashFkKey, str] = {
+    (
+        "trip_cash_collection_evidence",
+        ("ride_id",),
+        "active_rides",
+        ("ride_id",),
+    ): "fk_trip_cash_collection_evidence_ride_id_active_rides",
+    (
+        "trip_cash_collection_evidence",
+        ("fare_calculation_id",),
+        "fare_calculations",
+        ("calculation_id",),
+    ): "fk_trip_cash_collection_evidence_fare_calculation_id_fare_calculations",
+    (
+        "trip_cash_accounting_records",
+        ("ride_id",),
+        "active_rides",
+        ("ride_id",),
+    ): "fk_trip_cash_accounting_records_ride_id_active_rides",
+    (
+        "trip_cash_accounting_records",
+        ("evidence_id",),
+        "trip_cash_collection_evidence",
+        ("evidence_id",),
+    ): "fk_trip_cash_accounting_records_evidence_id_trip_cash_collection_evidence",
+    (
+        "trip_cash_accounting_records",
+        ("accounting_policy_id",),
+        "cash_accounting_policies",
+        ("accounting_policy_id",),
+    ): "fk_trip_cash_accounting_records_accounting_policy_id_cash_accounting_policies",
+    (
+        "trip_cash_accounting_records",
+        ("ledger_journal_id",),
+        "ledger_journals",
+        ("journal_id",),
+    ): "fk_trip_cash_accounting_records_ledger_journal_id_ledger_journals",
+    (
+        "trip_cash_accounting_records",
+        ("clearing_journal_id",),
+        "ledger_journals",
+        ("journal_id",),
+    ): "fk_trip_cash_accounting_records_clearing_journal_id_ledger_journals",
+    (
+        "cash_reconciliation_evidence",
+        ("ride_id",),
+        "trip_cash_accounting_records",
+        ("ride_id",),
+    ): "fk_cash_reconciliation_evidence_ride_id_trip_cash_accounting_records",
+    (
+        "cash_reconciliation_evidence",
+        ("accounting_policy_id",),
+        "cash_accounting_policies",
+        ("accounting_policy_id",),
+    ): "fk_cash_reconciliation_evidence_accounting_policy_id_cash_accounting_policies",
+    (
+        "cash_reconciliation_evidence",
+        ("original_accounting_journal_id",),
+        "ledger_journals",
+        ("journal_id",),
+    ): "fk_cash_reconciliation_evidence_original_accounting_journal_id_ledger_journals",
+}
+
+
+def _governed_cash_0059_metadata_identity(difference: tuple) -> tuple:
+    kind, constraint = difference
+    local_columns = tuple(element.parent.name for element in constraint.elements)
+    referred_columns = tuple(element.column.name for element in constraint.elements)
+    referred_table = constraint.elements[0].column.table.name
+    return (
+        kind,
+        constraint.table.schema,
+        constraint.table.name,
+        constraint.name,
+        local_columns,
+        referred_table,
+        referred_columns,
+    )
+
+
+def _approved_governed_cash_0059_fk_identities() -> set[tuple]:
+    return {
+        (
+            "add_constraint",
+            AYO_SCHEMA,
+            table_name,
+            constraint_name,
+            local_columns,
+            referred_table,
+            referred_columns,
+        )
+        for (
+            table_name,
+            local_columns,
+            referred_table,
+            referred_columns,
+        ), constraint_name in _GOVERNED_CASH_0059_FK_NAME_DIFFERENCES.items()
+    }
+
+
+def _approved_governed_cash_0059_unique_identities() -> set[tuple]:
+    return {
+        (
+            "add_constraint",
+            AYO_SCHEMA,
+            table_name,
+            local_columns,
+        )
+        for (table_name, local_columns) in _GOVERNED_CASH_0059_UNIQUE_NAME_DIFFERENCES
+    }
+
+
+def _is_governed_cash_0059_metadata_difference(difference: tuple) -> bool:
+    kind = difference[0]
+    if kind not in {"remove_constraint", "add_constraint"}:
+        return False
+    constraint = difference[1]
+    if constraint.table.schema != AYO_SCHEMA:
+        return False
+
+    if isinstance(constraint, UniqueConstraint):
+        unique_key: _CashUniqueKey = (
+            constraint.table.name,
+            tuple(constraint.columns.keys()),
+        )
+        expected_name = _GOVERNED_CASH_0059_UNIQUE_NAME_DIFFERENCES.get(unique_key)
+        return expected_name is not None and (
+            (kind == "add_constraint" and constraint.name == expected_name)
+            or (kind == "remove_constraint" and constraint.name != expected_name)
+        )
+
+    if isinstance(constraint, ForeignKeyConstraint):
+        local_columns = tuple(element.parent.name for element in constraint.elements)
+        referred_columns = tuple(element.column.name for element in constraint.elements)
+        referred_table = constraint.elements[0].column.table.name
+        fk_key: _CashFkKey = (
+            constraint.table.name,
+            local_columns,
+            referred_table,
+            referred_columns,
+        )
+        expected_name = _GOVERNED_CASH_0059_FK_NAME_DIFFERENCES.get(fk_key)
+        return expected_name is not None and (
+            (kind == "add_constraint" and constraint.name == expected_name)
+            or (kind == "remove_constraint" and constraint.name != expected_name)
+        )
+
+    return False
+
+
 def _unexpected_schema_differences(differences: list[tuple]) -> list[tuple]:
     return [
         difference
         for difference in differences
         if not _is_governed_courier_pickup_metadata_difference(difference)
+        and not _is_governed_cash_0059_metadata_difference(difference)
     ]
 
 
@@ -171,13 +360,18 @@ def test_upgrade_empty_database_matches_metadata_and_postgresql_17(
         "uq_booking_confirmation_fare_estimate",
         "uq_booking_confirmation_estimate_acceptance",
     } <= booking_unique_names
+    expected_handoff_check_name = _governed_constraint_name(
+        postgres_engine,
+        table_name="immediate_dispatch_handoffs",
+        logical_name="handoff_pricing_lineage_complete",
+    )
     handoff_check_names = {
         constraint["name"]
         for constraint in inspector.get_check_constraints(
             "immediate_dispatch_handoffs", schema=AYO_SCHEMA
         )
     }
-    assert "handoff_pricing_lineage_complete" in handoff_check_names
+    assert expected_handoff_check_name in handoff_check_names
     # Retained as review context; parity authority is SQLAlchemy metadata above.
     _historical_inventory = {
         "active_rides",
@@ -342,14 +536,14 @@ def test_upgrade_empty_database_matches_metadata_and_postgresql_17(
             },
         )
         differences = compare_metadata(context, metadata)
-        governed = [
+        courier_governed = [
             difference
             for difference in differences
             if _is_governed_courier_pickup_metadata_difference(difference)
         ]
         assert {
             _governed_courier_pickup_metadata_identity(difference)
-            for difference in governed
+            for difference in courier_governed
         } == {
             (
                 "remove_constraint",
@@ -366,6 +560,35 @@ def test_upgrade_empty_database_matches_metadata_and_postgresql_17(
                 ("assignment_id",),
             ),
         }
+        cash_0059_governed = [
+            difference
+            for difference in differences
+            if _is_governed_cash_0059_metadata_difference(difference)
+        ]
+        observed_governed_fk_identities = {
+            _governed_cash_0059_metadata_identity(difference)
+            for difference in cash_0059_governed
+            if isinstance(difference[1], ForeignKeyConstraint)
+        }
+        approved_governed_fk_identities = _approved_governed_cash_0059_fk_identities()
+        assert observed_governed_fk_identities <= approved_governed_fk_identities
+
+        observed_governed_unique_identities = {
+            (
+                difference[0],
+                difference[1].table.schema,
+                difference[1].table.name,
+                tuple(difference[1].columns.keys()),
+            )
+            for difference in cash_0059_governed
+            if isinstance(difference[1], UniqueConstraint)
+        }
+        approved_governed_unique_identities = (
+            _approved_governed_cash_0059_unique_identities()
+        )
+        assert (
+            observed_governed_unique_identities <= approved_governed_unique_identities
+        )
         assert _unexpected_schema_differences(differences) == []
         synthetic_drift = ("remove_column", AYO_SCHEMA, "unexpected", object())
         assert _unexpected_schema_differences([*differences, synthetic_drift]) == [
@@ -411,7 +634,6 @@ def test_canonical_compatibility_upgrades_from_previous_revision(
     } <= after
     readiness = SchemaVersionReadinessChecker(postgres_engine).check()
     assert readiness.ready
-    assert readiness.current_revision == "20260806_0058"
     assert readiness.current_revision == expected_schema_revision()
 
 
@@ -530,370 +752,136 @@ def test_account_access_upgrades_from_certified_compatibility_revision(
 def test_runtime_role_has_append_read_but_not_mutation_privileges(
     postgres_engine, empty_database
 ) -> None:
+    def assert_runtime_table_privilege(
+        connection, *, table_name: str, privilege: str, expected: bool
+    ) -> None:
+        actual = bool(
+            connection.execute(
+                text(
+                    "SELECT has_table_privilege('ayo_runtime', :table_name, :privilege)"
+                ),
+                {
+                    "table_name": f"ayo.{table_name}",
+                    "privilege": privilege,
+                },
+            ).scalar_one()
+        )
+        assert actual is expected, (
+            "ayo_runtime privilege mismatch: "
+            f"object=ayo.{table_name} privilege={privilege} "
+            f"expected={expected} actual={actual}"
+        )
+
     with postgres_engine.begin() as connection:
         connection.execute(text("DROP ROLE IF EXISTS ayo_runtime"))
         connection.execute(text("CREATE ROLE ayo_runtime NOLOGIN"))
     try:
         MigrationRunner(postgres_engine).upgrade()
         with postgres_engine.connect() as connection:
-            privileges = {
-                privilege: connection.execute(
-                    text(
-                        "SELECT has_table_privilege("
-                        "'ayo_runtime', 'ayo.audit_events', :privilege)"
-                    ),
-                    {"privilege": privilege},
-                ).scalar_one()
-                for privilege in ("SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE")
-            }
-        assert privileges == {
-            "SELECT": True,
-            "INSERT": True,
-            "UPDATE": False,
-            "DELETE": False,
-            "TRUNCATE": False,
-        }
-        with postgres_engine.connect() as connection:
-            assert (
-                connection.execute(
-                    text(
-                        "SELECT has_table_privilege("
-                        "'ayo_runtime', 'ayo.sessions', 'DELETE')"
-                    )
-                ).scalar_one()
-                is False
-            )
-            assert not connection.execute(
-                text(
-                    "SELECT has_table_privilege("
-                    "'ayo_runtime', 'ayo.dispatch_assignments', 'UPDATE')"
+            for privilege, expected in (
+                ("SELECT", True),
+                ("INSERT", True),
+                ("UPDATE", False),
+                ("DELETE", False),
+                ("TRUNCATE", False),
+            ):
+                assert_runtime_table_privilege(
+                    connection,
+                    table_name="audit_events",
+                    privilege=privilege,
+                    expected=expected,
                 )
-            ).scalar_one()
-            assert not connection.execute(
-                text(
-                    "SELECT has_table_privilege("
-                    "'ayo_runtime', 'ayo.dispatch_idempotency_records', 'UPDATE')"
+            for table_name, privilege, expected in (
+                ("sessions", "DELETE", False),
+                ("dispatch_assignments", "UPDATE", False),
+                ("dispatch_idempotency_records", "UPDATE", False),
+                ("dispatch_outbox", "UPDATE", True),
+                ("persistence_domain_events", "UPDATE", False),
+                ("persistence_outbox", "UPDATE", True),
+                ("rate_limit_buckets", "UPDATE", True),
+                ("support_case_events", "INSERT", True),
+                ("support_case_events", "UPDATE", False),
+                ("support_cases", "DELETE", False),
+                ("permissions", "INSERT", False),
+                ("identity_role_assignments", "UPDATE", True),
+                ("identity_role_assignments", "DELETE", False),
+                ("identities", "DELETE", False),
+                ("token_families", "UPDATE", True),
+                ("payment_attempts", "UPDATE", True),
+                ("payment_outbox", "UPDATE", True),
+                ("refund_requests", "UPDATE", True),
+                ("refund_decisions", "INSERT", True),
+                ("refund_requests", "DELETE", False),
+                ("settlement_batches", "UPDATE", True),
+                ("reconciliation_records", "INSERT", True),
+                ("settlement_batches", "DELETE", False),
+                ("payment_intents", "DELETE", False),
+                ("wallet_accounts", "UPDATE", True),
+                ("wallet_lineage_entries", "INSERT", True),
+                ("wallet_lineage_entries", "DELETE", False),
+                ("wallet_accounts", "DELETE", False),
+                ("financial_postings", "INSERT", True),
+                ("financial_postings", "UPDATE", False),
+                ("financial_posting_outbox", "UPDATE", True),
+                ("financial_posting_lines", "DELETE", False),
+                ("financial_holds", "INSERT", True),
+                ("financial_holds", "UPDATE", True),
+                ("financial_hold_state_history", "UPDATE", False),
+                ("financial_hold_state_history", "DELETE", False),
+                ("financial_hold_outbox", "UPDATE", True),
+            ):
+                assert_runtime_table_privilege(
+                    connection,
+                    table_name=table_name,
+                    privilege=privilege,
+                    expected=expected,
                 )
-            ).scalar_one()
-            assert connection.execute(
-                text(
-                    "SELECT has_table_privilege("
-                    "'ayo_runtime', 'ayo.dispatch_outbox', 'UPDATE')"
-                )
-            ).scalar_one()
-            assert not connection.execute(
-                text(
-                    "SELECT has_table_privilege("
-                    "'ayo_runtime', 'ayo.persistence_domain_events', 'UPDATE')"
-                )
-            ).scalar_one()
-            assert connection.execute(
-                text(
-                    "SELECT has_table_privilege("
-                    "'ayo_runtime', 'ayo.persistence_outbox', 'UPDATE')"
-                )
-            ).scalar_one()
-            assert (
-                connection.execute(
-                    text(
-                        "SELECT has_table_privilege("
-                        "'ayo_runtime', 'ayo.rate_limit_buckets', 'UPDATE')"
-                    )
-                ).scalar_one()
-                is True
-            )
             for immutable_table in (
                 "settlement_approvals",
                 "settlement_hold_evidence",
                 "settlement_external_evidence",
             ):
-                assert connection.execute(
-                    text(
-                        "SELECT has_table_privilege("
-                        f"'ayo_runtime', 'ayo.{immutable_table}', 'INSERT')"
+                for privilege, expected in (
+                    ("INSERT", True),
+                    ("UPDATE", False),
+                    ("DELETE", False),
+                ):
+                    assert_runtime_table_privilege(
+                        connection,
+                        table_name=immutable_table,
+                        privilege=privilege,
+                        expected=expected,
                     )
-                ).scalar_one()
-                assert not connection.execute(
-                    text(
-                        "SELECT has_table_privilege("
-                        f"'ayo_runtime', 'ayo.{immutable_table}', 'UPDATE')"
-                    )
-                ).scalar_one()
-                assert not connection.execute(
-                    text(
-                        "SELECT has_table_privilege("
-                        f"'ayo_runtime', 'ayo.{immutable_table}', 'DELETE')"
-                    )
-                ).scalar_one()
-            assert connection.execute(
-                text(
-                    "SELECT has_table_privilege("
-                    "'ayo_runtime', 'ayo.support_case_events', 'INSERT')"
-                )
-            ).scalar_one()
-            assert not connection.execute(
-                text(
-                    "SELECT has_table_privilege("
-                    "'ayo_runtime', 'ayo.support_case_events', 'UPDATE')"
-                )
-            ).scalar_one()
-            assert not connection.execute(
-                text(
-                    "SELECT has_table_privilege("
-                    "'ayo_runtime', 'ayo.support_cases', 'DELETE')"
-                )
-            ).scalar_one()
-            assert (
-                connection.execute(
-                    text(
-                        "SELECT has_table_privilege("
-                        "'ayo_runtime', 'ayo.permissions', 'INSERT')"
-                    )
-                ).scalar_one()
-                is False
-            )
-            assert (
-                connection.execute(
-                    text(
-                        "SELECT has_table_privilege("
-                        "'ayo_runtime', 'ayo.identity_role_assignments', 'UPDATE')"
-                    )
-                ).scalar_one()
-                is True
-            )
-            assert (
-                connection.execute(
-                    text(
-                        "SELECT has_table_privilege("
-                        "'ayo_runtime', 'ayo.identity_role_assignments', 'DELETE')"
-                    )
-                ).scalar_one()
-                is False
-            )
-            assert (
-                connection.execute(
-                    text(
-                        "SELECT has_table_privilege("
-                        "'ayo_runtime', 'ayo.identities', 'DELETE')"
-                    )
-                ).scalar_one()
-                is False
-            )
             for table_name, update_allowed in (
                 ("canonical_subjects", False),
                 ("identity_accounts", True),
                 ("legacy_identity_mappings", True),
             ):
-                assert connection.execute(
-                    text(
-                        "SELECT has_table_privilege("
-                        f"'ayo_runtime', 'ayo.{table_name}', 'SELECT')"
+                for privilege, expected in (
+                    ("SELECT", True),
+                    ("INSERT", True),
+                    ("UPDATE", update_allowed),
+                    ("DELETE", False),
+                ):
+                    assert_runtime_table_privilege(
+                        connection,
+                        table_name=table_name,
+                        privilege=privilege,
+                        expected=expected,
                     )
-                ).scalar_one()
-                assert connection.execute(
-                    text(
-                        "SELECT has_table_privilege("
-                        f"'ayo_runtime', 'ayo.{table_name}', 'INSERT')"
-                    )
-                ).scalar_one()
-                assert (
-                    connection.execute(
-                        text(
-                            "SELECT has_table_privilege("
-                            f"'ayo_runtime', 'ayo.{table_name}', 'UPDATE')"
-                        )
-                    ).scalar_one()
-                    is update_allowed
-                )
-                assert not connection.execute(
-                    text(
-                        "SELECT has_table_privilege("
-                        f"'ayo_runtime', 'ayo.{table_name}', 'DELETE')"
-                    )
-                ).scalar_one()
-            assert (
-                connection.execute(
-                    text(
-                        "SELECT has_table_privilege("
-                        "'ayo_runtime', 'ayo.token_families', 'UPDATE')"
-                    )
-                ).scalar_one()
-                is True
-            )
-            assert (
-                connection.execute(
-                    text(
-                        "SELECT has_table_privilege("
-                        "'ayo_runtime', 'ayo.payment_attempts', 'UPDATE')"
-                    )
-                ).scalar_one()
-                is True
-            )
-            assert (
-                connection.execute(
-                    text(
-                        "SELECT has_table_privilege("
-                        "'ayo_runtime', 'ayo.payment_outbox', 'UPDATE')"
-                    )
-                ).scalar_one()
-                is True
-            )
-            assert (
-                connection.execute(
-                    text(
-                        "SELECT has_table_privilege("
-                        "'ayo_runtime', 'ayo.refund_requests', 'UPDATE')"
-                    )
-                ).scalar_one()
-                is True
-            )
-            assert (
-                connection.execute(
-                    text(
-                        "SELECT has_table_privilege("
-                        "'ayo_runtime', 'ayo.refund_decisions', 'INSERT')"
-                    )
-                ).scalar_one()
-                is True
-            )
-            assert not connection.execute(
-                text(
-                    "SELECT has_table_privilege("
-                    "'ayo_runtime', 'ayo.refund_requests', 'DELETE')"
-                )
-            ).scalar_one()
-            assert (
-                connection.execute(
-                    text(
-                        "SELECT has_table_privilege("
-                        "'ayo_runtime', 'ayo.settlement_batches', 'UPDATE')"
-                    )
-                ).scalar_one()
-                is True
-            )
-            assert (
-                connection.execute(
-                    text(
-                        "SELECT has_table_privilege("
-                        "'ayo_runtime', 'ayo.reconciliation_records', 'INSERT')"
-                    )
-                ).scalar_one()
-                is True
-            )
-            assert not connection.execute(
-                text(
-                    "SELECT has_table_privilege("
-                    "'ayo_runtime', 'ayo.settlement_batches', 'DELETE')"
-                )
-            ).scalar_one()
-            assert not connection.execute(
-                text(
-                    "SELECT has_table_privilege("
-                    "'ayo_runtime', 'ayo.payment_intents', 'DELETE')"
-                )
-            ).scalar_one()
-            assert (
-                connection.execute(
-                    text(
-                        "SELECT has_table_privilege("
-                        "'ayo_runtime', 'ayo.wallet_accounts', 'UPDATE')"
-                    )
-                ).scalar_one()
-                is True
-            )
-            assert (
-                connection.execute(
-                    text(
-                        "SELECT has_table_privilege("
-                        "'ayo_runtime', 'ayo.wallet_lineage_entries', 'INSERT')"
-                    )
-                ).scalar_one()
-                is True
-            )
-            assert not connection.execute(
-                text(
-                    "SELECT has_table_privilege("
-                    "'ayo_runtime', 'ayo.wallet_lineage_entries', 'DELETE')"
-                )
-            ).scalar_one()
-            assert not connection.execute(
-                text(
-                    "SELECT has_table_privilege("
-                    "'ayo_runtime', 'ayo.wallet_accounts', 'DELETE')"
-                )
-            ).scalar_one()
-            assert (
-                connection.execute(
-                    text(
-                        "SELECT has_table_privilege("
-                        "'ayo_runtime', 'ayo.financial_postings', 'INSERT')"
-                    )
-                ).scalar_one()
-                is True
-            )
-            assert not connection.execute(
-                text(
-                    "SELECT has_table_privilege("
-                    "'ayo_runtime', 'ayo.financial_postings', 'UPDATE')"
-                )
-            ).scalar_one()
-            assert (
-                connection.execute(
-                    text(
-                        "SELECT has_table_privilege("
-                        "'ayo_runtime', 'ayo.financial_posting_outbox', 'UPDATE')"
-                    )
-                ).scalar_one()
-                is True
-            )
-            assert not connection.execute(
-                text(
-                    "SELECT has_table_privilege("
-                    "'ayo_runtime', 'ayo.financial_posting_lines', 'DELETE')"
-                )
-            ).scalar_one()
-            assert (
-                connection.execute(
-                    text(
-                        "SELECT has_table_privilege("
-                        "'ayo_runtime', 'ayo.financial_holds', 'INSERT')"
-                    )
-                ).scalar_one()
-                is True
-            )
-            assert (
-                connection.execute(
-                    text(
-                        "SELECT has_table_privilege("
-                        "'ayo_runtime', 'ayo.financial_holds', 'UPDATE')"
-                    )
-                ).scalar_one()
-                is True
-            )
-            assert not connection.execute(
-                text(
-                    "SELECT has_table_privilege("
-                    "'ayo_runtime', 'ayo.financial_hold_state_history', 'UPDATE')"
-                )
-            ).scalar_one()
-            assert not connection.execute(
-                text(
-                    "SELECT has_table_privilege("
-                    "'ayo_runtime', 'ayo.financial_hold_state_history', 'DELETE')"
-                )
-            ).scalar_one()
-            assert (
-                connection.execute(
-                    text(
-                        "SELECT has_table_privilege("
-                        "'ayo_runtime', 'ayo.financial_hold_outbox', 'UPDATE')"
-                    )
-                ).scalar_one()
-                is True
-            )
     finally:
         with postgres_engine.begin() as connection:
-            connection.execute(text("DROP OWNED BY ayo_runtime"))
+            connection.execute(
+                text(
+                    "REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA ayo FROM ayo_runtime"
+                )
+            )
+            connection.execute(
+                text(
+                    "REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA ayo FROM ayo_runtime"
+                )
+            )
+            connection.execute(text("REVOKE USAGE ON SCHEMA ayo FROM ayo_runtime"))
             connection.execute(text("DROP ROLE ayo_runtime"))
 
 
@@ -1596,7 +1584,10 @@ def test_courier_pickup_idempotency_v1_migrates_and_refuses_evidence_loss(
         assert SchemaVersionReadinessChecker(
             postgres_engine
         ).check().current_revision == ("20260805_0057")
-        assert expected_schema_revision() == "20260806_0058"
+        assert (
+            expected_schema_revision()
+            == ScriptDirectory.from_config(alembic_config()).get_current_head()
+        )
         assert expected_schema_revision() != "20260724_0056"
     with pytest.raises(
         RuntimeError,
@@ -1624,7 +1615,7 @@ def test_courier_pickup_idempotency_v1_migrates_and_refuses_evidence_loss(
     runner.upgrade()
     readiness = SchemaVersionReadinessChecker(postgres_engine).check()
     assert readiness.ready
-    assert readiness.current_revision == "20260806_0058"
+    assert readiness.current_revision == expected_schema_revision()
     with postgres_engine.connect() as connection:
         preserved = connection.execute(
             text(

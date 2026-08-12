@@ -4,7 +4,11 @@ from sqlalchemy import Connection, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from BACKEND.booking.models import BookingConfirmation, BookingConflict, RoutePreview
-from BACKEND.persistence.tables import booking_confirmations, booking_route_evidence
+from BACKEND.persistence.tables import (
+    booking_confirmations,
+    booking_route_evidence,
+    canonical_ride_requests,
+)
 
 
 class PostgresBookingRepository:
@@ -81,6 +85,28 @@ class PostgresBookingRepository:
             self._connection.execute(
                 select(booking_confirmations).where(
                     booking_confirmations.c.ride_request_id == ride_request_id
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        return None if row is None else BookingConfirmation.model_validate(dict(row))
+
+    def get_confirmation_for_client_request(
+        self, *, rider_identity_id: UUID, client_request_id: UUID
+    ) -> BookingConfirmation | None:
+        row = (
+            self._connection.execute(
+                select(booking_confirmations)
+                .join(
+                    canonical_ride_requests,
+                    canonical_ride_requests.c.request_id
+                    == booking_confirmations.c.ride_request_id,
+                )
+                .where(
+                    canonical_ride_requests.c.rider_identity_id == rider_identity_id,
+                    canonical_ride_requests.c.client_request_id == client_request_id,
+                    booking_confirmations.c.rider_identity_id == rider_identity_id,
                 )
             )
             .mappings()

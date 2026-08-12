@@ -6,7 +6,10 @@ from sqlalchemy import delete, insert, select, text, update
 from sqlalchemy.exc import DBAPIError
 
 from BACKEND.persistence.errors import IdempotencyConflictError
-from BACKEND.persistence.migrations import SchemaVersionReadinessChecker
+from BACKEND.persistence.migrations import (
+    SchemaVersionReadinessChecker,
+    expected_schema_revision,
+)
 from BACKEND.persistence.tables import (
     account_role_assignments,
     audit_events,
@@ -373,7 +376,7 @@ def test_provenance_and_continuity_are_database_immutable(
     del migration_built_schema
     readiness = SchemaVersionReadinessChecker(postgres_engine).check()
     assert readiness.ready
-    assert readiness.current_revision == "20260811_0059"
+    assert readiness.current_revision == expected_schema_revision()
     with postgres_engine.connect() as connection:
         triggers = set(
             connection.execute(

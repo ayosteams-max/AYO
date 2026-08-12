@@ -578,6 +578,15 @@ supplies no financial reasoning. No production tariff, payment, cash proof, ledg
 wallet, bonus, promotion, waiting/cancellation consequence, public route or Mission 20
 behavior is activated. See `IMPLEMENTATION_INCREMENT_7_PRICING_FOUNDATION.md`.
 
+**Immediate Standard public-contract checkpoint:** Following certification of the
+authoritative cash-ride backend chain, CTO review and Founder/CEO authorization approved a
+bounded PRE-PRODUCTION Rider/Driver transport-contract increment. Existing Booking,
+Dispatch, Active Ride and Post Trip routes remain authoritative; one rider-owned Booking
+confirmation recovery read closes the response-loss/process-restart gap using the durable
+`client_request_id`. No Ride Journey aggregate, schema, provider, mobile screen, production
+policy or activation is introduced. See
+`AYO_IMMEDIATE_STANDARD_PUBLIC_CONTRACT_WEAK_NETWORK_ARCHITECTURE.md`.
+
 **Shared gate:** Each engine requires a separately authorized research and architecture mission, Ethiopian legal/operational review, explicit policy and financial limits, privacy/retention approval, abuse controls, human-operations design and CTO/CEO approval. See `docs/AYO_FUTURE_TRUST_AND_AI_SUPPORT_ENGINES.md`.
 
 ## Post-launch expansion gate

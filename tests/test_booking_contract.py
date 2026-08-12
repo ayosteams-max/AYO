@@ -126,6 +126,8 @@ def preview() -> RoutePreview:
 class FixedApplication:
     def __init__(self, item: RoutePreview):
         self.item = item
+        self.confirmation = None
+        self.ride = None
 
     def search_places(self, **kwargs):
         del kwargs
@@ -142,14 +144,29 @@ class FixedApplication:
             evidence_hash=self.item.evidence_hash,
             quote_id=self.item.quote.quote_id,
             ride_request_id=uuid4(),
+            fare_estimate_id=uuid4(),
+            estimate_acceptance_id=uuid4(),
+            pricing_lineage_hash="d" * 64,
             rider_identity_id=subject.identity_id,
             idempotency_key_hash="c" * 64,
             confirmed_at=datetime.now(UTC),
         )
-        return item, SimpleNamespace(
+        ride = SimpleNamespace(
             request_id=item.ride_request_id,
             state=SimpleNamespace(value="ready_for_dispatch"),
         )
+        self.confirmation = item
+        self.ride = ride
+        return item, ride
+
+    def recover_confirmation(self, *, subject, client_request_id):
+        del client_request_id
+        if (
+            self.confirmation is None
+            or self.confirmation.rider_identity_id != subject.identity_id
+        ):
+            raise BookingConflict("booking_confirmation_not_found")
+        return self.confirmation, self.ride
 
 
 class FakeUnit:
@@ -182,6 +199,17 @@ class FakeBookingRepository:
 
     def get_confirmation_for_evidence(self, evidence_id):
         return self.confirmation if evidence_id == self.item.evidence_id else None
+
+    def get_confirmation_for_client_request(
+        self, *, rider_identity_id, client_request_id
+    ):
+        del client_request_id
+        if (
+            self.confirmation is None
+            or self.confirmation.rider_identity_id != rider_identity_id
+        ):
+            return None
+        return self.confirmation
 
 
 class FakeRideRequests:
@@ -282,7 +310,120 @@ def test_confirmation_requires_identity_and_authorization_permission():
     assert response.status_code == 201
     assert response.json()["dispatch_started"] is False
     assert response.json()["state"] == "ready_for_dispatch"
+    assert response.json()["fare_estimate_id"]
+    assert response.json()["estimate_acceptance_id"]
+    assert response.json()["pricing_lineage_hash"] == "d" * 64
+    assert response.json()["next_step"] == "check_dispatch_status"
     assert enforcer.requirement.permission == "ride_request.create"
+
+
+def test_lost_confirmation_response_recovers_by_rider_owned_client_request_id():
+    rider = AuthorizationSubject(
+        identity_id=uuid4(),
+        identity_type=IdentityType.RIDER,
+        actor_type=ActorType.RIDER,
+    )
+    api, item, enforcer = client(rider)
+    client_request_id = uuid4()
+    payload = {
+        "evidence_id": str(item.evidence_id),
+        "evidence_hash": item.evidence_hash,
+        "quote_id": str(item.quote.quote_id),
+        "booking_session": "s" * 32,
+        "client_request_id": str(client_request_id),
+        "consent_policy_version": "booking.consent.v1",
+    }
+    created = api.post(
+        "/api/mobile/booking/confirm",
+        json=payload,
+        headers={"Idempotency-Key": "booking-confirm-recovery-0001"},
+    )
+    recovered = api.get(
+        f"/api/mobile/booking/confirmations/by-client-request/{client_request_id}"
+    )
+    assert created.status_code == 201
+    assert recovered.status_code == 200
+    assert recovered.json() == created.json()
+    assert set(recovered.json()) == {
+        "confirmation_id",
+        "ride_request_id",
+        "fare_estimate_id",
+        "estimate_acceptance_id",
+        "pricing_lineage_hash",
+        "state",
+        "dispatch_started",
+        "next_step",
+    }
+    assert enforcer.requirement.permission == "ride_request.read_own"
+
+
+def test_confirmation_recovery_is_authenticated_and_cross_rider_safe():
+    client_request_id = uuid4()
+    anonymous, _, _ = client(None)
+    assert (
+        anonymous.get(
+            f"/api/mobile/booking/confirmations/by-client-request/{client_request_id}"
+        ).status_code
+        == 401
+    )
+
+    rider = AuthorizationSubject(
+        identity_id=uuid4(),
+        identity_type=IdentityType.RIDER,
+        actor_type=ActorType.RIDER,
+    )
+    api, _, _ = client(rider)
+    response = api.get(
+        f"/api/mobile/booking/confirmations/by-client-request/{client_request_id}"
+    )
+    assert response.status_code == 404
+    assert response.json() == {"detail": {"code": "booking_confirmation_not_found"}}
+
+
+def test_public_confirmation_fails_closed_without_complete_pricing_lineage():
+    rider = AuthorizationSubject(
+        identity_id=uuid4(),
+        identity_type=IdentityType.RIDER,
+        actor_type=ActorType.RIDER,
+    )
+    item = preview()
+
+    class IncompleteLineageApplication(FixedApplication):
+        def confirm(self, command, **kwargs):
+            confirmation, ride = super().confirm(command, **kwargs)
+            return (
+                confirmation.model_copy(
+                    update={
+                        "fare_estimate_id": None,
+                        "estimate_acceptance_id": None,
+                        "pricing_lineage_hash": None,
+                    }
+                ),
+                ride,
+            )
+
+    resolver = FixedResolver(rider)
+    api = FastAPI()
+    api.state.authorization_enforcer = CapturingEnforcer()
+    api.include_router(
+        create_booking_router(IncompleteLineageApplication(item), resolver),
+        prefix="/api",
+    )
+    api.add_middleware(AuthorizationContextMiddleware, resolver=resolver)
+    response = TestClient(api).post(
+        "/api/mobile/booking/confirm",
+        json={
+            "evidence_id": str(item.evidence_id),
+            "evidence_hash": item.evidence_hash,
+            "quote_id": str(item.quote.quote_id),
+            "booking_session": "s" * 32,
+            "client_request_id": str(uuid4()),
+            "consent_policy_version": "booking.consent.v1",
+        },
+        headers={"Idempotency-Key": "booking-confirm-lineage-0001"},
+    )
+    assert response.status_code == 503
+    assert response.json() == {"detail": {"code": "pricing_unavailable"}}
 
 
 def test_toll_model_never_allows_unknown_zero():
@@ -383,6 +524,49 @@ def test_backend_duplicate_confirmation_returns_same_canonical_request():
     assert stored == confirmation
     assert returned_ride is ride
     assert rides.create_calls == 0
+
+
+def test_application_recovers_only_the_authenticated_riders_confirmation():
+    item = preview()
+    rider = AuthorizationSubject(
+        identity_id=uuid4(),
+        identity_type=IdentityType.RIDER,
+        actor_type=ActorType.RIDER,
+    )
+    confirmation = BookingConfirmation(
+        evidence_id=item.evidence_id,
+        evidence_hash=item.evidence_hash,
+        quote_id=item.quote.quote_id,
+        ride_request_id=uuid4(),
+        fare_estimate_id=uuid4(),
+        estimate_acceptance_id=uuid4(),
+        pricing_lineage_hash="d" * 64,
+        rider_identity_id=rider.identity_id,
+        idempotency_key_hash="c" * 64,
+        confirmed_at=datetime.now(UTC),
+    )
+    ride = SimpleNamespace(request_id=confirmation.ride_request_id)
+    application = BookingApplication(
+        FakeComposition(FakeBookingRepository(item, confirmation)),
+        SimpleNamespace(),
+        SimpleNamespace(),
+        FakeRideRequests(ride),
+        uuid4(),
+    )
+    recovered = application.recover_confirmation(
+        subject=rider, client_request_id=uuid4()
+    )
+    assert recovered == (confirmation, ride)
+
+    stranger = rider.model_copy(update={"identity_id": uuid4()})
+    with pytest.raises(BookingConflict, match="booking_confirmation_not_found"):
+        application.recover_confirmation(subject=stranger, client_request_id=uuid4())
+
+    driver = rider.model_copy(
+        update={"identity_type": IdentityType.DRIVER, "actor_type": ActorType.DRIVER}
+    )
+    with pytest.raises(BookingConflict, match="authentication_required"):
+        application.recover_confirmation(subject=driver, client_request_id=uuid4())
 
 
 def test_persisted_booking_retries_same_dispatch_handoff_after_provider_timeout():
