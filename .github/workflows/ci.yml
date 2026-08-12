@@ -286,6 +286,9 @@ jobs:
             b30243de4bcc3b082a1222d368e9f7e9ef91cbdc)
               mode=courier-pickup-authorization-ordering
               ;;
+            ab795c7d2e200dac15215770fefae48b515fca68)
+              mode=immediate-standard-public-contract
+              ;;
             *)
               echo "Unreviewed tests tree: $tests_tree" >&2
               exit 1
@@ -1768,6 +1771,7 @@ jobs:
               MigrationRunner,
               SchemaVersionReadinessChecker,
               alembic_config,
+              expected_schema_revision,
           )
 
           admin = dict(host="127.0.0.1", user="ayo_test", password="ayo_test_password")
@@ -1785,14 +1789,7 @@ jobs:
               DatabaseSettings(application_name="ayo-ci-migration-roundtrip")
           )
           runner = MigrationRunner(engine)
-          expected_head = (
-              "20260805_0057"
-              if os.environ["EVIDENCE_MODE"] in {
-                  "courier-pickup-idempotency-v1",
-                  "courier-pickup-authorization-ordering",
-              }
-              else "20260724_0056"
-          )
+          expected_head = expected_schema_revision()
 
           def downgrade_with_migration_lock(revision):
               with engine.connect() as connection:
@@ -2039,6 +2036,8 @@ jobs:
           source_sha=05b74c47d133ea85028a8b383c4fd539b268c1c8
           if [[ "$EVIDENCE_MODE" == "courier-pickup-authorization-ordering" ]]; then
             source_sha=65ff78430315c2d10bc40a0f3edafced6cec3ad2
+          elif [[ "$EVIDENCE_MODE" == "immediate-standard-public-contract" ]]; then
+            source_sha=10d31018783bb11f05a8dc3ed789ac3e3d92970e
           fi
           git archive "$source_sha" | tar -x -C "$source_dir"
           UV_PROJECT_ENVIRONMENT="$mypy_environment" uv sync --locked --all-groups
@@ -2273,6 +2272,8 @@ jobs:
               print("Authorization-ordering strict location-insensitive fingerprint:", candidate_semantic_fp)
               print("Authorization-ordering strict source-only semantic diagnostics: []")
               print("Authorization-ordering strict candidate-only semantic diagnostics: []")
+          elif mode == "immediate-standard-public-contract":
+              compare("strict backend", source_strict, candidate_strict)
           else:
               compare("strict backend", source_strict, candidate_strict)
           strict_files = {item.path for item in candidate_strict}
@@ -2290,6 +2291,7 @@ jobs:
           if mode not in {
               "courier-pickup-idempotency-v1",
               "courier-pickup-authorization-ordering",
+              "immediate-standard-public-contract",
           }:
               strict_fingerprint = fingerprint(candidate_strict)
               if strict_fingerprint != "6257a24b9c057c822e45a041519a849c471f6c48":
@@ -2324,6 +2326,17 @@ jobs:
               if int(os.environ["CANDIDATE_CONFIGURED_STATUS"]) != 0:
                   raise SystemExit("Configured MyPy did not exit successfully")
               print(f"Configured MyPy: clean across {expected_files} files")
+          elif mode == "immediate-standard-public-contract":
+              compare("configured", source_configured, candidate_configured)
+              configured_files = {item.path for item in candidate_configured}
+              if len(candidate_configured) != 12 or configured_files != {
+                  "tests/test_merchant_generative_provider_evaluation.py"
+              }:
+                  raise SystemExit("configured MyPy governed diagnostic inventory drift")
+              if Counter(item.code for item in candidate_configured) != {
+                  "arg-type": 12
+              }:
+                  raise SystemExit("configured MyPy governed error-code drift")
           elif mode == "pre-batch2":
               compare(
                   "configured", source_configured, candidate_configured,
@@ -2386,6 +2399,43 @@ jobs:
               "tests/integration/test_identity_access_increment_2.py",
               "tests/test_authentication_runtime.py",
               "tests/test_q3_continuation3_identity_finance_coverage.py",
+          }
+          IMMEDIATE_STANDARD_REVIEWED_ADDITIONS = {
+              (
+                  "AYO-Mobile/tests/auth-session-foundation.test.ts", 59,
+                  "Secret Keyword", "df77a6b3e1381f280f62cc2eceea74ec575efde6",
+                  False,
+              ): "synthetic authentication credential test fixture",
+              (
+                  "AYO-Mobile/tests/authenticated-read-transport.test.ts", 27,
+                  "Secret Keyword", "99d72c7fc3e2e145870beab37c0b70e343ea9c3b",
+                  False,
+              ): "synthetic redaction test fixture",
+              (
+                  "AYO-Mobile/tests/authenticated-read-transport.test.ts", 43,
+                  "Basic Auth Credentials",
+                  "e5e9fa1ba31ecd1ae84f75caaa474f3a663f05f4", False,
+              ): "synthetic URL-normalization test fixture",
+              (
+                  "AYO-Mobile/tests/identity-session-provider.test.tsx", 10,
+                  "Secret Keyword", "df77a6b3e1381f280f62cc2eceea74ec575efde6",
+                  False,
+              ): "synthetic authentication credential test fixture",
+              (
+                  "AYO-Mobile/tests/operational-context-provider.test.tsx", 47,
+                  "Secret Keyword", "df77a6b3e1381f280f62cc2eceea74ec575efde6",
+                  False,
+              ): "synthetic authentication credential test fixture",
+              (
+                  "tests/test_merchant_anthropic_live_provider_evaluation.py", 307,
+                  "Secret Keyword", "8ced3c87ee2c45dc7602ae84d04a8350d58039aa",
+                  False,
+              ): "synthetic redaction test fixture",
+              (
+                  "tests/test_merchant_live_provider_evaluation.py", 127,
+                  "Secret Keyword", "8ced3c87ee2c45dc7602ae84d04a8350d58039aa",
+                  False,
+              ): "synthetic redaction test fixture",
           }
 
           def load(path):
@@ -2514,6 +2564,16 @@ jobs:
           }:
               exact("exact reviewed inventory", actual, reviewed)
               selected = "exact 34-finding inventory"
+          elif mode == "immediate-standard-public-contract":
+              immediate_standard_reviewed = sorted(
+                  [*reviewed, *IMMEDIATE_STANDARD_REVIEWED_ADDITIONS]
+              )
+              exact(
+                  "Immediate Standard exact reviewed inventory",
+                  actual,
+                  immediate_standard_reviewed,
+              )
+              selected = "exact 41-finding Immediate Standard inventory"
           elif mode == "pre-batch2":
               exact("pre-Batch-2 reviewed projection", actual, pre_batch2)
               selected = "pre-Batch-2 exact 11-finding projection"

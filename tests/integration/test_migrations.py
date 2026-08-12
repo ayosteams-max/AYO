@@ -586,7 +586,9 @@ def test_upgrade_empty_database_matches_metadata_and_postgresql_17(
         approved_governed_unique_identities = (
             _approved_governed_cash_0059_unique_identities()
         )
-        assert observed_governed_unique_identities <= approved_governed_unique_identities
+        assert (
+            observed_governed_unique_identities <= approved_governed_unique_identities
+        )
         assert _unexpected_schema_differences(differences) == []
         synthetic_drift = ("remove_column", AYO_SCHEMA, "unexpected", object())
         assert _unexpected_schema_differences([*differences, synthetic_drift]) == [
@@ -756,8 +758,7 @@ def test_runtime_role_has_append_read_but_not_mutation_privileges(
         actual = bool(
             connection.execute(
                 text(
-                    "SELECT has_table_privilege("
-                    "'ayo_runtime', :table_name, :privilege)"
+                    "SELECT has_table_privilege('ayo_runtime', :table_name, :privilege)"
                 ),
                 {
                     "table_name": f"ayo.{table_name}",
@@ -1583,9 +1584,10 @@ def test_courier_pickup_idempotency_v1_migrates_and_refuses_evidence_loss(
         assert SchemaVersionReadinessChecker(
             postgres_engine
         ).check().current_revision == ("20260805_0057")
-        assert expected_schema_revision() == ScriptDirectory.from_config(
-            alembic_config()
-        ).get_current_head()
+        assert (
+            expected_schema_revision()
+            == ScriptDirectory.from_config(alembic_config()).get_current_head()
+        )
         assert expected_schema_revision() != "20260724_0056"
     with pytest.raises(
         RuntimeError,
