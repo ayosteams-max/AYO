@@ -289,6 +289,9 @@ jobs:
             ab795c7d2e200dac15215770fefae48b515fca68)
               mode=immediate-standard-public-contract
               ;;
+            da9d47f7ac4e1f19bd7a4038fae09edc3c24b29c)
+              mode=booking-complete-replay-equivalence
+              ;;
             *)
               echo "Unreviewed tests tree: $tests_tree" >&2
               exit 1
@@ -651,6 +654,71 @@ jobs:
           echo "mode=$mode" >> "$GITHUB_OUTPUT"
           echo "Trusted comparison mode: $mode"
           echo "Trusted comparison base SHA: $comparison_sha"
+
+      - name: Bind exact Booking replay-equivalence candidate identity
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'booking-complete-replay-equivalence'
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_HEAD_SHA: ${{ github.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || '' }}
+          TRUSTED_COMPARISON_BASE_SHA: ${{ steps.trusted_comparison_base.outputs.sha }}
+        run: |
+          set -euo pipefail
+          expected_base=b79c7ae45f644dd1198f0b526bbda38bc2d11e23
+          expected_tests=da9d47f7ac4e1f19bd7a4038fae09edc3c24b29c
+          if [[ "$TRUSTED_COMPARISON_BASE_SHA" != "$expected_base" ]]; then
+            echo "Booking replay-equivalence base identity drift" >&2
+            exit 1
+          fi
+          case "$EVENT_NAME" in
+            pull_request)
+              candidate="$PR_HEAD_SHA"
+              ;;
+            push|workflow_dispatch)
+              candidate="$EVENT_HEAD_SHA"
+              ;;
+            *)
+              echo "Unsupported Booking replay-equivalence event" >&2
+              exit 1
+              ;;
+          esac
+          if [[ ! "$candidate" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Booking replay-equivalence candidate identity is absent or malformed" >&2
+            exit 1
+          fi
+          git cat-file -e "$candidate^{commit}" 2>/dev/null || {
+            echo "Booking replay-equivalence candidate commit is unavailable" >&2
+            exit 1
+          }
+          git merge-base --is-ancestor "$expected_base" "$candidate" || {
+            echo "Booking replay-equivalence candidate does not descend from its base" >&2
+            exit 1
+          }
+          mapfile -t changed < <(git diff --name-only "$expected_base" "$candidate")
+          expected=(
+            .github/workflows/ci.yml
+            BACKEND/booking/application.py
+            BACKEND/persistence/booking_repository.py
+            tests/integration/test_dispatch_handoff_localization.py
+            tests/test_booking_contract.py
+          )
+          if [[ "${changed[*]}" != "${expected[*]}" ]]; then
+            printf 'Booking replay-equivalence manifest drift: %s\n' "${changed[*]}" >&2
+            exit 1
+          fi
+          if [[ "$(git rev-parse "${candidate}:tests")" != "$expected_tests" ]]; then
+            echo "Booking replay-equivalence tests tree drift" >&2
+            exit 1
+          fi
+          for path in database/migrations BACKEND/persistence/tables.py \
+            pyproject.toml uv.lock .secrets.baseline AYO-Mobile; do
+            if [[ "$(git rev-parse "${expected_base}:$path")" \
+              != "$(git rev-parse "${candidate}:$path")" ]]; then
+              echo "Booking replay-equivalence immutable boundary drift: $path" >&2
+              exit 1
+            fi
+          done
+          echo "Booking replay-equivalence exact candidate identity: PASS"
 
       - name: Bind tested Courier Pickup tree to trusted authoritative base
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'courier-pickup-idempotency-v1'
@@ -2038,6 +2106,8 @@ jobs:
             source_sha=65ff78430315c2d10bc40a0f3edafced6cec3ad2
           elif [[ "$EVIDENCE_MODE" == "immediate-standard-public-contract" ]]; then
             source_sha=10d31018783bb11f05a8dc3ed789ac3e3d92970e
+          elif [[ "$EVIDENCE_MODE" == "booking-complete-replay-equivalence" ]]; then
+            source_sha=b79c7ae45f644dd1198f0b526bbda38bc2d11e23
           fi
           git archive "$source_sha" | tar -x -C "$source_dir"
           UV_PROJECT_ENVIRONMENT="$mypy_environment" uv sync --locked --all-groups
@@ -2272,12 +2342,18 @@ jobs:
               print("Authorization-ordering strict location-insensitive fingerprint:", candidate_semantic_fp)
               print("Authorization-ordering strict source-only semantic diagnostics: []")
               print("Authorization-ordering strict candidate-only semantic diagnostics: []")
-          elif mode == "immediate-standard-public-contract":
+          elif mode in {
+              "immediate-standard-public-contract",
+              "booking-complete-replay-equivalence",
+          }:
               compare("strict backend", source_strict, candidate_strict)
           else:
               compare("strict backend", source_strict, candidate_strict)
           strict_files = {item.path for item in candidate_strict}
-          if mode == "immediate-standard-public-contract":
+          if mode in {
+              "immediate-standard-public-contract",
+              "booking-complete-replay-equivalence",
+          }:
               if len(candidate_strict) != 383 or len(strict_files) != 54:
                   raise SystemExit("Immediate Standard strict MyPy count drift")
               expected_strict_codes = {
@@ -2309,6 +2385,7 @@ jobs:
               "courier-pickup-idempotency-v1",
               "courier-pickup-authorization-ordering",
               "immediate-standard-public-contract",
+              "booking-complete-replay-equivalence",
           }:
               strict_fingerprint = fingerprint(candidate_strict)
               if strict_fingerprint != "6257a24b9c057c822e45a041519a849c471f6c48":
@@ -2343,7 +2420,10 @@ jobs:
               if int(os.environ["CANDIDATE_CONFIGURED_STATUS"]) != 0:
                   raise SystemExit("Configured MyPy did not exit successfully")
               print(f"Configured MyPy: clean across {expected_files} files")
-          elif mode == "immediate-standard-public-contract":
+          elif mode in {
+              "immediate-standard-public-contract",
+              "booking-complete-replay-equivalence",
+          }:
               compare("configured", source_configured, candidate_configured)
               configured_files = {item.path for item in candidate_configured}
               if len(candidate_configured) != 12 or configured_files != {
@@ -2354,6 +2434,12 @@ jobs:
                   "arg-type": 12
               }:
                   raise SystemExit("configured MyPy governed error-code drift")
+              if (
+                  mode == "booking-complete-replay-equivalence"
+                  and fingerprint(candidate_configured)
+                  != "b50c53ef9a3bb574f36a8f6b489ec2b0c5285d08"
+              ):
+                  raise SystemExit("configured MyPy governed fingerprint drift")
           elif mode == "pre-batch2":
               compare(
                   "configured", source_configured, candidate_configured,
@@ -2587,7 +2673,10 @@ jobs:
           }:
               exact("exact reviewed inventory", actual, reviewed)
               selected = "exact 34-finding inventory"
-          elif mode == "immediate-standard-public-contract":
+          elif mode in {
+              "immediate-standard-public-contract",
+              "booking-complete-replay-equivalence",
+          }:
               immediate_standard_reviewed = sorted(
                   [*reviewed, *IMMEDIATE_STANDARD_REVIEWED_ADDITIONS]
               )

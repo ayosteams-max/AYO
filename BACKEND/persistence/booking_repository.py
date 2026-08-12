@@ -78,6 +78,22 @@ class PostgresBookingRepository:
         )
         return None if row is None else BookingConfirmation.model_validate(dict(row))
 
+    def get_confirmation_for_idempotency_key_hash(
+        self, *, rider_identity_id: UUID, idempotency_key_hash: str
+    ) -> BookingConfirmation | None:
+        row = (
+            self._connection.execute(
+                select(booking_confirmations).where(
+                    booking_confirmations.c.rider_identity_id == rider_identity_id,
+                    booking_confirmations.c.idempotency_key_hash
+                    == idempotency_key_hash,
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        return None if row is None else BookingConfirmation.model_validate(dict(row))
+
     def get_confirmation_for_ride_request(
         self, ride_request_id: UUID
     ) -> BookingConfirmation | None:

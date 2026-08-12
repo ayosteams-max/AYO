@@ -1,4 +1,5 @@
 import hashlib
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from uuid import uuid4
@@ -192,6 +193,7 @@ class FakeBookingRepository:
     def __init__(self, item, confirmation=None):
         self.item = item
         self.confirmation = confirmation
+        self.add_confirmation_calls = 0
 
     def get_preview(self, evidence_id, lock=False):
         del lock
@@ -199,6 +201,17 @@ class FakeBookingRepository:
 
     def get_confirmation_for_evidence(self, evidence_id):
         return self.confirmation if evidence_id == self.item.evidence_id else None
+
+    def get_confirmation_for_idempotency_key_hash(
+        self, *, rider_identity_id, idempotency_key_hash
+    ):
+        if (
+            self.confirmation is None
+            or self.confirmation.rider_identity_id != rider_identity_id
+            or self.confirmation.idempotency_key_hash != idempotency_key_hash
+        ):
+            return None
+        return self.confirmation
 
     def get_confirmation_for_client_request(
         self, *, rider_identity_id, client_request_id
@@ -210,6 +223,11 @@ class FakeBookingRepository:
         ):
             return None
         return self.confirmation
+
+    def add_confirmation(self, item):
+        self.add_confirmation_calls += 1
+        self.confirmation = item
+        return item
 
 
 class FakeRideRequests:
@@ -225,6 +243,15 @@ class FakeRideRequests:
         del kwargs
         self.create_calls += 1
         return self.ride
+
+
+class CountingDispatch:
+    def __init__(self):
+        self.calls = 0
+
+    def start(self, **kwargs):
+        del kwargs
+        self.calls += 1
 
 
 class FlakyDispatch:
@@ -483,14 +510,21 @@ def test_backend_rejects_expired_route_evidence_before_creating_ride():
     assert rides.create_calls == 0
 
 
-def test_backend_duplicate_confirmation_returns_same_canonical_request():
-    item = preview()
+def replay_scenario():
+    booking_session = "s" * 32
+    item = preview().model_copy(
+        update={
+            "booking_session_hash": hashlib.sha256(booking_session.encode()).hexdigest()
+        }
+    )
     rider = AuthorizationSubject(
         identity_id=uuid4(),
         identity_type=IdentityType.RIDER,
         actor_type=ActorType.RIDER,
     )
     key = "booking-confirm-stable"
+    client_request_id = uuid4()
+    consent_policy_version = "booking.consent.v1"
     confirmation = BookingConfirmation(
         evidence_id=item.evidence_id,
         evidence_hash=item.evidence_hash,
@@ -500,30 +534,130 @@ def test_backend_duplicate_confirmation_returns_same_canonical_request():
         idempotency_key_hash=hashlib.sha256(key.encode()).hexdigest(),
         confirmed_at=datetime.now(UTC),
     )
-    ride = SimpleNamespace(request_id=confirmation.ride_request_id)
+    ride = SimpleNamespace(
+        request_id=confirmation.ride_request_id,
+        rider_identity_id=rider.identity_id,
+        client_request_id=client_request_id,
+        consent_policy_version=consent_policy_version,
+    )
     rides = FakeRideRequests(ride)
+    repository = FakeBookingRepository(item, confirmation)
+    dispatch = CountingDispatch()
     application = BookingApplication(
-        FakeComposition(FakeBookingRepository(item, confirmation)),
+        FakeComposition(repository),
         SimpleNamespace(),
         SimpleNamespace(),
         rides,
         uuid4(),
+        dispatch,
     )
     command = ConfirmBookingCommand(
         evidence_id=item.evidence_id,
         evidence_hash=item.evidence_hash,
         quote_id=item.quote.quote_id,
-        booking_session="s" * 32,
-        client_request_id=uuid4(),
+        booking_session=booking_session,
+        client_request_id=client_request_id,
         idempotency_key=key,
-        consent_policy_version="booking.consent.v1",
+        consent_policy_version=consent_policy_version,
     )
+    return application, command, rider, confirmation, ride, repository, rides, dispatch
+
+
+def test_backend_duplicate_confirmation_returns_same_canonical_request():
+    (
+        application,
+        command,
+        rider,
+        confirmation,
+        ride,
+        repository,
+        rides,
+        dispatch,
+    ) = replay_scenario()
     stored, returned_ride = application.confirm(
         command, subject=rider, at=datetime.now(UTC)
     )
     assert stored == confirmation
     assert returned_ride is ride
     assert rides.create_calls == 0
+    assert repository.add_confirmation_calls == 0
+    assert dispatch.calls == 1
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    (
+        ("evidence_id", uuid4()),
+        ("evidence_hash", "c" * 64),
+        ("quote_id", uuid4()),
+        ("booking_session", "t" * 32),
+        ("client_request_id", uuid4()),
+        ("consent_policy_version", "booking.consent.v2"),
+        ("idempotency_key", "booking-confirm-changed"),
+    ),
+)
+def test_confirmation_replay_requires_every_immutable_field(field, value):
+    application, command, rider, _, _, repository, rides, dispatch = replay_scenario()
+
+    with pytest.raises(BookingConflict) as raised:
+        application.confirm(
+            command.model_copy(update={field: value}),
+            subject=rider,
+            at=datetime.now(UTC),
+        )
+
+    assert str(raised.value) == "idempotency_conflict"
+    assert rides.create_calls == 0
+    assert repository.add_confirmation_calls == 0
+    assert dispatch.calls == 0
+
+
+def test_confirmation_replay_is_rider_scoped_and_fails_closed():
+    application, command, rider, _, _, repository, rides, dispatch = replay_scenario()
+    other_rider = rider.model_copy(update={"identity_id": uuid4()})
+
+    with pytest.raises(BookingConflict) as raised:
+        application.confirm(command, subject=other_rider, at=datetime.now(UTC))
+
+    assert str(raised.value) == "idempotency_conflict"
+    assert rides.create_calls == 0
+    assert repository.add_confirmation_calls == 0
+    assert dispatch.calls == 0
+
+
+def test_concurrent_exact_replays_return_one_canonical_confirmation():
+    application, command, rider, confirmation, ride, repository, rides, dispatch = (
+        replay_scenario()
+    )
+
+    def replay(_):
+        return application.confirm(command, subject=rider, at=datetime.now(UTC))
+
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        results = tuple(executor.map(replay, range(8)))
+
+    assert all(item == (confirmation, ride) for item in results)
+    assert rides.create_calls == 0
+    assert repository.add_confirmation_calls == 0
+    assert dispatch.calls == 8
+
+
+def test_concurrent_conflicting_replays_never_return_canonical_success():
+    application, command, rider, _, _, repository, rides, dispatch = replay_scenario()
+    conflict = command.model_copy(update={"evidence_id": uuid4()})
+
+    def replay(_):
+        with pytest.raises(BookingConflict) as raised:
+            application.confirm(conflict, subject=rider, at=datetime.now(UTC))
+        return str(raised.value)
+
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        results = tuple(executor.map(replay, range(8)))
+
+    assert results == ("idempotency_conflict",) * 8
+    assert rides.create_calls == 0
+    assert repository.add_confirmation_calls == 0
+    assert dispatch.calls == 0
 
 
 def test_application_recovers_only_the_authenticated_riders_confirmation():
@@ -570,13 +704,20 @@ def test_application_recovers_only_the_authenticated_riders_confirmation():
 
 
 def test_persisted_booking_retries_same_dispatch_handoff_after_provider_timeout():
-    item = preview()
+    booking_session = "s" * 32
+    item = preview().model_copy(
+        update={
+            "booking_session_hash": hashlib.sha256(booking_session.encode()).hexdigest()
+        }
+    )
     rider = AuthorizationSubject(
         identity_id=uuid4(),
         identity_type=IdentityType.RIDER,
         actor_type=ActorType.RIDER,
     )
     key = "booking-dispatch-retry"
+    client_request_id = uuid4()
+    consent_policy_version = "booking.consent.v1"
     confirmation = BookingConfirmation(
         evidence_id=item.evidence_id,
         evidence_hash=item.evidence_hash,
@@ -586,7 +727,12 @@ def test_persisted_booking_retries_same_dispatch_handoff_after_provider_timeout(
         idempotency_key_hash=hashlib.sha256(key.encode()).hexdigest(),
         confirmed_at=datetime.now(UTC),
     )
-    ride = SimpleNamespace(request_id=confirmation.ride_request_id)
+    ride = SimpleNamespace(
+        request_id=confirmation.ride_request_id,
+        rider_identity_id=rider.identity_id,
+        client_request_id=client_request_id,
+        consent_policy_version=consent_policy_version,
+    )
     dispatch = FlakyDispatch()
     application = BookingApplication(
         FakeComposition(FakeBookingRepository(item, confirmation)),
@@ -600,10 +746,10 @@ def test_persisted_booking_retries_same_dispatch_handoff_after_provider_timeout(
         evidence_id=item.evidence_id,
         evidence_hash=item.evidence_hash,
         quote_id=item.quote.quote_id,
-        booking_session="s" * 32,
-        client_request_id=uuid4(),
+        booking_session=booking_session,
+        client_request_id=client_request_id,
         idempotency_key=key,
-        consent_policy_version="booking.consent.v1",
+        consent_policy_version=consent_policy_version,
     )
     with pytest.raises(BookingConflict, match="temporarily_unavailable"):
         application.confirm(command, subject=rider, at=datetime.now(UTC))

@@ -307,6 +307,40 @@ def test_booking_confirmation_recovery_is_client_request_and_rider_scoped(
     assert cross_rider is None
 
 
+def test_booking_confirmation_idempotency_hash_lookup_is_scoped_and_restart_safe(
+    postgres_composition,
+) -> None:
+    request, subject = ready_request(postgres_composition)
+
+    def reload_confirmation():
+        with postgres_composition.unit_of_work() as unit:
+            return unit.booking.get_confirmation_for_idempotency_key_hash(
+                rider_identity_id=subject.identity_id,
+                idempotency_key_hash="c" * 64,
+            )
+
+    first = reload_confirmation()
+    second = reload_confirmation()
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        concurrent = tuple(executor.map(lambda _: reload_confirmation(), range(8)))
+    with postgres_composition.unit_of_work() as unit:
+        wrong_rider = unit.booking.get_confirmation_for_idempotency_key_hash(
+            rider_identity_id=uuid4(),
+            idempotency_key_hash="c" * 64,
+        )
+        wrong_hash = unit.booking.get_confirmation_for_idempotency_key_hash(
+            rider_identity_id=subject.identity_id,
+            idempotency_key_hash="d" * 64,
+        )
+
+    assert first is not None
+    assert first.ride_request_id == request.request_id
+    assert second == first
+    assert all(item == first for item in concurrent)
+    assert wrong_rider is None
+    assert wrong_hash is None
+
+
 def test_handoff_minimizes_data_and_fastest_authoritative_driver_wins(
     postgres_composition,
 ) -> None:
