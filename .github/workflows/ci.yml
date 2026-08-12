@@ -2277,17 +2277,34 @@ jobs:
           else:
               compare("strict backend", source_strict, candidate_strict)
           strict_files = {item.path for item in candidate_strict}
-          if len(candidate_strict) != 387 or len(strict_files) != 52:
-              raise SystemExit("strict backend MyPy historical count drift")
-          expected_strict_codes = {
-              "no-any-return": 199,
-              "no-untyped-call": 120,
-              "no-untyped-def": 61,
-              "redundant-cast": 4,
-              "type-arg": 3,
-          }
-          if Counter(item.code for item in candidate_strict) != expected_strict_codes:
-              raise SystemExit("strict backend MyPy error-code distribution drift")
+          if mode == "immediate-standard-public-contract":
+              if len(candidate_strict) != 383 or len(strict_files) != 54:
+                  raise SystemExit("Immediate Standard strict MyPy count drift")
+              expected_strict_codes = {
+                  "no-any-return": 198,
+                  "no-untyped-call": 115,
+                  "no-untyped-def": 63,
+                  "redundant-cast": 4,
+                  "type-arg": 3,
+              }
+              if Counter(item.code for item in candidate_strict) != expected_strict_codes:
+                  raise SystemExit(
+                      "Immediate Standard strict MyPy error-code distribution drift"
+                  )
+              if fingerprint(candidate_strict) != "a7018245b4e9086aeca1d39d47903e5e98d0b62d":
+                  raise SystemExit("Immediate Standard strict MyPy fingerprint drift")
+          else:
+              if len(candidate_strict) != 387 or len(strict_files) != 52:
+                  raise SystemExit("strict backend MyPy historical count drift")
+              expected_strict_codes = {
+                  "no-any-return": 199,
+                  "no-untyped-call": 120,
+                  "no-untyped-def": 61,
+                  "redundant-cast": 4,
+                  "type-arg": 3,
+              }
+              if Counter(item.code for item in candidate_strict) != expected_strict_codes:
+                  raise SystemExit("strict backend MyPy error-code distribution drift")
           if mode not in {
               "courier-pickup-idempotency-v1",
               "courier-pickup-authorization-ordering",
@@ -2436,6 +2453,12 @@ jobs:
                   "Secret Keyword", "8ced3c87ee2c45dc7602ae84d04a8350d58039aa",
                   False,
               ): "synthetic redaction test fixture",
+              # Inherited unchanged from the exact PR base; public UI wording only.
+              (
+                  "AYO-Mobile/localization/authentication.ts", 11,
+                  "Secret Keyword", "8be3c943b1609fffbfc51aad666d0a04adf83c9d",
+                  False,
+              ): "ordinary public password-field localization wording",
           }
 
           def load(path):
@@ -2568,12 +2591,19 @@ jobs:
               immediate_standard_reviewed = sorted(
                   [*reviewed, *IMMEDIATE_STANDARD_REVIEWED_ADDITIONS]
               )
+              if (
+                  len(immediate_standard_reviewed) != 42
+                  or len(set(immediate_standard_reviewed)) != 42
+              ):
+                  raise SystemExit(
+                      "Immediate Standard reviewed finding count or uniqueness drift"
+                  )
               exact(
                   "Immediate Standard exact reviewed inventory",
                   actual,
                   immediate_standard_reviewed,
               )
-              selected = "exact 41-finding Immediate Standard inventory"
+              selected = "exact 42-finding Immediate Standard inventory"
           elif mode == "pre-batch2":
               exact("pre-Batch-2 reviewed projection", actual, pre_batch2)
               selected = "pre-Batch-2 exact 11-finding projection"
