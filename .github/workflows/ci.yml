@@ -289,7 +289,7 @@ jobs:
             ab795c7d2e200dac15215770fefae48b515fca68)
               mode=immediate-standard-public-contract
               ;;
-            da9d47f7ac4e1f19bd7a4038fae09edc3c24b29c)
+            a54dc4b68b6f1882d5f81e247460d3e4ffbab062)
               mode=booking-complete-replay-equivalence
               ;;
             *)
@@ -665,7 +665,7 @@ jobs:
         run: |
           set -euo pipefail
           expected_base=b79c7ae45f644dd1198f0b526bbda38bc2d11e23
-          expected_tests=da9d47f7ac4e1f19bd7a4038fae09edc3c24b29c
+          expected_tests=a54dc4b68b6f1882d5f81e247460d3e4ffbab062
           if [[ "$TRUSTED_COMPARISON_BASE_SHA" != "$expected_base" ]]; then
             echo "Booking replay-equivalence base identity drift" >&2
             exit 1
@@ -3033,7 +3033,7 @@ jobs:
           if workflow.count(resolver_id) != 1:
               raise SystemExit("trusted comparison base resolver is not unique")
           if (
-              workflow.count(authoritative_mapping) != 2
+              workflow.count(authoritative_mapping) != 3
               or workflow.count(predecessor_mapping) != 2
           ):
               raise SystemExit("comparison-dependent gates do not share one resolver output")
