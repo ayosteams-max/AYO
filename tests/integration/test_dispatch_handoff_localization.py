@@ -1,5 +1,6 @@
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
+from threading import Barrier
 from uuid import uuid4
 
 import pytest
@@ -7,7 +8,21 @@ from sqlalchemy import func, insert, select
 
 from BACKEND.audit.models import ActorType
 from BACKEND.authorization.contracts import AuthorizationSubject
-from BACKEND.booking.models import BookingConfirmation
+from BACKEND.booking.application import (
+    BookingApplication,
+    ConfirmBookingCommand,
+    route_preview_evidence_hash,
+)
+from BACKEND.booking.consent import ImmutableBookingConsentRegistry
+from BACKEND.booking.models import (
+    BookingConfirmation,
+    BookingConflict,
+    BookingConsentMetadata,
+    ProviderRouteEvidence,
+    RoutePreview,
+    TollEvidenceState,
+    TrafficEvidenceState,
+)
 from BACKEND.dispatch.handoff import EligibleDriverInput, HandoffState
 from BACKEND.dispatch.handoff_service import ImmediateHandoffService
 from BACKEND.driver_trust.models import (
@@ -23,12 +38,24 @@ from BACKEND.localization.models import LanguagePackManifest, TextDirection
 from BACKEND.localization.service import LocalizationService
 from BACKEND.persistence.handoff_dispatch_repository import HandoffConflict
 from BACKEND.persistence.tables import (
+    booking_confirmations,
     booking_route_evidence,
+    canonical_ride_requests,
+    dispatch_outbox,
+    fare_estimate_acceptances,
+    fare_estimates,
     immediate_dispatch_assignments,
     immediate_dispatch_outbox,
+    pricing_outbox,
+    ride_request_outbox,
 )
 from BACKEND.pricing.application import PricingApplication
-from BACKEND.pricing.models import DataQuality, PricingPolicy, RouteMetrics
+from BACKEND.pricing.booking import BookingPricingApplication
+from BACKEND.pricing.models import (
+    DataQuality,
+    PricingPolicy,
+    RouteMetrics,
+)
 from BACKEND.ride_request.application import (
     CreateRideRequestCommand,
     RideRequestApplication,
@@ -41,6 +68,196 @@ from BACKEND.ride_request.models import (
     ServiceZone,
     ValidationPolicy,
 )
+
+
+class CountingBookingDispatch:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def start(self, **kwargs) -> None:
+        del kwargs
+        self.calls += 1
+
+
+def consent_manifest(
+    *, version: str, content_hash: str, start: datetime, end: datetime
+) -> BookingConsentMetadata:
+    return BookingConsentMetadata(
+        required_version=version,
+        document_id="booking.immediate-standard.synthetic",
+        content_hash=content_hash,
+        effective_from=start,
+        effective_until=end,
+        acknowledgment_required=True,
+    )
+
+
+def consent_booking_scenario(composition):
+    rider = Identity(
+        identity_type=IdentityType.RIDER,
+        status=AccountStatus.ACTIVE,
+        created_at=NOW,
+        updated_at=NOW,
+    )
+    zone = ServiceZone(
+        code=f"consent.zone.{uuid4().hex}",
+        version="zone.consent.v1",
+        min_latitude=8.5,
+        max_latitude=9.5,
+        min_longitude=38.2,
+        max_longitude=39.2,
+        supported_service_types=frozenset({"immediate_standard"}),
+        active_from=NOW - timedelta(days=1),
+        policy_version="zone.consent.v1",
+    )
+    with composition.unit_of_work() as unit:
+        rider = unit.identities.create(rider)
+        unit.ride_requests.add_zone(zone)
+        staff = tuple(
+            unit.identities.create(
+                Identity(
+                    identity_type=IdentityType.STAFF,
+                    status=AccountStatus.ACTIVE,
+                    created_at=NOW,
+                    updated_at=NOW,
+                )
+            )
+            for _ in range(3)
+        )
+    subject = AuthorizationSubject(
+        identity_id=rider.identity_id,
+        identity_type=IdentityType.RIDER,
+        actor_type=ActorType.RIDER,
+    )
+    operators = tuple(
+        AuthorizationSubject(
+            identity_id=item.identity_id,
+            identity_type=IdentityType.STAFF,
+            actor_type=ActorType.STAFF,
+        )
+        for item in staff
+    )
+    pricing = PricingApplication(composition)
+    policy = pricing.create_policy(
+        operators[0],
+        PricingPolicy(
+            policy_version=f"pricing.consent.{uuid4().hex[:12]}",
+            service_zone_id=zone.zone_id,
+            service_type="immediate_standard",
+            currency="ETB",
+            base_fare_minor=100,
+            distance_rate_per_km_minor=10,
+            time_rate_per_minute_minor=5,
+            minimum_fare_minor=100,
+            commission_basis_points=0,
+            rounding_increment_minor=1,
+            effective_from=NOW - timedelta(days=1),
+            made_by_identity_id=operators[0].identity_id,
+            created_at=NOW,
+        ),
+    )
+    policy = pricing.approve_policy(operators[1], policy.policy_id, at=NOW)
+    policy = pricing.publish_policy(operators[2], policy.policy_id, at=NOW)
+    pickup = PickupDefinition(
+        coordinate=Coordinate(latitude=9, longitude=38.7),
+        source=LocationSource.RIDER_SELECTED,
+        observed_at=NOW,
+        accuracy_metres=10,
+        policy_version="pickup.synthetic.v1",
+    )
+    destination = DestinationDefinition(
+        coordinate=Coordinate(latitude=9.02, longitude=38.72),
+        source=LocationSource.RIDER_SELECTED,
+        observed_at=NOW,
+    )
+    metrics = RouteMetrics(
+        distance_meters=2000,
+        duration_seconds=600,
+        observed_at=NOW,
+        provider_id="approved_synthetic",
+        provider_version="route.synthetic.v1",
+        distance_source="approved_synthetic",
+        duration_source="approved_synthetic",
+        provenance_reference=f"consent-{uuid4()}",
+        data_quality=DataQuality.APPROVED_SYNTHETIC,
+    )
+    route = ProviderRouteEvidence(
+        metrics=metrics,
+        geometry=((9, 38.7), (9.02, 38.72)),
+        origin_accuracy_metres=10,
+        destination_accuracy_metres=10,
+        map_confidence_bps=9000,
+        traffic_state=TrafficEvidenceState.NOT_REQUESTED,
+        toll_state=TollEvidenceState.UNKNOWN,
+        attribution="Approved synthetic test evidence",
+    )
+    quote = BookingPricingApplication(composition).quote(
+        policy_id=policy.policy_id,
+        service_zone_id=zone.zone_id,
+        metrics=metrics,
+        at=NOW,
+    )
+    consent = consent_manifest(
+        version="booking.consent.synthetic.v1",
+        content_hash="e" * 64,
+        start=NOW - timedelta(days=1),
+        end=NOW + timedelta(days=1),
+    )
+    session = "s" * 32
+    import hashlib
+
+    evidence_id = uuid4()
+    evidence_hash = route_preview_evidence_hash(
+        evidence_id=evidence_id,
+        booking_session_hash=hashlib.sha256(session.encode()).hexdigest(),
+        pickup=pickup,
+        destination=destination,
+        route=route,
+        quote=quote,
+        consent=consent,
+        service_zone_version=zone.version,
+    )
+    preview = RoutePreview(
+        evidence_id=evidence_id,
+        booking_session_hash=hashlib.sha256(session.encode()).hexdigest(),
+        rider_identity_id=rider.identity_id,
+        pickup=pickup,
+        destination=destination,
+        service_zone_id=zone.zone_id,
+        service_zone_version=zone.version,
+        service_type="immediate_standard",
+        route=route,
+        quote=quote,
+        consent=consent,
+        evidence_hash=evidence_hash,
+        created_at=NOW,
+        expires_at=quote.expires_at,
+    )
+    with composition.unit_of_work() as unit:
+        preview = unit.booking.add_preview(preview)
+    dispatch = CountingBookingDispatch()
+    application = BookingApplication(
+        composition,
+        object(),
+        BookingPricingApplication(composition),
+        RideRequestApplication(composition, POLICY),
+        policy.policy_id,
+        dispatch,
+        consent=ImmutableBookingConsentRegistry((consent,)),
+    )
+    command = ConfirmBookingCommand(
+        evidence_id=preview.evidence_id,
+        evidence_hash=preview.evidence_hash,
+        quote_id=preview.quote.quote_id,
+        booking_session=session,
+        client_request_id=uuid4(),
+        idempotency_key=f"consent-confirm-{uuid4().hex}",
+        consent_policy_version=consent.required_version,
+        consent_document_hash=consent.content_hash,
+        consent_acknowledged=True,
+    )
+    return application, command, subject, preview, consent, dispatch
+
 
 pytestmark = [pytest.mark.integration, pytest.mark.authorization]
 NOW = datetime(2026, 7, 16, tzinfo=UTC)
@@ -339,6 +556,272 @@ def test_booking_confirmation_idempotency_hash_lookup_is_scoped_and_restart_safe
     assert all(item == first for item in concurrent)
     assert wrong_rider is None
     assert wrong_hash is None
+
+
+def test_booking_consent_binding_reconstructs_across_units_of_work(
+    postgres_composition,
+) -> None:
+    _, _, _, preview, consent, _ = consent_booking_scenario(postgres_composition)
+
+    def reload_preview():
+        with postgres_composition.unit_of_work() as unit:
+            return unit.booking.get_preview(preview.evidence_id)
+
+    reloaded = reload_preview()
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        concurrent = tuple(executor.map(lambda _: reload_preview(), range(8)))
+    assert reloaded == preview
+    assert reloaded is not None and reloaded.consent == consent
+    assert all(item == preview for item in concurrent)
+
+
+def booking_side_effect_counts(composition) -> dict[str, int]:
+    tables = {
+        "rides": canonical_ride_requests,
+        "confirmations": booking_confirmations,
+        "estimates": fare_estimates,
+        "acceptances": fare_estimate_acceptances,
+        "ride_outbox": ride_request_outbox,
+        "pricing_outbox": pricing_outbox,
+        "dispatch_outbox": dispatch_outbox,
+        "immediate_dispatch_outbox": immediate_dispatch_outbox,
+    }
+    with composition.unit_of_work() as unit:
+        return {
+            name: unit.connection.execute(
+                select(func.count()).select_from(table)
+            ).scalar_one()
+            for name, table in tables.items()
+        }
+
+
+def test_booking_consent_confirmation_persists_authority_and_replays_canonically(
+    postgres_composition,
+) -> None:
+    application, command, subject, preview, consent, dispatch = (
+        consent_booking_scenario(postgres_composition)
+    )
+    confirmation, ride = application.confirm(command, subject=subject, at=NOW)
+    after_first = booking_side_effect_counts(postgres_composition)
+
+    reconstructed = BookingApplication(
+        postgres_composition,
+        object(),
+        BookingPricingApplication(postgres_composition),
+        RideRequestApplication(postgres_composition, POLICY),
+        preview.quote.policy_id,
+        dispatch,
+        consent=ImmutableBookingConsentRegistry((consent,)),
+    )
+    replayed = reconstructed.confirm(command, subject=subject, at=NOW)
+    recovered = reconstructed.recover_confirmation(
+        subject=subject, client_request_id=command.client_request_id
+    )
+
+    def concurrent_replay(_: int):
+        concurrent_application = BookingApplication(
+            postgres_composition,
+            object(),
+            BookingPricingApplication(postgres_composition),
+            RideRequestApplication(postgres_composition, POLICY),
+            preview.quote.policy_id,
+            dispatch,
+            consent=ImmutableBookingConsentRegistry((consent,)),
+        )
+        return concurrent_application.confirm(command, subject=subject, at=NOW)
+
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        concurrent = tuple(executor.map(concurrent_replay, range(3)))
+    with postgres_composition.unit_of_work() as unit:
+        stored_preview = unit.booking.get_preview(preview.evidence_id)
+        stored_confirmation = unit.booking.get_confirmation_for_evidence(
+            preview.evidence_id
+        )
+        stored_ride = unit.ride_requests.get(ride.request_id)
+    assert stored_preview is not None and stored_preview.consent == consent
+    assert stored_confirmation == confirmation
+    assert stored_ride is not None
+    assert stored_ride.consent_policy_version == consent.required_version
+    assert replayed == (confirmation, ride)
+    assert recovered == (confirmation, ride)
+    assert all(item == (confirmation, ride) for item in concurrent)
+    assert booking_side_effect_counts(postgres_composition) == after_first
+
+    for update in (
+        {"consent_policy_version": "booking.consent.synthetic.v2"},
+        {"consent_document_hash": "f" * 64},
+    ):
+        with pytest.raises(BookingConflict) as raised:
+            reconstructed.confirm(
+                command.model_copy(update=update), subject=subject, at=NOW
+            )
+        assert str(raised.value) == "idempotency_conflict"
+        assert "consent" not in str(raised.value)
+    assert booking_side_effect_counts(postgres_composition) == after_first
+    assert dispatch.calls == 5
+
+
+def test_booking_consent_rotation_and_legacy_reject_without_persisted_effects(
+    postgres_composition,
+) -> None:
+    application, command, subject, preview, consent_v1, dispatch = (
+        consent_booking_scenario(postgres_composition)
+    )
+    del application
+    rotation_time = NOW + timedelta(seconds=1)
+    v1 = consent_v1.model_copy(update={"effective_until": rotation_time})
+    v2 = consent_manifest(
+        version="booking.consent.synthetic.v2",
+        content_hash="f" * 64,
+        start=rotation_time,
+        end=NOW + timedelta(days=1),
+    )
+    reconstructed = BookingApplication(
+        postgres_composition,
+        object(),
+        BookingPricingApplication(postgres_composition),
+        RideRequestApplication(postgres_composition, POLICY),
+        preview.quote.policy_id,
+        dispatch,
+        consent=ImmutableBookingConsentRegistry((v1, v2)),
+    )
+    before = booking_side_effect_counts(postgres_composition)
+    with pytest.raises(BookingConflict) as raised:
+        reconstructed.confirm(command, subject=subject, at=rotation_time)
+    assert str(raised.value) == "consent_policy_changed"
+    assert booking_side_effect_counts(postgres_composition) == before
+
+    deliberate_v2 = preview.model_copy(
+        update={
+            "evidence_id": uuid4(),
+            "consent": v2,
+            "evidence_hash": "b" * 64,
+            "created_at": rotation_time,
+        }
+    )
+    with postgres_composition.unit_of_work() as unit:
+        assert unit.booking.add_preview(deliberate_v2).consent == v2
+        assert unit.booking.get_preview(preview.evidence_id) == preview
+
+    legacy = preview.model_copy(
+        update={"evidence_id": uuid4(), "consent": None, "evidence_hash": "c" * 64}
+    )
+    with postgres_composition.unit_of_work() as unit:
+        unit.booking.add_preview(legacy)
+    legacy_command = command.model_copy(
+        update={
+            "evidence_id": legacy.evidence_id,
+            "evidence_hash": legacy.evidence_hash,
+            "quote_id": legacy.quote.quote_id,
+            "client_request_id": uuid4(),
+            "idempotency_key": f"legacy-consent-{uuid4().hex}",
+        }
+    )
+    before_legacy = booking_side_effect_counts(postgres_composition)
+    with pytest.raises(BookingConflict) as raised:
+        reconstructed.confirm(legacy_command, subject=subject, at=NOW)
+    assert str(raised.value) == "consent_policy_changed"
+    assert booking_side_effect_counts(postgres_composition) == before_legacy
+    with postgres_composition.unit_of_work() as unit:
+        assert unit.booking.get_preview(legacy.evidence_id) == legacy
+        assert unit.booking.get_confirmation_for_evidence(legacy.evidence_id) is None
+    assert dispatch.calls == 0
+
+
+def test_booking_consent_concurrent_stale_confirmation_cannot_bypass_rotation(
+    postgres_composition,
+) -> None:
+    _, command, subject, preview, consent_v1, dispatch = consent_booking_scenario(
+        postgres_composition
+    )
+    rotation_time = NOW + timedelta(seconds=1)
+    v1 = consent_v1.model_copy(update={"effective_until": rotation_time})
+    v2 = consent_manifest(
+        version="booking.consent.synthetic.v2",
+        content_hash="f" * 64,
+        start=rotation_time,
+        end=NOW + timedelta(days=1),
+    )
+
+    def reject_stale(_: int) -> str:
+        application = BookingApplication(
+            postgres_composition,
+            object(),
+            BookingPricingApplication(postgres_composition),
+            RideRequestApplication(postgres_composition, POLICY),
+            preview.quote.policy_id,
+            dispatch,
+            consent=ImmutableBookingConsentRegistry((v1, v2)),
+        )
+        with pytest.raises(BookingConflict) as raised:
+            application.confirm(command, subject=subject, at=rotation_time)
+        return str(raised.value)
+
+    before = booking_side_effect_counts(postgres_composition)
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        outcomes = tuple(executor.map(reject_stale, range(3)))
+    assert outcomes == ("consent_policy_changed",) * 3
+    assert booking_side_effect_counts(postgres_composition) == before
+    assert dispatch.calls == 0
+
+
+def test_booking_consent_concurrent_first_confirmation_has_one_canonical_result(
+    postgres_composition,
+) -> None:
+    _, command, subject, preview, consent, _ = consent_booking_scenario(
+        postgres_composition
+    )
+    barrier = Barrier(3)
+
+    def confirm_once(index: int):
+        candidate = command
+        if index == 2:
+            candidate = command.model_copy(update={"consent_document_hash": "f" * 64})
+        application = BookingApplication(
+            postgres_composition,
+            object(),
+            BookingPricingApplication(postgres_composition),
+            RideRequestApplication(postgres_composition, POLICY),
+            preview.quote.policy_id,
+            consent=ImmutableBookingConsentRegistry((consent,)),
+        )
+        barrier.wait()
+        try:
+            return application.confirm(candidate, subject=subject, at=NOW)
+        except BookingConflict as error:
+            return str(error)
+
+    before = booking_side_effect_counts(postgres_composition)
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        outcomes = tuple(executor.map(confirm_once, range(3)))
+    successes = tuple(item for item in outcomes if isinstance(item, tuple))
+    failures = tuple(item for item in outcomes if isinstance(item, str))
+    assert successes
+    canonical_confirmation, canonical_ride = successes[0]
+    assert all(item == (canonical_confirmation, canonical_ride) for item in successes)
+    assert failures and set(failures) <= {
+        "consent_policy_changed",
+        "idempotency_conflict",
+    }
+    after = booking_side_effect_counts(postgres_composition)
+    assert after["rides"] - before["rides"] == 1
+    assert after["confirmations"] - before["confirmations"] == 1
+    assert after["estimates"] - before["estimates"] == 1
+    assert after["acceptances"] - before["acceptances"] == 1
+    assert after["ride_outbox"] - before["ride_outbox"] == 4
+    assert after["pricing_outbox"] - before["pricing_outbox"] == 2
+    assert after["dispatch_outbox"] == before["dispatch_outbox"]
+    assert after["immediate_dispatch_outbox"] == before["immediate_dispatch_outbox"]
+    with postgres_composition.unit_of_work() as unit:
+        stored_preview = unit.booking.get_preview(preview.evidence_id)
+        stored_confirmation = unit.booking.get_confirmation_for_evidence(
+            preview.evidence_id
+        )
+        stored_ride = unit.ride_requests.get(canonical_ride.request_id)
+    assert stored_preview is not None and stored_preview.consent == consent
+    assert stored_confirmation == canonical_confirmation
+    assert stored_ride is not None
+    assert stored_ride.consent_policy_version == consent.required_version
 
 
 def test_handoff_minimizes_data_and_fastest_authoritative_driver_wins(

@@ -28,7 +28,14 @@ class PostgresBookingRepository:
                 service_zone_version=preview.service_zone_version,
                 service_type=preview.service_type,
                 route_payload=preview.route.model_dump(mode="json"),
-                quote_payload=preview.quote.model_dump(mode="json"),
+                quote_payload={
+                    "quote": preview.quote.model_dump(mode="json"),
+                    "consent": (
+                        None
+                        if preview.consent is None
+                        else preview.consent.model_dump(mode="json")
+                    ),
+                },
                 evidence_hash=preview.evidence_hash,
                 created_at=preview.created_at,
                 expires_at=preview.expires_at,
@@ -61,7 +68,13 @@ class PostgresBookingRepository:
         value["pickup"] = value.pop("pickup_payload")
         value["destination"] = value.pop("destination_payload")
         value["route"] = value.pop("route_payload")
-        value["quote"] = value.pop("quote_payload")
+        quote_payload = value.pop("quote_payload")
+        if "quote" in quote_payload:
+            value["quote"] = quote_payload["quote"]
+            value["consent"] = quote_payload.get("consent")
+        else:
+            value["quote"] = quote_payload
+            value["consent"] = None
         return RoutePreview.model_validate(value)
 
     def get_confirmation_for_evidence(

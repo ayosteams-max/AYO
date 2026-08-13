@@ -3,10 +3,11 @@ import hmac
 from datetime import UTC, datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StrictBool
 
 from BACKEND.authorization.contracts import AuthorizationSubject
 from BACKEND.booking.contracts import (
+    BookingConsentAuthority,
     BookingDispatchStarter,
     BookingPricingAuthority,
     RouteIntelligenceProvider,
@@ -14,8 +15,11 @@ from BACKEND.booking.contracts import (
 from BACKEND.booking.models import (
     BookingConfirmation,
     BookingConflict,
+    BookingConsentMetadata,
+    BookingQuote,
     BookingSession,
     PlaceCandidate,
+    ProviderRouteEvidence,
     RoutePreview,
 )
 from BACKEND.identity.models import IdentityType
@@ -40,6 +44,32 @@ def _digest(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()
 
 
+def route_preview_evidence_hash(
+    *,
+    evidence_id: UUID,
+    booking_session_hash: str,
+    pickup: PickupDefinition,
+    destination: DestinationDefinition,
+    route: ProviderRouteEvidence,
+    quote: BookingQuote,
+    consent: BookingConsentMetadata,
+    service_zone_version: str,
+) -> str:
+    payload = "|".join(
+        (
+            str(evidence_id),
+            booking_session_hash,
+            pickup.model_dump_json(),
+            destination.model_dump_json(),
+            route.model_dump_json(),
+            quote.model_dump_json(),
+            consent.model_dump_json(),
+            service_zone_version,
+        )
+    )
+    return _digest(payload)
+
+
 class PreviewRouteCommand(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
     client_preview_id: UUID
@@ -57,7 +87,9 @@ class ConfirmBookingCommand(BaseModel):
     booking_session: BookingSession
     client_request_id: UUID
     idempotency_key: str = Field(min_length=16, max_length=128)
-    consent_policy_version: str = Field(pattern=r"^[a-z][a-z0-9_.-]{2,62}$")
+    consent_policy_version: str | None = None
+    consent_document_hash: str | None = None
+    consent_acknowledged: StrictBool | None = None
 
 
 class BookingApplication:
@@ -69,6 +101,7 @@ class BookingApplication:
         ride_requests: RideRequestApplication,
         pricing_policy_id: UUID,
         dispatch: BookingDispatchStarter | None = None,
+        consent: BookingConsentAuthority | None = None,
     ) -> None:
         self._composition = composition
         self._routes = routes
@@ -76,6 +109,7 @@ class BookingApplication:
         self._ride_requests = ride_requests
         self._pricing_policy_id = pricing_policy_id
         self._dispatch = dispatch
+        self._consent = consent
 
     @property
     def dispatch_enabled(self) -> bool:
@@ -148,6 +182,19 @@ class BookingApplication:
                 preview is not None and preview.quote.quote_id == command.quote_id,
                 ride.client_request_id == command.client_request_id,
                 ride.consent_policy_version == command.consent_policy_version,
+                preview is not None and preview.consent is not None,
+                preview is not None
+                and preview.consent is not None
+                and command.consent_acknowledged is True,
+                preview is not None
+                and preview.consent is not None
+                and command.consent_policy_version == preview.consent.required_version,
+                preview is not None
+                and preview.consent is not None
+                and command.consent_document_hash is not None
+                and hmac.compare_digest(
+                    command.consent_document_hash, preview.consent.content_hash
+                ),
                 hashes_match,
             )
         )
@@ -178,6 +225,9 @@ class BookingApplication:
         at: datetime,
     ) -> RoutePreview:
         at = at.astimezone(UTC)
+        if self._consent is None:
+            raise BookingConflict("consent_policy_unavailable")
+        consent = self._consent.required_policy(at=at)
         rider_id = None
         if subject is not None:
             if subject.identity_type is not IdentityType.RIDER:
@@ -259,17 +309,6 @@ class BookingApplication:
             at=at,
         )
         expires_at = quote.expires_at
-        payload = "|".join(
-            (
-                str(command.client_preview_id),
-                session_hash,
-                pickup.model_dump_json(),
-                destination.model_dump_json(),
-                route.model_dump_json(),
-                quote.model_dump_json(),
-                pickup_zone.version,
-            )
-        )
         preview = RoutePreview(
             evidence_id=command.client_preview_id,
             booking_session_hash=session_hash,
@@ -281,7 +320,17 @@ class BookingApplication:
             service_type=command.service_type.value,
             route=route,
             quote=quote,
-            evidence_hash=_digest(payload),
+            consent=consent,
+            evidence_hash=route_preview_evidence_hash(
+                evidence_id=command.client_preview_id,
+                booking_session_hash=session_hash,
+                pickup=pickup,
+                destination=destination,
+                route=route,
+                quote=quote,
+                consent=consent,
+                service_zone_version=pickup_zone.version,
+            ),
             created_at=at,
             expires_at=expires_at,
         )
@@ -328,6 +377,31 @@ class BookingApplication:
             raise BookingConflict("route_changed")
         if preview.quote.quote_id != command.quote_id:
             raise BookingConflict("quote_changed")
+        if preview.consent is None or self._consent is None:
+            raise BookingConflict("consent_policy_changed")
+        try:
+            current_consent = self._consent.required_policy(at=at)
+            created_consent = self._consent.required_policy(at=preview.created_at)
+            registered_consent = self._consent.policy_for_version(
+                preview.consent.required_version
+            )
+        except BookingConflict as error:
+            raise BookingConflict("consent_policy_changed") from error
+        consent_matches = all(
+            (
+                command.consent_acknowledged is True,
+                command.consent_policy_version == preview.consent.required_version,
+                command.consent_document_hash is not None,
+                hmac.compare_digest(
+                    command.consent_document_hash or "", preview.consent.content_hash
+                ),
+                registered_consent == preview.consent,
+                created_consent == preview.consent,
+                current_consent == preview.consent,
+            )
+        )
+        if not consent_matches:
+            raise BookingConflict("consent_policy_changed")
         if at >= preview.expires_at:
             raise BookingConflict("route_evidence_expired")
         if at >= preview.quote.expires_at:
@@ -341,7 +415,7 @@ class BookingApplication:
                 destination=preview.destination,
                 service_type=RideServiceType.IMMEDIATE_STANDARD,
                 payment_intent=PaymentIntentType.CASH_COMPATIBLE,
-                consent_policy_version=command.consent_policy_version,
+                consent_policy_version=preview.consent.required_version,
             ),
             at=at,
         )

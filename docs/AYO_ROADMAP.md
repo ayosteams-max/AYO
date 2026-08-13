@@ -587,6 +587,8 @@ confirmation recovery read closes the response-loss/process-restart gap using th
 policy or activation is introduced. See
 `AYO_IMMEDIATE_STANDARD_PUBLIC_CONTRACT_WEAK_NETWORK_ARCHITECTURE.md`.
 
+**Booking consent-authority checkpoint:** Before the mobile booking-intent foundation can submit a real confirmation, preview must bind explicitly reviewed server-owned consent metadata and confirmation must reject missing, altered, legacy, or rotated consent before side effects. This candidate provides technical policy-metadata authority, not legal policy prose or legal compliance. No production consent policy is configured. Policy content requires separate legal and product approval. The bounded PRE-PRODUCTION correction uses no provider, schema, migration, mobile implementation, or production activation. Production remains prohibited.
+
 **Shared gate:** Each engine requires a separately authorized research and architecture mission, Ethiopian legal/operational review, explicit policy and financial limits, privacy/retention approval, abuse controls, human-operations design and CTO/CEO approval. See `docs/AYO_FUTURE_TRUST_AND_AI_SUPPORT_ENGINES.md`.
 
 ## Post-launch expansion gate

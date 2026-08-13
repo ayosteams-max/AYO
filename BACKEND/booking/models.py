@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -94,6 +94,45 @@ class BookingQuote(BaseModel):
         return value.astimezone(UTC)
 
 
+class BookingConsentMetadata(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    required_version: str = Field(pattern=r"^[a-z][a-z0-9_.-]{2,62}$")
+    document_id: str = Field(pattern=r"^[a-z][a-z0-9_.-]{2,127}$")
+    content_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
+    effective_from: datetime
+    effective_until: datetime | None = None
+    acknowledgment_required: bool
+    rotation_mode: Literal["immediate_mandatory"] = "immediate_mandatory"
+
+    @field_validator("effective_from", "effective_until")
+    @classmethod
+    def consent_utc(cls, value: datetime | None) -> datetime | None:
+        if value is None:
+            return None
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("Consent effective time must be timezone-aware")
+        return value.astimezone(UTC)
+
+    @model_validator(mode="after")
+    def valid_effective_interval(self) -> "BookingConsentMetadata":
+        if (
+            self.effective_until is not None
+            and self.effective_until <= self.effective_from
+        ):
+            raise ValueError("Consent effective interval is invalid")
+        if not self.acknowledgment_required:
+            raise ValueError("Booking consent acknowledgment must be required")
+        return self
+
+    def public_metadata(self) -> dict[str, str | bool]:
+        return {
+            "required_version": self.required_version,
+            "document_id": self.document_id,
+            "content_hash": self.content_hash,
+            "acknowledgment_required": self.acknowledgment_required,
+        }
+
+
 class RoutePreview(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
     evidence_id: UUID = Field(default_factory=uuid4)
@@ -106,6 +145,7 @@ class RoutePreview(BaseModel):
     service_type: str = Field(pattern=r"^immediate_standard$")
     route: ProviderRouteEvidence
     quote: BookingQuote
+    consent: BookingConsentMetadata | None = None
     evidence_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
     created_at: datetime
     expires_at: datetime
