@@ -659,23 +659,49 @@ jobs:
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'booking-complete-replay-equivalence'
         env:
           EVENT_NAME: ${{ github.event_name }}
+          EVENT_BEFORE: ${{ github.event.before || '' }}
           EVENT_HEAD_SHA: ${{ github.sha }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || '' }}
           TRUSTED_COMPARISON_BASE_SHA: ${{ steps.trusted_comparison_base.outputs.sha }}
         run: |
           set -euo pipefail
+          zero=0000000000000000000000000000000000000000
           expected_base=b79c7ae45f644dd1198f0b526bbda38bc2d11e23
           expected_tests=a54dc4b68b6f1882d5f81e247460d3e4ffbab062
-          if [[ "$TRUSTED_COMPARISON_BASE_SHA" != "$expected_base" ]]; then
-            echo "Booking replay-equivalence base identity drift" >&2
-            exit 1
-          fi
           case "$EVENT_NAME" in
             pull_request)
               candidate="$PR_HEAD_SHA"
+              if [[ "$TRUSTED_COMPARISON_BASE_SHA" != "$expected_base" ]]; then
+                echo "Booking replay-equivalence PR base identity drift" >&2
+                exit 1
+              fi
               ;;
-            push|workflow_dispatch)
+            push)
               candidate="$EVENT_HEAD_SHA"
+              if [[ ! "$EVENT_BEFORE" =~ ^[0-9a-f]{40}$ \
+                || "$EVENT_BEFORE" == "$zero" ]]; then
+                echo "Booking replay-equivalence push predecessor is absent, malformed, or all-zero" >&2
+                exit 1
+              fi
+              git cat-file -e "$EVENT_BEFORE^{commit}" 2>/dev/null || {
+                echo "Booking replay-equivalence push predecessor is unavailable" >&2
+                exit 1
+              }
+              if [[ "$TRUSTED_COMPARISON_BASE_SHA" != "$EVENT_BEFORE" ]]; then
+                echo "Booking replay-equivalence push predecessor identity drift" >&2
+                exit 1
+              fi
+              git merge-base --is-ancestor "$EVENT_BEFORE" "$candidate" || {
+                echo "Booking replay-equivalence push predecessor is not an ancestor" >&2
+                exit 1
+              }
+              ;;
+            workflow_dispatch)
+              candidate="$EVENT_HEAD_SHA"
+              if [[ "$TRUSTED_COMPARISON_BASE_SHA" != "$expected_base" ]]; then
+                echo "Booking replay-equivalence dispatch base identity drift" >&2
+                exit 1
+              fi
               ;;
             *)
               echo "Unsupported Booking replay-equivalence event" >&2
@@ -688,6 +714,10 @@ jobs:
           fi
           git cat-file -e "$candidate^{commit}" 2>/dev/null || {
             echo "Booking replay-equivalence candidate commit is unavailable" >&2
+            exit 1
+          }
+          git cat-file -e "$expected_base^{commit}" 2>/dev/null || {
+            echo "Booking replay-equivalence governed base is unavailable" >&2
             exit 1
           }
           git merge-base --is-ancestor "$expected_base" "$candidate" || {
@@ -881,7 +911,7 @@ jobs:
           PY
 
       - name: Test all admitted non-PostgreSQL behavior with coverage
-        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'pre-batch2'
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && (steps.evidence_contract.outputs.mode == 'pre-batch2' || steps.evidence_contract.outputs.mode == 'booking-complete-replay-equivalence')
         env:
           TRUSTED_COMPARISON_BASE_SHA: ${{ steps.trusted_comparison_base.outputs.sha }}
         run: |
