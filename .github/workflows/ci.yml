@@ -292,6 +292,9 @@ jobs:
             382a299236787d20a567cc5934a8f82d0147e7ad)
               mode=booking-complete-replay-equivalence
               ;;
+            16e1a683dec9be302f15f5d596e2e502d00c1b16)
+              mode=booking-consent-policy-authority
+              ;;
             *)
               echo "Unreviewed tests tree: $tests_tree" >&2
               exit 1
@@ -751,6 +754,118 @@ jobs:
           done
           echo "Booking replay-equivalence exact candidate identity: PASS"
 
+      - name: Bind exact Booking consent-policy-authority candidate identity
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'booking-consent-policy-authority'
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_BEFORE: ${{ github.event.before || '' }}
+          EVENT_HEAD_SHA: ${{ github.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || '' }}
+          TRUSTED_COMPARISON_BASE_SHA: ${{ steps.trusted_comparison_base.outputs.sha }}
+        run: |
+          set -euo pipefail
+          zero=0000000000000000000000000000000000000000
+          expected_base=6613a936b0fe896308682c8fe038708876a06c02
+          expected_tests=16e1a683dec9be302f15f5d596e2e502d00c1b16
+          case "$EVENT_NAME" in
+            pull_request)
+              candidate="$PR_HEAD_SHA"
+              if [[ "$PR_BASE_SHA" != "$expected_base" \
+                || "$TRUSTED_COMPARISON_BASE_SHA" != "$expected_base" ]]; then
+                echo "Booking consent authority PR base identity drift" >&2
+                exit 1
+              fi
+              git merge-base --is-ancestor "$expected_base" HEAD || {
+                echo "Booking consent authority base is not ancestral to tested merge" >&2
+                exit 1
+              }
+              ;;
+            push)
+              candidate="$EVENT_HEAD_SHA"
+              if [[ "$candidate" != "$(git rev-parse HEAD)" ]]; then
+                echo "Booking consent authority pushed candidate identity drift" >&2
+                exit 1
+              fi
+              if [[ -n "$EVENT_BEFORE" && "$EVENT_BEFORE" != "$zero" ]]; then
+                if [[ ! "$EVENT_BEFORE" =~ ^[0-9a-f]{40}$ ]]; then
+                  echo "Booking consent authority push predecessor is malformed" >&2
+                  exit 1
+                fi
+                git cat-file -e "$EVENT_BEFORE^{commit}" 2>/dev/null || {
+                  echo "Booking consent authority push predecessor is unavailable" >&2
+                  exit 1
+                }
+                if [[ "$TRUSTED_COMPARISON_BASE_SHA" != "$EVENT_BEFORE" ]]; then
+                  echo "Booking consent authority push predecessor identity drift" >&2
+                  exit 1
+                fi
+                git merge-base --is-ancestor "$EVENT_BEFORE" "$candidate" || {
+                  echo "Booking consent authority push predecessor is not an ancestor" >&2
+                  exit 1
+                }
+              elif [[ "$TRUSTED_COMPARISON_BASE_SHA" != "$expected_base" ]]; then
+                echo "Booking consent authority first-push base identity drift" >&2
+                exit 1
+              fi
+              ;;
+            workflow_dispatch)
+              candidate="$EVENT_HEAD_SHA"
+              if [[ "$TRUSTED_COMPARISON_BASE_SHA" != "$expected_base" ]]; then
+                echo "Booking consent authority dispatch base identity drift" >&2
+                exit 1
+              fi
+              ;;
+            *) echo "Unsupported Booking consent authority event" >&2; exit 1 ;;
+          esac
+          if [[ ! "$candidate" =~ ^[0-9a-f]{40}$ || "$candidate" == "$zero" ]]; then
+            echo "Booking consent authority candidate is absent, malformed, or all-zero" >&2
+            exit 1
+          fi
+          for commit in "$candidate" "$expected_base"; do
+            git cat-file -e "$commit^{commit}" 2>/dev/null || {
+              echo "Booking consent authority governed commit is unavailable" >&2
+              exit 1
+            }
+          done
+          git merge-base --is-ancestor "$expected_base" "$candidate" || {
+            echo "Booking consent authority candidate does not descend from governed base" >&2
+            exit 1
+          }
+          mapfile -t changed < <(git diff --name-only "$expected_base" "$candidate")
+          expected=(
+            .github/workflows/ci.yml
+            BACKEND/booking/application.py
+            BACKEND/booking/consent.py
+            BACKEND/booking/contracts.py
+            BACKEND/booking/models.py
+            BACKEND/persistence/booking_repository.py
+            BACKEND/routes/booking.py
+            docs/AYO_BOOKING_CONSENT_AUTHORITY_ARCHITECTURE.md
+            docs/AYO_DECISION_LOG.md
+            docs/AYO_IMMEDIATE_STANDARD_PUBLIC_CONTRACT_WEAK_NETWORK_ARCHITECTURE.md
+            docs/AYO_ROADMAP.md
+            tests/integration/test_dispatch_handoff_localization.py
+            tests/test_booking_contract.py
+          )
+          if [[ "${changed[*]}" != "${expected[*]}" ]]; then
+            printf 'Booking consent authority manifest drift: %s\n' "${changed[*]}" >&2
+            exit 1
+          fi
+          if [[ "$(git rev-parse "${candidate}:tests")" != "$expected_tests" ]]; then
+            echo "Booking consent authority tests tree drift" >&2
+            exit 1
+          fi
+          for path in database/migrations BACKEND/persistence/tables.py pyproject.toml \
+            uv.lock .secrets.baseline AYO-Mobile BACKEND/config; do
+            if [[ "$(git rev-parse "${expected_base}:$path")" \
+              != "$(git rev-parse "${candidate}:$path")" ]]; then
+              echo "Booking consent authority immutable boundary drift: $path" >&2
+              exit 1
+            fi
+          done
+          echo "Booking consent-policy-authority exact candidate identity: PASS"
+
       - name: Bind tested Courier Pickup tree to trusted authoritative base
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'courier-pickup-idempotency-v1'
         id: courier_pickup_v1_content
@@ -912,10 +1027,11 @@ jobs:
           PY
 
       - name: Test all admitted non-PostgreSQL behavior with coverage
-        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && (steps.evidence_contract.outputs.mode == 'pre-batch2' || steps.evidence_contract.outputs.mode == 'booking-complete-replay-equivalence')
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && (steps.evidence_contract.outputs.mode == 'pre-batch2' || steps.evidence_contract.outputs.mode == 'booking-complete-replay-equivalence' || steps.evidence_contract.outputs.mode == 'booking-consent-policy-authority')
         env:
           EVIDENCE_MODE: ${{ steps.evidence_contract.outputs.mode }}
           TRUSTED_COMPARISON_BASE_SHA: ${{ steps.trusted_comparison_base.outputs.sha }}
+          BOOKING_CONSENT_BROAD_EVIDENCE_PATH: ${{ runner.temp }}/booking-consent-broad-v1.txt
         run: |
           set +e
           set -o pipefail
@@ -1066,7 +1182,11 @@ jobs:
               "tests/test_services.py::test_cash_commission_is_not_lost_on_repeated_wallet_refresh"
           }
           mode = os.environ["EVIDENCE_MODE"]
-          governed_replay_evidence = mode == "booking-complete-replay-equivalence"
+          governed_replay_evidence = mode in {
+              "booking-complete-replay-equivalence",
+              "booking-consent-policy-authority",
+          }
+          capture_consent_evidence = mode == "booking-consent-policy-authority"
           new_registry_node = (
               "tests/test_authorization_contracts.py::"
               "test_permission_registry_contains_exact_reconciled_production_inventory"
@@ -1230,7 +1350,9 @@ jobs:
                   raise SystemExit(f"historical uncollected-file inventory drift: {sorted(uncollected)!r}")
           else:
               compare_sha = (
-                  "b79c7ae45f644dd1198f0b526bbda38bc2d11e23"
+                  "6613a936b0fe896308682c8fe038708876a06c02"
+                  if capture_consent_evidence
+                  else "b79c7ae45f644dd1198f0b526bbda38bc2d11e23"
                   if governed_replay_evidence
                   else os.environ.get("TRUSTED_COMPARISON_BASE_SHA", "")
               )
@@ -1256,12 +1378,24 @@ jobs:
                           text=True,
                       ).stdout.splitlines()
                   )
-                  if not {
-                      "BACKEND/booking/application.py",
-                      "BACKEND/persistence/booking_repository.py",
-                  }.issubset(changed_backend_paths):
+                  required_backend_paths = (
+                      {
+                          "BACKEND/booking/application.py",
+                          "BACKEND/booking/consent.py",
+                          "BACKEND/booking/contracts.py",
+                          "BACKEND/booking/models.py",
+                          "BACKEND/persistence/booking_repository.py",
+                          "BACKEND/routes/booking.py",
+                      }
+                      if capture_consent_evidence
+                      else {
+                          "BACKEND/booking/application.py",
+                          "BACKEND/persistence/booking_repository.py",
+                      }
+                  )
+                  if not required_backend_paths.issubset(changed_backend_paths):
                       raise SystemExit(
-                          "booking replay governed production diff is empty or incomplete"
+                          "governed booking production diff is empty or incomplete"
                       )
               changed = subprocess.run(
                   ["git", "diff", "--unified=0", compare_sha, "HEAD", "--", "BACKEND"],
@@ -1313,7 +1447,7 @@ jobs:
           print("Certified historical coverage baseline:", f"{baseline:.8f}%")
           print("Coverage regression floor: PASS")
           print("Coverage improvement target: 70%")
-          if governed_replay_evidence:
+          if mode == "booking-complete-replay-equivalence":
               xfail_nodes = sorted(xfailed_nodes)
               reviewed_evidence = {
                   "collected": 1002,
@@ -1366,6 +1500,51 @@ jobs:
               if actual_inventory["skipped"] != 0 or actual_inventory["xfailed"] != 1:
                   raise SystemExit("Booking replay-equivalence skip or xfail drift")
               print("Booking replay-equivalence exact broad evidence: PASS")
+          elif capture_consent_evidence:
+              xfail_nodes = sorted(xfailed_nodes)
+              xfail_reason = " ".join(
+                  xfailed[0].find("skipped").get("message", "").split()
+              ) if len(xfailed) == 1 else ""
+              if (
+                  actual_inventory["failed"] != 0
+                  or actual_inventory["errors"] != 0
+                  or actual_inventory["skipped"] != 0
+                  or len(xfail_nodes) != 1
+                  or xfailed_nodes != expected_xfailed_nodes
+                  or actual_percentage < 70.0
+              ):
+                  raise SystemExit("Booking consent broad evidence is not admissible")
+              lines = [
+                  "BOOKING_CONSENT_BROAD_EVIDENCE_V1",
+                  f"collected={len(case_nodes) + matched_deselections}",
+                  f"selected={len(case_nodes)}",
+                  f"passed={len(passed_nodes)}",
+                  f"failed={actual_inventory['failed']}",
+                  f"errors={actual_inventory['errors']}",
+                  f"skipped={actual_inventory['skipped']}",
+                  f"xfail_count={len(xfail_nodes)}",
+                  f"xfail_node={xfail_nodes[0]}",
+                  f"xfail_reason={xfail_reason}",
+                  "requested_deselections=" + "|".join(actual_deselection_order),
+                  f"matched_deselection_count={matched_deselections}",
+                  "matched_deselection_identities=not-deterministically-available",
+                  f"selected_node_fingerprint={selected_fingerprint}",
+                  f"passing_node_fingerprint={passed_fingerprint}",
+                  f"permission_registry_blob={registry_blob}",
+                  f"authorization_contract_test_blob={registry_test_blob}",
+                  f"total_coverage_percentage={actual_totals[2]}",
+                  f"coverage_semantic_fingerprint={fingerprint}",
+                  f"zero_coverage_inventory_fingerprint={hashlib.sha256(chr(10).join(sorted(zero_coverage)).encode()).hexdigest()}",
+                  f"uncollected_inventory_fingerprint={hashlib.sha256(chr(10).join(sorted(uncollected)).encode()).hexdigest()}",
+                  "changed_production_line_coverage=PASS",
+                  "END_BOOKING_CONSENT_BROAD_EVIDENCE_V1",
+              ]
+              block = "\n".join(lines) + "\n"
+              path = os.environ["BOOKING_CONSENT_BROAD_EVIDENCE_PATH"]
+              with open(path, "x", encoding="utf-8", newline="\n") as output:
+                  output.write(block); output.flush(); os.fsync(output.fileno())
+              if open(path, encoding="utf-8", newline="").read() != block:
+                  raise SystemExit("Booking consent broad evidence retention failed")
           PY
 
       - name: Verify exact Batch 2 test and coverage contract
@@ -1823,8 +2002,48 @@ jobs:
           PY
 
       - name: Verify PostgreSQL 17/PostGIS integration tests without skips
-        if: (success() || failure()) && steps.postgis.outputs.ready == 'true'
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-policy-authority'
         run: uv run --locked pytest -m "integration and not migration" --no-cov -q
+
+      - name: Capture Booking consent authority PostgreSQL evidence
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'booking-consent-policy-authority'
+        env:
+          EVIDENCE_PATH: ${{ runner.temp }}/booking-consent-postgresql-v1.txt
+        run: |
+          set -euo pipefail
+          uv run --locked pytest -m "integration and not migration" --collect-only -q > booking-consent-postgresql-collect.txt
+          uv run --locked pytest -m "integration and not migration" --no-cov -q \
+            --junitxml=booking-consent-postgresql.xml
+          uv run --locked python - <<'PY'
+          import hashlib, os, xml.etree.ElementTree as ET
+          from pathlib import Path
+          nodes = sorted(line.strip() for line in Path("booking-consent-postgresql-collect.txt").read_text().splitlines() if "::" in line)
+          required = {
+              "tests/integration/test_dispatch_handoff_localization.py::test_booking_consent_binding_reconstructs_across_units_of_work",
+              "tests/integration/test_dispatch_handoff_localization.py::test_booking_consent_confirmation_persists_authority_and_replays_canonically",
+              "tests/integration/test_dispatch_handoff_localization.py::test_booking_consent_rotation_and_legacy_reject_without_persisted_effects",
+              "tests/integration/test_dispatch_handoff_localization.py::test_booking_consent_concurrent_stale_confirmation_cannot_bypass_rotation",
+              "tests/integration/test_dispatch_handoff_localization.py::test_booking_consent_concurrent_first_confirmation_has_one_canonical_result",
+              "tests/integration/test_dispatch_handoff_localization.py::test_booking_confirmation_idempotency_hash_lookup_is_scoped_and_restart_safe",
+              "tests/integration/test_dispatch_handoff_localization.py::test_booking_confirmation_recovery_is_client_request_and_rider_scoped",
+          }
+          if len(nodes) != len(set(nodes)) or not required.issubset(nodes):
+              raise SystemExit("Booking consent PostgreSQL required-node inventory drift")
+          cases = ET.parse("booking-consent-postgresql.xml").getroot().findall(".//testcase")
+          def node(case): return f"{case.get('classname').replace('.', '/')}.py::{case.get('name')}"
+          selected = sorted(node(case) for case in cases)
+          failed = sum(case.find("failure") is not None for case in cases)
+          errors = sum(case.find("error") is not None for case in cases)
+          skipped = sum(case.find("skipped") is not None for case in cases)
+          passed_nodes = sorted(node(case) for case in cases if all(case.find(kind) is None for kind in ("failure", "error", "skipped")))
+          if selected != nodes or failed or errors or skipped or not required.issubset(passed_nodes):
+              raise SystemExit("Booking consent PostgreSQL execution evidence is not admissible")
+          lines = ["BOOKING_CONSENT_POSTGRESQL_EVIDENCE_V1", f"collected={len(nodes)}", f"selected={len(selected)}", f"passed={len(passed_nodes)}", f"failed={failed}", f"errors={errors}", f"skipped={skipped}", "xfailed=0", f"selected_node_fingerprint={hashlib.sha256(chr(10).join(nodes).encode()).hexdigest()}", f"passing_node_fingerprint={hashlib.sha256(chr(10).join(passed_nodes).encode()).hexdigest()}", "required_consent_nodes=PASS", "END_BOOKING_CONSENT_POSTGRESQL_EVIDENCE_V1"]
+          block = "\n".join(lines) + "\n"; path = os.environ["EVIDENCE_PATH"]
+          with open(path, "x", encoding="utf-8", newline="\n") as output: output.write(block); output.flush(); os.fsync(output.fileno())
+          if open(path, encoding="utf-8", newline="").read() != block: raise SystemExit("PostgreSQL evidence retention failed")
+          PY
+          rm booking-consent-postgresql-collect.txt booking-consent-postgresql.xml
 
       - name: Verify exact Courier Pickup PostgreSQL inventory
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'courier-pickup-idempotency-v1'
@@ -2239,6 +2458,7 @@ jobs:
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true'
         env:
           EVIDENCE_MODE: ${{ steps.evidence_contract.outputs.mode }}
+          BOOKING_CONSENT_MYPY_EVIDENCE_PATH: ${{ runner.temp }}/booking-consent-mypy-v1.txt
         run: |
           set -euo pipefail
           source_dir="$(mktemp -d)"
@@ -2251,6 +2471,8 @@ jobs:
             source_sha=10d31018783bb11f05a8dc3ed789ac3e3d92970e
           elif [[ "$EVIDENCE_MODE" == "booking-complete-replay-equivalence" ]]; then
             source_sha=b79c7ae45f644dd1198f0b526bbda38bc2d11e23
+          elif [[ "$EVIDENCE_MODE" == "booking-consent-policy-authority" ]]; then
+            source_sha=6613a936b0fe896308682c8fe038708876a06c02
           fi
           git archive "$source_sha" | tar -x -C "$source_dir"
           UV_PROJECT_ENVIRONMENT="$mypy_environment" uv sync --locked --all-groups
@@ -2422,6 +2644,13 @@ jobs:
           source_strict = normalized("source-strict.txt")
           candidate_strict = normalized("candidate-strict.txt")
           mode = os.environ["EVIDENCE_MODE"]
+          if mode == "booking-consent-policy-authority":
+              report("Source strict backend", source_strict)
+              report("Candidate strict backend", candidate_strict)
+              source_only_strict = sorted(set(source_strict) - set(candidate_strict))
+              candidate_only_strict = sorted(set(candidate_strict) - set(source_strict))
+              for item in source_only_strict: print("SOURCE_ONLY_STRICT|" + item.render())
+              for item in candidate_only_strict: print("CANDIDATE_ONLY_STRICT|" + item.render())
           if mode == "courier-pickup-idempotency-v1":
               source_raw, source_column_fp, source_semantic_fp = reviewed_v1_fingerprints("source-strict.txt")
               candidate_raw, candidate_column_fp, candidate_semantic_fp = reviewed_v1_fingerprints("candidate-strict.txt")
@@ -2490,7 +2719,7 @@ jobs:
               "booking-complete-replay-equivalence",
           }:
               compare("strict backend", source_strict, candidate_strict)
-          else:
+          elif mode != "booking-consent-policy-authority":
               compare("strict backend", source_strict, candidate_strict)
           strict_files = {item.path for item in candidate_strict}
           if mode in {
@@ -2512,7 +2741,7 @@ jobs:
                   )
               if fingerprint(candidate_strict) != "a7018245b4e9086aeca1d39d47903e5e98d0b62d":
                   raise SystemExit("Immediate Standard strict MyPy fingerprint drift")
-          else:
+          elif mode != "booking-consent-policy-authority":
               if len(candidate_strict) != 387 or len(strict_files) != 52:
                   raise SystemExit("strict backend MyPy historical count drift")
               expected_strict_codes = {
@@ -2529,6 +2758,7 @@ jobs:
               "courier-pickup-authorization-ordering",
               "immediate-standard-public-contract",
               "booking-complete-replay-equivalence",
+              "booking-consent-policy-authority",
           }:
               strict_fingerprint = fingerprint(candidate_strict)
               if strict_fingerprint != "6257a24b9c057c822e45a041519a849c471f6c48":
@@ -2566,23 +2796,58 @@ jobs:
           elif mode in {
               "immediate-standard-public-contract",
               "booking-complete-replay-equivalence",
+              "booking-consent-policy-authority",
           }:
               compare("configured", source_configured, candidate_configured)
               configured_files = {item.path for item in candidate_configured}
-              if len(candidate_configured) != 12 or configured_files != {
-                  "tests/test_merchant_generative_provider_evaluation.py"
-              }:
-                  raise SystemExit("configured MyPy governed diagnostic inventory drift")
-              if Counter(item.code for item in candidate_configured) != {
-                  "arg-type": 12
-              }:
-                  raise SystemExit("configured MyPy governed error-code drift")
-              if (
-                  mode == "booking-complete-replay-equivalence"
-                  and fingerprint(candidate_configured)
-                  != "b50c53ef9a3bb574f36a8f6b489ec2b0c5285d08"
-              ):
-                  raise SystemExit("configured MyPy governed fingerprint drift")
+              if mode != "booking-consent-policy-authority":
+                  if len(candidate_configured) != 12 or configured_files != {
+                      "tests/test_merchant_generative_provider_evaluation.py"
+                  }:
+                      raise SystemExit("configured MyPy governed diagnostic inventory drift")
+                  if Counter(item.code for item in candidate_configured) != {
+                      "arg-type": 12
+                  }:
+                      raise SystemExit("configured MyPy governed error-code drift")
+                  if (
+                      mode == "booking-complete-replay-equivalence"
+                      and fingerprint(candidate_configured)
+                      != "b50c53ef9a3bb574f36a8f6b489ec2b0c5285d08"
+                  ):
+                      raise SystemExit("configured MyPy governed fingerprint drift")
+              else:
+                  import json
+                  strict_equal = source_strict == candidate_strict
+                  configured_equal = source_configured == candidate_configured
+                  lines = [
+                      "BOOKING_CONSENT_MYPY_EVIDENCE_V1",
+                      f"strict_base_count={len(source_strict)}",
+                      f"strict_candidate_count={len(candidate_strict)}",
+                      f"strict_base_files={len({item.path for item in source_strict})}",
+                      f"strict_candidate_files={len({item.path for item in candidate_strict})}",
+                      "strict_base_codes=" + json.dumps(dict(sorted(Counter(item.code for item in source_strict).items())), separators=(",", ":")),
+                      "strict_candidate_codes=" + json.dumps(dict(sorted(Counter(item.code for item in candidate_strict).items())), separators=(",", ":")),
+                      f"strict_base_fingerprint={fingerprint(source_strict)}",
+                      f"strict_candidate_fingerprint={fingerprint(candidate_strict)}",
+                      f"strict_base_only={len(source_only_strict)}",
+                      f"strict_candidate_only={len(candidate_only_strict)}",
+                      f"configured_base_count={len(source_configured)}",
+                      f"configured_candidate_count={len(candidate_configured)}",
+                      f"configured_base_files={len({item.path for item in source_configured})}",
+                      f"configured_candidate_files={len({item.path for item in candidate_configured})}",
+                      "configured_base_codes=" + json.dumps(dict(sorted(Counter(item.code for item in source_configured).items())), separators=(",", ":")),
+                      "configured_candidate_codes=" + json.dumps(dict(sorted(Counter(item.code for item in candidate_configured).items())), separators=(",", ":")),
+                      f"configured_base_fingerprint={fingerprint(source_configured)}",
+                      f"configured_candidate_fingerprint={fingerprint(candidate_configured)}",
+                      f"configured_base_only={len(set(source_configured)-set(candidate_configured))}",
+                      f"configured_candidate_only={len(set(candidate_configured)-set(source_configured))}",
+                      "END_BOOKING_CONSENT_MYPY_EVIDENCE_V1",
+                  ]
+                  block = "\n".join(lines) + "\n"; path = os.environ["BOOKING_CONSENT_MYPY_EVIDENCE_PATH"]
+                  with open(path, "x", encoding="utf-8", newline="\n") as output: output.write(block); output.flush(); os.fsync(output.fileno())
+                  if open(path, encoding="utf-8", newline="").read() != block: raise SystemExit("MyPy evidence retention failed")
+                  if not strict_equal or not configured_equal:
+                      raise SystemExit("Booking consent MyPy evidence differs from governed base")
           elif mode == "pre-batch2":
               compare(
                   "configured", source_configured, candidate_configured,
@@ -2614,6 +2879,8 @@ jobs:
 
       - name: Scan exact candidate for secrets
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true'
+        env:
+          BOOKING_CONSENT_SECRET_EVIDENCE_PATH: ${{ runner.temp }}/booking-consent-secrets-v1.txt
         run: |
           set -euo pipefail
           scanner_version="$(uv tool run --from 'detect-secrets==1.5.0' detect-secrets --version)"
@@ -2625,6 +2892,12 @@ jobs:
               --all-files --exclude-files '^\.git/'
           ) > candidate-secrets.json
           rm -rf "$scan_root"
+          if [[ "${{ steps.evidence_contract.outputs.mode }}" == "booking-consent-policy-authority" ]]; then
+            base_root="$(mktemp -d)"
+            git archive 6613a936b0fe896308682c8fe038708876a06c02 | tar -x -C "$base_root"
+            (cd "$base_root" && uv tool run --from 'detect-secrets==1.5.0' detect-secrets scan --all-files --exclude-files '^\.git/') > base-secrets.json
+            rm -rf "$base_root"
+          fi
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             git show "$GITHUB_SHA:.secrets.baseline" > reviewed-secrets-baseline.json
           else
@@ -2836,6 +3109,32 @@ jobs:
                   immediate_standard_reviewed,
               )
               selected = "exact 42-finding Immediate Standard inventory"
+          elif mode == "booking-consent-policy-authority":
+              base = scan_inventory(load("base-secrets.json").get("results"))
+              def safe(item):
+                  path, line, detector, digest, verified = item
+                  classification = classes.get(item[:3], "review-required")
+                  return f"{path}|{line}|{detector}|{digest}|{str(verified).lower()}|{classification}"
+              base_only = sorted(set(base) - set(actual))
+              candidate_only = sorted(set(actual) - set(base))
+              for item in base_only: print("SECRET_BASE_ONLY|" + safe(item))
+              for item in candidate_only: print("SECRET_CANDIDATE_ONLY|" + safe(item))
+              lines = [
+                  "BOOKING_CONSENT_SECRET_EVIDENCE_V1",
+                  f"base_count={len(base)}",
+                  f"candidate_count={len(actual)}",
+                  f"base_fingerprint={fingerprint(base)}",
+                  f"candidate_fingerprint={fingerprint(actual)}",
+                  f"base_only_count={len(base_only)}",
+                  f"candidate_only_count={len(candidate_only)}",
+                  "base_only_tuples=" + "||".join(safe(item) for item in base_only),
+                  "candidate_only_tuples=" + "||".join(safe(item) for item in candidate_only),
+                  "END_BOOKING_CONSENT_SECRET_EVIDENCE_V1",
+              ]
+              block = "\n".join(lines) + "\n"; path = os.environ["BOOKING_CONSENT_SECRET_EVIDENCE_PATH"]
+              with open(path, "x", encoding="utf-8", newline="\n") as output: output.write(block); output.flush(); os.fsync(output.fileno())
+              if open(path, encoding="utf-8", newline="").read() != block: raise SystemExit("secret evidence retention failed")
+              selected = "unadmitted Booking consent base/candidate inventory"
           elif mode == "pre-batch2":
               exact("pre-Batch-2 reviewed projection", actual, pre_batch2)
               selected = "pre-Batch-2 exact 11-finding projection"
@@ -2850,7 +3149,7 @@ jobs:
           print("Batch 2 reviewed findings/fingerprint:", len(reviewed), approved)
           print("Exact reviewed secret-finding contract: PASS")
           PY
-          rm candidate-secrets.json reviewed-secrets-baseline.json
+          rm -f candidate-secrets.json base-secrets.json reviewed-secrets-baseline.json
 
       - name: Verify shared certification dependencies survived MyPy
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true'
@@ -3176,7 +3475,7 @@ jobs:
           if workflow.count(resolver_id) != 1:
               raise SystemExit("trusted comparison base resolver is not unique")
           if (
-              workflow.count(authoritative_mapping) != 3
+              workflow.count(authoritative_mapping) != 4
               or workflow.count(predecessor_mapping) != 2
           ):
               raise SystemExit("comparison-dependent gates do not share one resolver output")
@@ -3874,3 +4173,64 @@ jobs:
             exit 1
           fi
           echo "Certified candidate tracked tree cleanliness: PASS"
+
+      - name: Assemble Booking consent authority evidence
+        if: success() && steps.evidence_contract.outputs.mode == 'booking-consent-policy-authority'
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          EVIDENCE_PATH: ${{ runner.temp }}/booking-consent-policy-authority-evidence-v1.txt
+          BROAD_PATH: ${{ runner.temp }}/booking-consent-broad-v1.txt
+          POSTGRESQL_PATH: ${{ runner.temp }}/booking-consent-postgresql-v1.txt
+          MYPY_PATH: ${{ runner.temp }}/booking-consent-mypy-v1.txt
+          SECRET_PATH: ${{ runner.temp }}/booking-consent-secrets-v1.txt
+        run: |
+          set -euo pipefail
+          uv run --locked python - <<'PY'
+          import os, re
+          from pathlib import Path
+          sha = os.environ["CANDIDATE_SHA"]
+          if not re.fullmatch(r"[0-9a-f]{40}", sha): raise SystemExit("malformed evidence candidate")
+          sections = []
+          for variable in ("BROAD_PATH", "POSTGRESQL_PATH", "MYPY_PATH", "SECRET_PATH"):
+              path = Path(os.environ[variable])
+              if not path.is_file() or path.is_symlink() or path.stat().st_size not in range(1, 65537):
+                  raise SystemExit(f"missing or unsafe evidence section: {variable}")
+              value = path.read_text(encoding="utf-8")
+              if "BEGIN PRIVATE KEY" in value or "://" in value or "AYO_TEST_DATABASE_URL" in value:
+                  raise SystemExit("unsafe evidence content")
+              sections.append(value.rstrip("\n"))
+          lines = [
+              "BOOKING_CONSENT_POLICY_AUTHORITY_EVIDENCE_V1",
+              f"event={os.environ['EVENT_NAME']}", f"candidate_sha={sha}",
+              "governed_base=6613a936b0fe896308682c8fe038708876a06c02",
+              "tests_tree=16e1a683dec9be302f15f5d596e2e502d00c1b16",
+              *sections,
+              "canonical_migration_head=20260812_0060",
+              "backup_restore=PASS", "migration_round_trip=PASS",
+              "security_audit_dependency_checks=PASS", "cleanup=PASS",
+              "END_BOOKING_CONSENT_POLICY_AUTHORITY_EVIDENCE_V1",
+          ]
+          block = "\n".join(lines) + "\n"; path = Path(os.environ["EVIDENCE_PATH"])
+          if path.exists(): raise SystemExit("evidence output already exists")
+          with path.open("x", encoding="utf-8", newline="\n") as output:
+              output.write(block); output.flush(); os.fsync(output.fileno())
+          if path.is_symlink() or path.read_text(encoding="utf-8") != block or path.stat().st_size > 262144:
+              raise SystemExit("combined evidence verification failed")
+          PY
+
+      - name: Upload Booking consent authority evidence
+        if: success() && steps.evidence_contract.outputs.mode == 'booking-consent-policy-authority'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: booking-consent-policy-authority-evidence-${{ github.event_name }}-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ${{ runner.temp }}/booking-consent-policy-authority-evidence-v1.txt
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+      - name: Await CTO admission of Booking consent authority evidence
+        if: steps.evidence_contract.outputs.mode == 'booking-consent-policy-authority'
+        run: |
+          echo "booking consent policy authority evidence awaiting CTO admission" >&2
+          exit 1
