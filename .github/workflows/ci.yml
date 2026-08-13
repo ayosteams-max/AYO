@@ -940,6 +940,7 @@ jobs:
           import os
           import re
           import subprocess
+          import sys
           import xml.etree.ElementTree as ET
 
           approved_tree = "5c4895867a7cbf7537158ba41fa7a5361d1ddf31"
@@ -1276,22 +1277,60 @@ jobs:
           print("Coverage regression floor: PASS")
           print("Coverage improvement target: 70%")
           if capture_replay_evidence:
-              print("Replay broad collected-node count:", len(case_nodes) + matched_deselections)
-              print("Replay broad selected-node count:", len(case_nodes))
-              print("Replay broad passed-node count:", len(passed_nodes))
-              print("Replay broad governed xfail count:", len(xfailed_nodes))
-              print("Replay broad governed xfail nodes:", sorted(xfailed_nodes))
-              print("Replay broad matched deselection count:", matched_deselections)
-              print("Replay broad requested deselection nodes:", sorted(actual_deselections))
-              print("Replay broad selected-node fingerprint:", selected_fingerprint)
-              print("Replay broad passing-node fingerprint:", passed_fingerprint)
-              print("Replay broad permission registry blob:", registry_blob)
-              print("Replay broad authorization-contract test blob:", registry_test_blob)
-              print("Replay broad total coverage percentage:", f"{actual_percentage:.8f}")
-              print("Replay broad changed-production-line coverage: PASS")
-              raise SystemExit(
-                  "booking replay-equivalence broad evidence awaiting CTO admission"
+              xfail_nodes = sorted(xfailed_nodes)
+              requested_deselections = sorted(actual_deselections)
+              sha256 = re.compile(r"[0-9a-f]{64}")
+              sha1 = re.compile(r"[0-9a-f]{40}")
+              if (
+                  len(xfail_nodes) != 1
+                  or xfail_nodes != sorted(expected_xfailed_nodes)
+                  or matched_deselections < 0
+                  or matched_deselections > len(requested_deselections)
+                  or not sha256.fullmatch(selected_fingerprint)
+                  or not sha256.fullmatch(passed_fingerprint)
+                  or not sha1.fullmatch(registry_blob)
+                  or not sha1.fullmatch(registry_test_blob)
+                  or actual_inventory["failed"] != 0
+                  or actual_inventory["errors"] != 0
+              ):
+                  raise SystemExit("malformed or inconsistent replay broad evidence")
+              evidence_lines = [
+                  "BOOKING_REPLAY_BROAD_EVIDENCE_V1",
+                  f"collected={len(case_nodes) + matched_deselections}",
+                  f"selected={len(case_nodes)}",
+                  f"passed={len(passed_nodes)}",
+                  f"failed={actual_inventory['failed']}",
+                  f"errors={actual_inventory['errors']}",
+                  f"governed_xfail_count={len(xfail_nodes)}",
+                  f"governed_xfail_node={xfail_nodes[0]}",
+                  "requested_deselections=" + "|".join(requested_deselections),
+                  f"matched_deselection_count={matched_deselections}",
+                  "matched_deselection_identities=not-deterministically-available",
+                  f"selected_node_fingerprint={selected_fingerprint}",
+                  f"passing_node_fingerprint={passed_fingerprint}",
+                  f"permission_registry_blob={registry_blob}",
+                  f"authorization_contract_test_blob={registry_test_blob}",
+                  f"total_coverage_percentage={actual_percentage:.8f}",
+                  "changed_production_line_coverage=PASS",
+                  "END_BOOKING_REPLAY_BROAD_EVIDENCE_V1",
+              ]
+              evidence_block = "\n".join(evidence_lines) + "\n"
+              sys.stdout.write(evidence_block)
+              sys.stdout.flush()
+              summary_path = os.environ.get("GITHUB_STEP_SUMMARY", "")
+              if not summary_path:
+                  raise SystemExit("GitHub step summary path is unavailable")
+              with open(summary_path, "a", encoding="utf-8", newline="\n") as summary:
+                  summary.write("## Booking replay-equivalence broad evidence\n\n```text\n")
+                  summary.write(evidence_block)
+                  summary.write("```\n")
+                  summary.flush()
+                  os.fsync(summary.fileno())
+              sys.stderr.write(
+                  "booking replay-equivalence broad evidence awaiting CTO admission\n"
               )
+              sys.stderr.flush()
+              raise SystemExit(1)
           PY
 
       - name: Verify exact Batch 2 test and coverage contract
