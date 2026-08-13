@@ -289,7 +289,7 @@ jobs:
             ab795c7d2e200dac15215770fefae48b515fca68)
               mode=immediate-standard-public-contract
               ;;
-            a54dc4b68b6f1882d5f81e247460d3e4ffbab062)
+            c51cbae572c09503b71d2836e2052468a7c21d34)
               mode=booking-complete-replay-equivalence
               ;;
             *)
@@ -667,7 +667,7 @@ jobs:
           set -euo pipefail
           zero=0000000000000000000000000000000000000000
           expected_base=b79c7ae45f644dd1198f0b526bbda38bc2d11e23
-          expected_tests=a54dc4b68b6f1882d5f81e247460d3e4ffbab062
+          expected_tests=c51cbae572c09503b71d2836e2052468a7c21d34
           case "$EVENT_NAME" in
             pull_request)
               candidate="$PR_HEAD_SHA"
@@ -731,6 +731,7 @@ jobs:
             BACKEND/persistence/booking_repository.py
             tests/integration/test_dispatch_handoff_localization.py
             tests/test_booking_contract.py
+            tests/test_courier_pickup_api_contract.py
           )
           if [[ "${changed[*]}" != "${expected[*]}" ]]; then
             printf 'Booking replay-equivalence manifest drift: %s\n' "${changed[*]}" >&2
