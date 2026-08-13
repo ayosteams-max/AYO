@@ -1,4 +1,3 @@
-import logging
 from types import SimpleNamespace
 from typing import cast
 from uuid import UUID, uuid4
@@ -25,6 +24,7 @@ from BACKEND.main import (
     CustodyPlatformActivation,
     create_app,
 )
+from BACKEND.routes import courier_pickup as courier_pickup_routes
 from BACKEND.routes.courier_pickup import (
     MERCHANT_PRESENTATION_ACTION_BY_STATE,
     CourierPickupCourierCommandResult,
@@ -38,9 +38,6 @@ from BACKEND.routes.courier_pickup import (
     _merchant_command_result,
     _merchant_status,
     create_courier_pickup_router,
-)
-from BACKEND.routes.courier_pickup import (
-    logger as courier_pickup_logger,
 )
 from tests.test_courier_pickup_increment1 import application, subject
 
@@ -444,37 +441,23 @@ def test_reviewed_conflicts_have_explicit_minimal_public_mappings(
     assert captured.value.detail == {"code": public}
 
 
-def test_unknown_conflict_is_sanitized_and_safely_logged() -> None:
+def test_unknown_conflict_is_sanitized_and_safely_logged(monkeypatch) -> None:
     sensitive = "unknown_actor_merchant_hash_table_trace"
-    records: list[logging.LogRecord] = []
+    calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
 
-    class CaptureHandler(logging.Handler):
-        def emit(self, record: logging.LogRecord) -> None:
-            records.append(record)
+    def capture_error(*args: object, **kwargs: object) -> None:
+        calls.append((args, kwargs))
 
     def fail() -> None:
         raise CourierPickupConflict(sensitive)
 
-    handler = CaptureHandler()
-    original_handlers = list(courier_pickup_logger.handlers)
-    original_level = courier_pickup_logger.level
-    original_propagate = courier_pickup_logger.propagate
-    try:
-        courier_pickup_logger.handlers = [handler]
-        courier_pickup_logger.setLevel(logging.ERROR)
-        courier_pickup_logger.propagate = False
-        with pytest.raises(HTTPException) as captured:
-            _call(fail)
-    finally:
-        courier_pickup_logger.handlers = original_handlers
-        courier_pickup_logger.setLevel(original_level)
-        courier_pickup_logger.propagate = original_propagate
+    monkeypatch.setattr(courier_pickup_routes.logger, "error", capture_error)
+    with pytest.raises(HTTPException) as captured:
+        _call(fail)
 
     assert captured.value.status_code == 500
     assert captured.value.detail == {"code": "request_rejected"}
-    messages = [record.getMessage() for record in records]
-    assert "unclassified courier pickup conflict" in messages
-    assert all(sensitive not in message for message in messages)
-    assert all(sensitive not in repr(record.args) for record in records)
-    assert all(sensitive not in repr(record.__dict__) for record in records)
+    assert calls == [(("unclassified courier pickup conflict",), {})]
+    assert all(sensitive not in repr(args) for args, _ in calls)
+    assert all(sensitive not in repr(kwargs) for _, kwargs in calls)
     assert sensitive not in str(captured.value.detail)
