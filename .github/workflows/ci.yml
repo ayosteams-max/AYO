@@ -914,7 +914,6 @@ jobs:
       - name: Test all admitted non-PostgreSQL behavior with coverage
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && (steps.evidence_contract.outputs.mode == 'pre-batch2' || steps.evidence_contract.outputs.mode == 'booking-complete-replay-equivalence')
         env:
-          BOOKING_REPLAY_EVIDENCE_PATH: ${{ runner.temp }}/booking-replay-broad-evidence-v1.txt
           EVIDENCE_MODE: ${{ steps.evidence_contract.outputs.mode }}
           TRUSTED_COMPARISON_BASE_SHA: ${{ steps.trusted_comparison_base.outputs.sha }}
         run: |
@@ -951,6 +950,12 @@ jobs:
               "tests/test_ride_flow.py::test_complete_current_ride_happy_path",
               "tests/test_ride_flow.py::test_invalid_transition_remains_rejected",
           }
+          expected_deselection_order = (
+              "tests/test_app.py::test_openapi_preserves_current_route_inventory",
+              "tests/test_migration_foundation.py::test_migration_history_has_one_expected_head",
+              "tests/test_ride_flow.py::test_complete_current_ride_happy_path",
+              "tests/test_ride_flow.py::test_invalid_transition_remains_rejected",
+          )
           expected_zero_coverage = {
               "BACKEND/active_ride/streaming.py",
               "BACKEND/active_ride/verification.py",
@@ -1061,7 +1066,7 @@ jobs:
               "tests/test_services.py::test_cash_commission_is_not_lost_on_repeated_wallet_refresh"
           }
           mode = os.environ["EVIDENCE_MODE"]
-          capture_replay_evidence = mode == "booking-complete-replay-equivalence"
+          governed_replay_evidence = mode == "booking-complete-replay-equivalence"
           new_registry_node = (
               "tests/test_authorization_contracts.py::"
               "test_permission_registry_contains_exact_reconciled_production_inventory"
@@ -1099,7 +1104,7 @@ jobs:
               },
           }
           content_contract = content_contracts.get((registry_blob, registry_test_blob))
-          if not capture_replay_evidence and content_contract is None:
+          if not governed_replay_evidence and content_contract is None:
               raise SystemExit(
                   "governed permission-registry/test content pair drift: "
                   f"registry={registry_blob} test={registry_test_blob}"
@@ -1111,7 +1116,7 @@ jobs:
               "\n".join(sorted(case_nodes)).encode()
           ).hexdigest()
           if (
-              not capture_replay_evidence
+              not governed_replay_evidence
               and passed_fingerprint != content_contract["passed_fingerprint"]
           ):
               raise SystemExit(
@@ -1119,7 +1124,7 @@ jobs:
                   f"count={len(passed_nodes)} fingerprint={passed_fingerprint}"
               )
           if (
-              not capture_replay_evidence
+              not governed_replay_evidence
               and selected_fingerprint != content_contract["selected_fingerprint"]
           ):
               raise SystemExit(
@@ -1130,7 +1135,7 @@ jobs:
               raise SystemExit(f"governed xfail-node inventory drift: {sorted(xfailed_nodes)!r}")
           registry_node_count = case_nodes.count(new_registry_node)
           if (
-              not capture_replay_evidence
+              not governed_replay_evidence
               and registry_node_count != content_contract["registry_node_count"]
           ):
               raise SystemExit(
@@ -1146,7 +1151,7 @@ jobs:
               "skipped": len(skipped),
               "xfailed": len(xfailed),
           }
-          if not capture_replay_evidence:
+          if not governed_replay_evidence:
               expected_inventory = {
                   "passed": content_contract["passed"],
                   "failed": 0,
@@ -1160,7 +1165,7 @@ jobs:
           log = open("batch1-coverage.log", encoding="utf-8").read()
           deselected_matches = re.findall(r"(\d+) deselected", log)
           matched_deselections = int(deselected_matches[-1]) if deselected_matches else 0
-          if not capture_replay_evidence and "4 deselected" not in log:
+          if not governed_replay_evidence and "4 deselected" not in log:
               raise SystemExit("Batch 1 exact four-test deselection count disappeared")
           coverage = json.load(open("batch1-coverage.json", encoding="utf-8"))
           totals = coverage["totals"]
@@ -1226,12 +1231,12 @@ jobs:
           else:
               compare_sha = (
                   "b79c7ae45f644dd1198f0b526bbda38bc2d11e23"
-                  if capture_replay_evidence
+                  if governed_replay_evidence
                   else os.environ.get("TRUSTED_COMPARISON_BASE_SHA", "")
               )
               if not compare_sha or set(compare_sha) == {"0"}:
                   raise SystemExit("changed BACKEND tree lacks an exact coverage comparison base")
-              if capture_replay_evidence:
+              if governed_replay_evidence:
                   subprocess.run(
                       ["git", "cat-file", "-e", f"{compare_sha}^{{commit}}"],
                       check=True,
@@ -1282,9 +1287,10 @@ jobs:
                       "modified production statements lack coverage: "
                       + ", ".join(uncovered_changed)
                   )
-          actual_deselections = set(
+          actual_deselection_order = tuple(
               open("batch1-deselections.txt", encoding="utf-8").read().splitlines()
           )
+          actual_deselections = set(actual_deselection_order)
           if actual_deselections != expected_deselections:
               raise SystemExit(f"Batch 1 governed deselection drift: {sorted(actual_deselections)!r}")
 
@@ -1292,7 +1298,7 @@ jobs:
           print("Batch 1 BACKEND tree:", backend_tree)
           deselection_summary = (
               f"deselected={matched_deselections}"
-              if capture_replay_evidence
+              if governed_replay_evidence
               else "deselected=4"
           )
           print("Batch 1 test inventory:", actual_inventory, deselection_summary)
@@ -1307,74 +1313,60 @@ jobs:
           print("Certified historical coverage baseline:", f"{baseline:.8f}%")
           print("Coverage regression floor: PASS")
           print("Coverage improvement target: 70%")
-          if capture_replay_evidence:
+          if governed_replay_evidence:
               xfail_nodes = sorted(xfailed_nodes)
-              requested_deselections = sorted(actual_deselections)
-              sha256 = re.compile(r"[0-9a-f]{64}")
-              sha1 = re.compile(r"[0-9a-f]{40}")
-              if (
-                  len(xfail_nodes) != 1
-                  or xfail_nodes != sorted(expected_xfailed_nodes)
-                  or matched_deselections < 0
-                  or matched_deselections > len(requested_deselections)
-                  or not sha256.fullmatch(selected_fingerprint)
-                  or not sha256.fullmatch(passed_fingerprint)
-                  or not sha1.fullmatch(registry_blob)
-                  or not sha1.fullmatch(registry_test_blob)
-                  or actual_inventory["failed"] != 0
-                  or actual_inventory["errors"] != 0
-              ):
-                  raise SystemExit("malformed or inconsistent replay broad evidence")
-              evidence_lines = [
-                  "BOOKING_REPLAY_BROAD_EVIDENCE_V1",
-                  f"collected={len(case_nodes) + matched_deselections}",
-                  f"selected={len(case_nodes)}",
-                  f"passed={len(passed_nodes)}",
-                  f"failed={actual_inventory['failed']}",
-                  f"errors={actual_inventory['errors']}",
-                  f"governed_xfail_count={len(xfail_nodes)}",
-                  f"governed_xfail_node={xfail_nodes[0]}",
-                  "requested_deselections=" + "|".join(requested_deselections),
-                  f"matched_deselection_count={matched_deselections}",
-                  "matched_deselection_identities=not-deterministically-available",
-                  f"selected_node_fingerprint={selected_fingerprint}",
-                  f"passing_node_fingerprint={passed_fingerprint}",
-                  f"permission_registry_blob={registry_blob}",
-                  f"authorization_contract_test_blob={registry_test_blob}",
-                  f"total_coverage_percentage={actual_percentage:.8f}",
-                  "changed_production_line_coverage=PASS",
-                  "END_BOOKING_REPLAY_BROAD_EVIDENCE_V1",
-              ]
-              evidence_block = "\n".join(evidence_lines) + "\n"
-              evidence_path = os.environ.get("BOOKING_REPLAY_EVIDENCE_PATH", "")
-              if not evidence_path:
-                  raise SystemExit("booking replay evidence path is unavailable")
-              with open(evidence_path, "x", encoding="utf-8", newline="\n") as evidence_file:
-                  evidence_file.write(evidence_block)
-                  evidence_file.flush()
-                  os.fsync(evidence_file.fileno())
-              with open(evidence_path, encoding="utf-8", newline="") as evidence_file:
-                  retained_evidence = evidence_file.read()
-              if retained_evidence != evidence_block:
-                  raise SystemExit("booking replay evidence file verification failed")
+              reviewed_evidence = {
+                  "collected": 1002,
+                  "selected": 1000,
+                  "passed": 999,
+                  "failed": 0,
+                  "errors": 0,
+                  "governed_xfail_count": 1,
+                  "governed_xfail_node": (
+                      "tests/test_services.py::"
+                      "test_cash_commission_is_not_lost_on_repeated_wallet_refresh"
+                  ),
+                  "requested_deselections": expected_deselection_order,
+                  "matched_deselection_count": 2,
+                  "selected_node_fingerprint": (
+                      "fa64e73582a82352c9db482d29d0f77851aa8366f296be8c62b0741320e8c64f"
+                  ),
+                  "passing_node_fingerprint": (
+                      "adbf637c499af28754b2229a4216b011e14ec4091029f834fe79009742ac0aeb"
+                  ),
+                  "permission_registry_blob": "8632e8b9df1a626901731c9c1905640f648788d5",
+                  "authorization_contract_test_blob": (
+                      "2d42f8e1c5ec3a167e6302acb6573bd5c4f8bf03"
+                  ),
+                  "total_coverage_percentage": "79.51722932",
+                  "changed_production_line_coverage": "PASS",
+              }
+              actual_evidence = {
+                  "collected": len(case_nodes) + matched_deselections,
+                  "selected": len(case_nodes),
+                  "passed": len(passed_nodes),
+                  "failed": actual_inventory["failed"],
+                  "errors": actual_inventory["errors"],
+                  "governed_xfail_count": len(xfail_nodes),
+                  "governed_xfail_node": xfail_nodes[0] if len(xfail_nodes) == 1 else "",
+                  "requested_deselections": actual_deselection_order,
+                  "matched_deselection_count": matched_deselections,
+                  "selected_node_fingerprint": selected_fingerprint,
+                  "passing_node_fingerprint": passed_fingerprint,
+                  "permission_registry_blob": registry_blob,
+                  "authorization_contract_test_blob": registry_test_blob,
+                  "total_coverage_percentage": actual_totals[2],
+                  "changed_production_line_coverage": "PASS",
+              }
+              if actual_evidence != reviewed_evidence:
+                  raise SystemExit(
+                      "Booking replay-equivalence broad evidence drift: "
+                      f"{actual_evidence!r}"
+                  )
+              if actual_inventory["skipped"] != 0 or actual_inventory["xfailed"] != 1:
+                  raise SystemExit("Booking replay-equivalence skip or xfail drift")
+              print("Booking replay-equivalence exact broad evidence: PASS")
           PY
-
-      - name: Upload Booking replay-equivalence broad evidence
-        if: steps.evidence_contract.outputs.mode == 'booking-complete-replay-equivalence'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: booking-replay-broad-evidence-${{ github.event_name }}-${{ github.event.pull_request.head.sha || github.sha }}
-          path: ${{ runner.temp }}/booking-replay-broad-evidence-v1.txt
-          if-no-files-found: error
-          retention-days: 1
-          compression-level: 0
-
-      - name: Await CTO admission of Booking replay-equivalence evidence
-        if: steps.evidence_contract.outputs.mode == 'booking-complete-replay-equivalence'
-        shell: bash
-        run: |
-          echo "booking replay-equivalence broad evidence awaiting CTO admission" >&2
-          exit 1
 
       - name: Verify exact Batch 2 test and coverage contract
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'batch2'
