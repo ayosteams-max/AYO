@@ -1,4 +1,5 @@
 import hashlib
+import hmac
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -101,6 +102,59 @@ class BookingApplication:
             )
         except (RuntimeError, TimeoutError) as error:
             raise BookingConflict("temporarily_unavailable") from error
+
+    def _resolve_canonical_replay(
+        self,
+        command: ConfirmBookingCommand,
+        *,
+        subject: AuthorizationSubject,
+        confirmation: BookingConfirmation,
+        key_hash: str,
+        at: datetime,
+    ) -> tuple[BookingConfirmation, RideRequest]:
+        with self._composition.unit_of_work() as unit:
+            preview = unit.booking.get_preview(confirmation.evidence_id, lock=True)
+        try:
+            ride = self._ride_requests.get_owned(
+                subject=subject, request_id=confirmation.ride_request_id
+            )
+        except RideRequestAccessDenied as error:
+            raise BookingConflict("idempotency_conflict") from error
+        session_hash = _digest(command.booking_session)
+        preview_evidence_hash = (
+            preview.evidence_hash if preview is not None else "0" * 64
+        )
+        preview_session_hash = (
+            preview.booking_session_hash if preview is not None else "0" * 64
+        )
+        hashes_match = all(
+            (
+                hmac.compare_digest(confirmation.idempotency_key_hash, key_hash),
+                hmac.compare_digest(confirmation.evidence_hash, command.evidence_hash),
+                hmac.compare_digest(preview_evidence_hash, command.evidence_hash),
+                hmac.compare_digest(preview_session_hash, session_hash),
+            )
+        )
+        canonical_match = all(
+            (
+                confirmation.rider_identity_id == subject.identity_id,
+                ride.rider_identity_id == subject.identity_id,
+                confirmation.evidence_id == command.evidence_id,
+                preview is not None,
+                preview is not None and preview.evidence_id == command.evidence_id,
+                preview is not None
+                and preview.rider_identity_id in {None, subject.identity_id},
+                confirmation.quote_id == command.quote_id,
+                preview is not None and preview.quote.quote_id == command.quote_id,
+                ride.client_request_id == command.client_request_id,
+                ride.consent_policy_version == command.consent_policy_version,
+                hashes_match,
+            )
+        )
+        if not canonical_match:
+            raise BookingConflict("idempotency_conflict")
+        self._start_dispatch(confirmation, ride, at=at)
+        return confirmation, ride
 
     def search_places(
         self, *, query: str, locale: str, limit: int, at: datetime
@@ -246,20 +300,24 @@ class BookingApplication:
         at = at.astimezone(UTC)
         key_hash = _digest(command.idempotency_key)
         with self._composition.unit_of_work() as unit:
-            preview = unit.booking.get_preview(command.evidence_id, lock=True)
-            existing = unit.booking.get_confirmation_for_evidence(command.evidence_id)
-        if existing is not None:
-            if (
-                existing.rider_identity_id != subject.identity_id
-                or existing.idempotency_key_hash != key_hash
-                or existing.evidence_hash != command.evidence_hash
-            ):
-                raise BookingConflict("idempotency_conflict")
-            ride = self._ride_requests.get_owned(
-                subject=subject, request_id=existing.ride_request_id
+            existing_for_key = unit.booking.get_confirmation_for_idempotency_key_hash(
+                rider_identity_id=subject.identity_id,
+                idempotency_key_hash=key_hash,
             )
-            self._start_dispatch(existing, ride, at=at)
-            return existing, ride
+            existing_for_evidence = unit.booking.get_confirmation_for_evidence(
+                command.evidence_id
+            )
+            preview = unit.booking.get_preview(command.evidence_id, lock=True)
+        if existing_for_key is not None:
+            return self._resolve_canonical_replay(
+                command,
+                subject=subject,
+                confirmation=existing_for_key,
+                key_hash=key_hash,
+                at=at,
+            )
+        if existing_for_evidence is not None:
+            raise BookingConflict("idempotency_conflict")
         if preview is None:
             raise BookingConflict("route_evidence_not_found")
         if preview.booking_session_hash != _digest(command.booking_session):
@@ -318,8 +376,13 @@ class BookingApplication:
         )
         with self._composition.unit_of_work() as unit:
             stored = unit.booking.add_confirmation(confirmation)
-        self._start_dispatch(stored, ride, at=at)
-        return stored, ride
+        return self._resolve_canonical_replay(
+            command,
+            subject=subject,
+            confirmation=stored,
+            key_hash=key_hash,
+            at=at,
+        )
 
     def recover_confirmation(
         self,

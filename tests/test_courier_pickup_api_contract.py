@@ -24,6 +24,7 @@ from BACKEND.main import (
     CustodyPlatformActivation,
     create_app,
 )
+from BACKEND.routes import courier_pickup as courier_pickup_routes
 from BACKEND.routes.courier_pickup import (
     MERCHANT_PRESENTATION_ACTION_BY_STATE,
     CourierPickupCourierCommandResult,
@@ -440,16 +441,23 @@ def test_reviewed_conflicts_have_explicit_minimal_public_mappings(
     assert captured.value.detail == {"code": public}
 
 
-def test_unknown_conflict_is_sanitized_and_safely_logged(caplog) -> None:
+def test_unknown_conflict_is_sanitized_and_safely_logged(monkeypatch) -> None:
     sensitive = "unknown_actor_merchant_hash_table_trace"
+    calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+    def capture_error(*args: object, **kwargs: object) -> None:
+        calls.append((args, kwargs))
 
     def fail() -> None:
         raise CourierPickupConflict(sensitive)
 
-    with caplog.at_level("ERROR"), pytest.raises(HTTPException) as captured:
+    monkeypatch.setattr(courier_pickup_routes.logger, "error", capture_error)
+    with pytest.raises(HTTPException) as captured:
         _call(fail)
+
     assert captured.value.status_code == 500
     assert captured.value.detail == {"code": "request_rejected"}
-    assert "unclassified courier pickup conflict" in caplog.text
-    assert sensitive not in caplog.text
+    assert calls == [(("unclassified courier pickup conflict",), {})]
+    assert all(sensitive not in repr(args) for args, _ in calls)
+    assert all(sensitive not in repr(kwargs) for _, kwargs in calls)
     assert sensitive not in str(captured.value.detail)

@@ -289,6 +289,9 @@ jobs:
             ab795c7d2e200dac15215770fefae48b515fca68)
               mode=immediate-standard-public-contract
               ;;
+            382a299236787d20a567cc5934a8f82d0147e7ad)
+              mode=booking-complete-replay-equivalence
+              ;;
             *)
               echo "Unreviewed tests tree: $tests_tree" >&2
               exit 1
@@ -652,6 +655,102 @@ jobs:
           echo "Trusted comparison mode: $mode"
           echo "Trusted comparison base SHA: $comparison_sha"
 
+      - name: Bind exact Booking replay-equivalence candidate identity
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'booking-complete-replay-equivalence'
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_BEFORE: ${{ github.event.before || '' }}
+          EVENT_HEAD_SHA: ${{ github.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || '' }}
+          TRUSTED_COMPARISON_BASE_SHA: ${{ steps.trusted_comparison_base.outputs.sha }}
+        run: |
+          set -euo pipefail
+          zero=0000000000000000000000000000000000000000
+          expected_base=b79c7ae45f644dd1198f0b526bbda38bc2d11e23
+          expected_tests=382a299236787d20a567cc5934a8f82d0147e7ad
+          case "$EVENT_NAME" in
+            pull_request)
+              candidate="$PR_HEAD_SHA"
+              if [[ "$TRUSTED_COMPARISON_BASE_SHA" != "$expected_base" ]]; then
+                echo "Booking replay-equivalence PR base identity drift" >&2
+                exit 1
+              fi
+              ;;
+            push)
+              candidate="$EVENT_HEAD_SHA"
+              if [[ ! "$EVENT_BEFORE" =~ ^[0-9a-f]{40}$ \
+                || "$EVENT_BEFORE" == "$zero" ]]; then
+                echo "Booking replay-equivalence push predecessor is absent, malformed, or all-zero" >&2
+                exit 1
+              fi
+              git cat-file -e "$EVENT_BEFORE^{commit}" 2>/dev/null || {
+                echo "Booking replay-equivalence push predecessor is unavailable" >&2
+                exit 1
+              }
+              if [[ "$TRUSTED_COMPARISON_BASE_SHA" != "$EVENT_BEFORE" ]]; then
+                echo "Booking replay-equivalence push predecessor identity drift" >&2
+                exit 1
+              fi
+              git merge-base --is-ancestor "$EVENT_BEFORE" "$candidate" || {
+                echo "Booking replay-equivalence push predecessor is not an ancestor" >&2
+                exit 1
+              }
+              ;;
+            workflow_dispatch)
+              candidate="$EVENT_HEAD_SHA"
+              if [[ "$TRUSTED_COMPARISON_BASE_SHA" != "$expected_base" ]]; then
+                echo "Booking replay-equivalence dispatch base identity drift" >&2
+                exit 1
+              fi
+              ;;
+            *)
+              echo "Unsupported Booking replay-equivalence event" >&2
+              exit 1
+              ;;
+          esac
+          if [[ ! "$candidate" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Booking replay-equivalence candidate identity is absent or malformed" >&2
+            exit 1
+          fi
+          git cat-file -e "$candidate^{commit}" 2>/dev/null || {
+            echo "Booking replay-equivalence candidate commit is unavailable" >&2
+            exit 1
+          }
+          git cat-file -e "$expected_base^{commit}" 2>/dev/null || {
+            echo "Booking replay-equivalence governed base is unavailable" >&2
+            exit 1
+          }
+          git merge-base --is-ancestor "$expected_base" "$candidate" || {
+            echo "Booking replay-equivalence candidate does not descend from its base" >&2
+            exit 1
+          }
+          mapfile -t changed < <(git diff --name-only "$expected_base" "$candidate")
+          expected=(
+            .github/workflows/ci.yml
+            BACKEND/booking/application.py
+            BACKEND/persistence/booking_repository.py
+            tests/integration/test_dispatch_handoff_localization.py
+            tests/test_booking_contract.py
+            tests/test_courier_pickup_api_contract.py
+          )
+          if [[ "${changed[*]}" != "${expected[*]}" ]]; then
+            printf 'Booking replay-equivalence manifest drift: %s\n' "${changed[*]}" >&2
+            exit 1
+          fi
+          if [[ "$(git rev-parse "${candidate}:tests")" != "$expected_tests" ]]; then
+            echo "Booking replay-equivalence tests tree drift" >&2
+            exit 1
+          fi
+          for path in database/migrations BACKEND/persistence/tables.py \
+            pyproject.toml uv.lock .secrets.baseline AYO-Mobile; do
+            if [[ "$(git rev-parse "${expected_base}:$path")" \
+              != "$(git rev-parse "${candidate}:$path")" ]]; then
+              echo "Booking replay-equivalence immutable boundary drift: $path" >&2
+              exit 1
+            fi
+          done
+          echo "Booking replay-equivalence exact candidate identity: PASS"
+
       - name: Bind tested Courier Pickup tree to trusted authoritative base
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'courier-pickup-idempotency-v1'
         id: courier_pickup_v1_content
@@ -813,8 +912,9 @@ jobs:
           PY
 
       - name: Test all admitted non-PostgreSQL behavior with coverage
-        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'pre-batch2'
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && (steps.evidence_contract.outputs.mode == 'pre-batch2' || steps.evidence_contract.outputs.mode == 'booking-complete-replay-equivalence')
         env:
+          EVIDENCE_MODE: ${{ steps.evidence_contract.outputs.mode }}
           TRUSTED_COMPARISON_BASE_SHA: ${{ steps.trusted_comparison_base.outputs.sha }}
         run: |
           set +e
@@ -838,6 +938,7 @@ jobs:
           import hashlib
           import json
           import os
+          import re
           import subprocess
           import xml.etree.ElementTree as ET
 
@@ -849,6 +950,12 @@ jobs:
               "tests/test_ride_flow.py::test_complete_current_ride_happy_path",
               "tests/test_ride_flow.py::test_invalid_transition_remains_rejected",
           }
+          expected_deselection_order = (
+              "tests/test_app.py::test_openapi_preserves_current_route_inventory",
+              "tests/test_migration_foundation.py::test_migration_history_has_one_expected_head",
+              "tests/test_ride_flow.py::test_complete_current_ride_happy_path",
+              "tests/test_ride_flow.py::test_invalid_transition_remains_rejected",
+          )
           expected_zero_coverage = {
               "BACKEND/active_ride/streaming.py",
               "BACKEND/active_ride/verification.py",
@@ -958,6 +1065,8 @@ jobs:
           expected_xfailed_nodes = {
               "tests/test_services.py::test_cash_commission_is_not_lost_on_repeated_wallet_refresh"
           }
+          mode = os.environ["EVIDENCE_MODE"]
+          governed_replay_evidence = mode == "booking-complete-replay-equivalence"
           new_registry_node = (
               "tests/test_authorization_contracts.py::"
               "test_permission_registry_contains_exact_reconciled_production_inventory"
@@ -995,7 +1104,7 @@ jobs:
               },
           }
           content_contract = content_contracts.get((registry_blob, registry_test_blob))
-          if content_contract is None:
+          if not governed_replay_evidence and content_contract is None:
               raise SystemExit(
                   "governed permission-registry/test content pair drift: "
                   f"registry={registry_blob} test={registry_test_blob}"
@@ -1006,12 +1115,18 @@ jobs:
           selected_fingerprint = hashlib.sha256(
               "\n".join(sorted(case_nodes)).encode()
           ).hexdigest()
-          if passed_fingerprint != content_contract["passed_fingerprint"]:
+          if (
+              not governed_replay_evidence
+              and passed_fingerprint != content_contract["passed_fingerprint"]
+          ):
               raise SystemExit(
                   "governed passing-node inventory drift: "
                   f"count={len(passed_nodes)} fingerprint={passed_fingerprint}"
               )
-          if selected_fingerprint != content_contract["selected_fingerprint"]:
+          if (
+              not governed_replay_evidence
+              and selected_fingerprint != content_contract["selected_fingerprint"]
+          ):
               raise SystemExit(
                   "governed selected-node inventory drift: "
                   f"count={len(case_nodes)} fingerprint={selected_fingerprint}"
@@ -1019,7 +1134,10 @@ jobs:
           if xfailed_nodes != expected_xfailed_nodes:
               raise SystemExit(f"governed xfail-node inventory drift: {sorted(xfailed_nodes)!r}")
           registry_node_count = case_nodes.count(new_registry_node)
-          if registry_node_count != content_contract["registry_node_count"]:
+          if (
+              not governed_replay_evidence
+              and registry_node_count != content_contract["registry_node_count"]
+          ):
               raise SystemExit(
                   "authorized permission-registry test count drift: "
                   f"{registry_node_count}"
@@ -1033,18 +1151,21 @@ jobs:
               "skipped": len(skipped),
               "xfailed": len(xfailed),
           }
-          expected_inventory = {
-              "passed": content_contract["passed"],
-              "failed": 0,
-              "errors": 0,
-              "skipped": 0,
-              "xfailed": 1,
-          }
-          if actual_inventory != expected_inventory:
-              raise SystemExit(f"Batch 1 test inventory drift: {actual_inventory!r}")
+          if not governed_replay_evidence:
+              expected_inventory = {
+                  "passed": content_contract["passed"],
+                  "failed": 0,
+                  "errors": 0,
+                  "skipped": 0,
+                  "xfailed": 1,
+              }
+              if actual_inventory != expected_inventory:
+                  raise SystemExit(f"Batch 1 test inventory drift: {actual_inventory!r}")
 
           log = open("batch1-coverage.log", encoding="utf-8").read()
-          if "4 deselected" not in log:
+          deselected_matches = re.findall(r"(\d+) deselected", log)
+          matched_deselections = int(deselected_matches[-1]) if deselected_matches else 0
+          if not governed_replay_evidence and "4 deselected" not in log:
               raise SystemExit("Batch 1 exact four-test deselection count disappeared")
           coverage = json.load(open("batch1-coverage.json", encoding="utf-8"))
           totals = coverage["totals"]
@@ -1108,9 +1229,40 @@ jobs:
               if uncollected != expected_uncollected | expected_preexisting_uncollected:
                   raise SystemExit(f"historical uncollected-file inventory drift: {sorted(uncollected)!r}")
           else:
-              compare_sha = os.environ.get("TRUSTED_COMPARISON_BASE_SHA", "")
+              compare_sha = (
+                  "b79c7ae45f644dd1198f0b526bbda38bc2d11e23"
+                  if governed_replay_evidence
+                  else os.environ.get("TRUSTED_COMPARISON_BASE_SHA", "")
+              )
               if not compare_sha or set(compare_sha) == {"0"}:
                   raise SystemExit("changed BACKEND tree lacks an exact coverage comparison base")
+              if governed_replay_evidence:
+                  subprocess.run(
+                      ["git", "cat-file", "-e", f"{compare_sha}^{{commit}}"],
+                      check=True,
+                  )
+                  if subprocess.run(
+                      ["git", "merge-base", "--is-ancestor", compare_sha, "HEAD"]
+                  ).returncode:
+                      raise SystemExit("coverage comparison base is not an ancestor")
+                  changed_backend_paths = set(
+                      subprocess.run(
+                          [
+                              "git", "diff", "--name-only", compare_sha, "HEAD",
+                              "--", "BACKEND",
+                          ],
+                          check=True,
+                          capture_output=True,
+                          text=True,
+                      ).stdout.splitlines()
+                  )
+                  if not {
+                      "BACKEND/booking/application.py",
+                      "BACKEND/persistence/booking_repository.py",
+                  }.issubset(changed_backend_paths):
+                      raise SystemExit(
+                          "booking replay governed production diff is empty or incomplete"
+                      )
               changed = subprocess.run(
                   ["git", "diff", "--unified=0", compare_sha, "HEAD", "--", "BACKEND"],
                   check=True, capture_output=True, text=True,
@@ -1135,15 +1287,21 @@ jobs:
                       "modified production statements lack coverage: "
                       + ", ".join(uncovered_changed)
                   )
-          actual_deselections = set(
+          actual_deselection_order = tuple(
               open("batch1-deselections.txt", encoding="utf-8").read().splitlines()
           )
+          actual_deselections = set(actual_deselection_order)
           if actual_deselections != expected_deselections:
               raise SystemExit(f"Batch 1 governed deselection drift: {sorted(actual_deselections)!r}")
 
           print("Batch 1 tested SHA:", tested_sha)
           print("Batch 1 BACKEND tree:", backend_tree)
-          print("Batch 1 test inventory:", actual_inventory, "deselected=4")
+          deselection_summary = (
+              f"deselected={matched_deselections}"
+              if governed_replay_evidence
+              else "deselected=4"
+          )
+          print("Batch 1 test inventory:", actual_inventory, deselection_summary)
           print("Governed passing-node fingerprint:", passed_fingerprint)
           print("Governed selected-node fingerprint:", selected_fingerprint)
           print("Governed registry/test blobs:", registry_blob, registry_test_blob)
@@ -1155,6 +1313,59 @@ jobs:
           print("Certified historical coverage baseline:", f"{baseline:.8f}%")
           print("Coverage regression floor: PASS")
           print("Coverage improvement target: 70%")
+          if governed_replay_evidence:
+              xfail_nodes = sorted(xfailed_nodes)
+              reviewed_evidence = {
+                  "collected": 1002,
+                  "selected": 1000,
+                  "passed": 999,
+                  "failed": 0,
+                  "errors": 0,
+                  "governed_xfail_count": 1,
+                  "governed_xfail_node": (
+                      "tests/test_services.py::"
+                      "test_cash_commission_is_not_lost_on_repeated_wallet_refresh"
+                  ),
+                  "requested_deselections": expected_deselection_order,
+                  "matched_deselection_count": 2,
+                  "selected_node_fingerprint": (
+                      "fa64e73582a82352c9db482d29d0f77851aa8366f296be8c62b0741320e8c64f"
+                  ),
+                  "passing_node_fingerprint": (
+                      "adbf637c499af28754b2229a4216b011e14ec4091029f834fe79009742ac0aeb"
+                  ),
+                  "permission_registry_blob": "8632e8b9df1a626901731c9c1905640f648788d5",
+                  "authorization_contract_test_blob": (
+                      "2d42f8e1c5ec3a167e6302acb6573bd5c4f8bf03"
+                  ),
+                  "total_coverage_percentage": "79.51722932",
+                  "changed_production_line_coverage": "PASS",
+              }
+              actual_evidence = {
+                  "collected": len(case_nodes) + matched_deselections,
+                  "selected": len(case_nodes),
+                  "passed": len(passed_nodes),
+                  "failed": actual_inventory["failed"],
+                  "errors": actual_inventory["errors"],
+                  "governed_xfail_count": len(xfail_nodes),
+                  "governed_xfail_node": xfail_nodes[0] if len(xfail_nodes) == 1 else "",
+                  "requested_deselections": actual_deselection_order,
+                  "matched_deselection_count": matched_deselections,
+                  "selected_node_fingerprint": selected_fingerprint,
+                  "passing_node_fingerprint": passed_fingerprint,
+                  "permission_registry_blob": registry_blob,
+                  "authorization_contract_test_blob": registry_test_blob,
+                  "total_coverage_percentage": actual_totals[2],
+                  "changed_production_line_coverage": "PASS",
+              }
+              if actual_evidence != reviewed_evidence:
+                  raise SystemExit(
+                      "Booking replay-equivalence broad evidence drift: "
+                      f"{actual_evidence!r}"
+                  )
+              if actual_inventory["skipped"] != 0 or actual_inventory["xfailed"] != 1:
+                  raise SystemExit("Booking replay-equivalence skip or xfail drift")
+              print("Booking replay-equivalence exact broad evidence: PASS")
           PY
 
       - name: Verify exact Batch 2 test and coverage contract
@@ -2038,6 +2249,8 @@ jobs:
             source_sha=65ff78430315c2d10bc40a0f3edafced6cec3ad2
           elif [[ "$EVIDENCE_MODE" == "immediate-standard-public-contract" ]]; then
             source_sha=10d31018783bb11f05a8dc3ed789ac3e3d92970e
+          elif [[ "$EVIDENCE_MODE" == "booking-complete-replay-equivalence" ]]; then
+            source_sha=b79c7ae45f644dd1198f0b526bbda38bc2d11e23
           fi
           git archive "$source_sha" | tar -x -C "$source_dir"
           UV_PROJECT_ENVIRONMENT="$mypy_environment" uv sync --locked --all-groups
@@ -2272,12 +2485,18 @@ jobs:
               print("Authorization-ordering strict location-insensitive fingerprint:", candidate_semantic_fp)
               print("Authorization-ordering strict source-only semantic diagnostics: []")
               print("Authorization-ordering strict candidate-only semantic diagnostics: []")
-          elif mode == "immediate-standard-public-contract":
+          elif mode in {
+              "immediate-standard-public-contract",
+              "booking-complete-replay-equivalence",
+          }:
               compare("strict backend", source_strict, candidate_strict)
           else:
               compare("strict backend", source_strict, candidate_strict)
           strict_files = {item.path for item in candidate_strict}
-          if mode == "immediate-standard-public-contract":
+          if mode in {
+              "immediate-standard-public-contract",
+              "booking-complete-replay-equivalence",
+          }:
               if len(candidate_strict) != 383 or len(strict_files) != 54:
                   raise SystemExit("Immediate Standard strict MyPy count drift")
               expected_strict_codes = {
@@ -2309,6 +2528,7 @@ jobs:
               "courier-pickup-idempotency-v1",
               "courier-pickup-authorization-ordering",
               "immediate-standard-public-contract",
+              "booking-complete-replay-equivalence",
           }:
               strict_fingerprint = fingerprint(candidate_strict)
               if strict_fingerprint != "6257a24b9c057c822e45a041519a849c471f6c48":
@@ -2343,7 +2563,10 @@ jobs:
               if int(os.environ["CANDIDATE_CONFIGURED_STATUS"]) != 0:
                   raise SystemExit("Configured MyPy did not exit successfully")
               print(f"Configured MyPy: clean across {expected_files} files")
-          elif mode == "immediate-standard-public-contract":
+          elif mode in {
+              "immediate-standard-public-contract",
+              "booking-complete-replay-equivalence",
+          }:
               compare("configured", source_configured, candidate_configured)
               configured_files = {item.path for item in candidate_configured}
               if len(candidate_configured) != 12 or configured_files != {
@@ -2354,6 +2577,12 @@ jobs:
                   "arg-type": 12
               }:
                   raise SystemExit("configured MyPy governed error-code drift")
+              if (
+                  mode == "booking-complete-replay-equivalence"
+                  and fingerprint(candidate_configured)
+                  != "b50c53ef9a3bb574f36a8f6b489ec2b0c5285d08"
+              ):
+                  raise SystemExit("configured MyPy governed fingerprint drift")
           elif mode == "pre-batch2":
               compare(
                   "configured", source_configured, candidate_configured,
@@ -2587,7 +2816,10 @@ jobs:
           }:
               exact("exact reviewed inventory", actual, reviewed)
               selected = "exact 34-finding inventory"
-          elif mode == "immediate-standard-public-contract":
+          elif mode in {
+              "immediate-standard-public-contract",
+              "booking-complete-replay-equivalence",
+          }:
               immediate_standard_reviewed = sorted(
                   [*reviewed, *IMMEDIATE_STANDARD_REVIEWED_ADDITIONS]
               )
@@ -2944,7 +3176,7 @@ jobs:
           if workflow.count(resolver_id) != 1:
               raise SystemExit("trusted comparison base resolver is not unique")
           if (
-              workflow.count(authoritative_mapping) != 2
+              workflow.count(authoritative_mapping) != 3
               or workflow.count(predecessor_mapping) != 2
           ):
               raise SystemExit("comparison-dependent gates do not share one resolver output")
