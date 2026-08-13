@@ -289,7 +289,7 @@ jobs:
             ab795c7d2e200dac15215770fefae48b515fca68)
               mode=immediate-standard-public-contract
               ;;
-            4f7ae505be15b659a21424f005bb5ca5749115ea)
+            382a299236787d20a567cc5934a8f82d0147e7ad)
               mode=booking-complete-replay-equivalence
               ;;
             *)
@@ -667,7 +667,7 @@ jobs:
           set -euo pipefail
           zero=0000000000000000000000000000000000000000
           expected_base=b79c7ae45f644dd1198f0b526bbda38bc2d11e23
-          expected_tests=4f7ae505be15b659a21424f005bb5ca5749115ea
+          expected_tests=382a299236787d20a567cc5934a8f82d0147e7ad
           case "$EVENT_NAME" in
             pull_request)
               candidate="$PR_HEAD_SHA"
@@ -1224,9 +1224,40 @@ jobs:
               if uncollected != expected_uncollected | expected_preexisting_uncollected:
                   raise SystemExit(f"historical uncollected-file inventory drift: {sorted(uncollected)!r}")
           else:
-              compare_sha = os.environ.get("TRUSTED_COMPARISON_BASE_SHA", "")
+              compare_sha = (
+                  "b79c7ae45f644dd1198f0b526bbda38bc2d11e23"
+                  if capture_replay_evidence
+                  else os.environ.get("TRUSTED_COMPARISON_BASE_SHA", "")
+              )
               if not compare_sha or set(compare_sha) == {"0"}:
                   raise SystemExit("changed BACKEND tree lacks an exact coverage comparison base")
+              if capture_replay_evidence:
+                  subprocess.run(
+                      ["git", "cat-file", "-e", f"{compare_sha}^{{commit}}"],
+                      check=True,
+                  )
+                  if subprocess.run(
+                      ["git", "merge-base", "--is-ancestor", compare_sha, "HEAD"]
+                  ).returncode:
+                      raise SystemExit("coverage comparison base is not an ancestor")
+                  changed_backend_paths = set(
+                      subprocess.run(
+                          [
+                              "git", "diff", "--name-only", compare_sha, "HEAD",
+                              "--", "BACKEND",
+                          ],
+                          check=True,
+                          capture_output=True,
+                          text=True,
+                      ).stdout.splitlines()
+                  )
+                  if not {
+                      "BACKEND/booking/application.py",
+                      "BACKEND/persistence/booking_repository.py",
+                  }.issubset(changed_backend_paths):
+                      raise SystemExit(
+                          "booking replay governed production diff is empty or incomplete"
+                      )
               changed = subprocess.run(
                   ["git", "diff", "--unified=0", compare_sha, "HEAD", "--", "BACKEND"],
                   check=True, capture_output=True, text=True,
