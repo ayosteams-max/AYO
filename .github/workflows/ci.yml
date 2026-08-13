@@ -913,6 +913,7 @@ jobs:
       - name: Test all admitted non-PostgreSQL behavior with coverage
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && (steps.evidence_contract.outputs.mode == 'pre-batch2' || steps.evidence_contract.outputs.mode == 'booking-complete-replay-equivalence')
         env:
+          EVIDENCE_MODE: ${{ steps.evidence_contract.outputs.mode }}
           TRUSTED_COMPARISON_BASE_SHA: ${{ steps.trusted_comparison_base.outputs.sha }}
         run: |
           set +e
@@ -936,6 +937,7 @@ jobs:
           import hashlib
           import json
           import os
+          import re
           import subprocess
           import xml.etree.ElementTree as ET
 
@@ -1056,6 +1058,8 @@ jobs:
           expected_xfailed_nodes = {
               "tests/test_services.py::test_cash_commission_is_not_lost_on_repeated_wallet_refresh"
           }
+          mode = os.environ["EVIDENCE_MODE"]
+          capture_replay_evidence = mode == "booking-complete-replay-equivalence"
           new_registry_node = (
               "tests/test_authorization_contracts.py::"
               "test_permission_registry_contains_exact_reconciled_production_inventory"
@@ -1093,7 +1097,7 @@ jobs:
               },
           }
           content_contract = content_contracts.get((registry_blob, registry_test_blob))
-          if content_contract is None:
+          if not capture_replay_evidence and content_contract is None:
               raise SystemExit(
                   "governed permission-registry/test content pair drift: "
                   f"registry={registry_blob} test={registry_test_blob}"
@@ -1104,12 +1108,18 @@ jobs:
           selected_fingerprint = hashlib.sha256(
               "\n".join(sorted(case_nodes)).encode()
           ).hexdigest()
-          if passed_fingerprint != content_contract["passed_fingerprint"]:
+          if (
+              not capture_replay_evidence
+              and passed_fingerprint != content_contract["passed_fingerprint"]
+          ):
               raise SystemExit(
                   "governed passing-node inventory drift: "
                   f"count={len(passed_nodes)} fingerprint={passed_fingerprint}"
               )
-          if selected_fingerprint != content_contract["selected_fingerprint"]:
+          if (
+              not capture_replay_evidence
+              and selected_fingerprint != content_contract["selected_fingerprint"]
+          ):
               raise SystemExit(
                   "governed selected-node inventory drift: "
                   f"count={len(case_nodes)} fingerprint={selected_fingerprint}"
@@ -1117,7 +1127,10 @@ jobs:
           if xfailed_nodes != expected_xfailed_nodes:
               raise SystemExit(f"governed xfail-node inventory drift: {sorted(xfailed_nodes)!r}")
           registry_node_count = case_nodes.count(new_registry_node)
-          if registry_node_count != content_contract["registry_node_count"]:
+          if (
+              not capture_replay_evidence
+              and registry_node_count != content_contract["registry_node_count"]
+          ):
               raise SystemExit(
                   "authorized permission-registry test count drift: "
                   f"{registry_node_count}"
@@ -1131,18 +1144,21 @@ jobs:
               "skipped": len(skipped),
               "xfailed": len(xfailed),
           }
-          expected_inventory = {
-              "passed": content_contract["passed"],
-              "failed": 0,
-              "errors": 0,
-              "skipped": 0,
-              "xfailed": 1,
-          }
-          if actual_inventory != expected_inventory:
-              raise SystemExit(f"Batch 1 test inventory drift: {actual_inventory!r}")
+          if not capture_replay_evidence:
+              expected_inventory = {
+                  "passed": content_contract["passed"],
+                  "failed": 0,
+                  "errors": 0,
+                  "skipped": 0,
+                  "xfailed": 1,
+              }
+              if actual_inventory != expected_inventory:
+                  raise SystemExit(f"Batch 1 test inventory drift: {actual_inventory!r}")
 
           log = open("batch1-coverage.log", encoding="utf-8").read()
-          if "4 deselected" not in log:
+          deselected_matches = re.findall(r"(\d+) deselected", log)
+          matched_deselections = int(deselected_matches[-1]) if deselected_matches else 0
+          if not capture_replay_evidence and "4 deselected" not in log:
               raise SystemExit("Batch 1 exact four-test deselection count disappeared")
           coverage = json.load(open("batch1-coverage.json", encoding="utf-8"))
           totals = coverage["totals"]
@@ -1241,7 +1257,12 @@ jobs:
 
           print("Batch 1 tested SHA:", tested_sha)
           print("Batch 1 BACKEND tree:", backend_tree)
-          print("Batch 1 test inventory:", actual_inventory, "deselected=4")
+          deselection_summary = (
+              f"deselected={matched_deselections}"
+              if capture_replay_evidence
+              else "deselected=4"
+          )
+          print("Batch 1 test inventory:", actual_inventory, deselection_summary)
           print("Governed passing-node fingerprint:", passed_fingerprint)
           print("Governed selected-node fingerprint:", selected_fingerprint)
           print("Governed registry/test blobs:", registry_blob, registry_test_blob)
@@ -1253,6 +1274,23 @@ jobs:
           print("Certified historical coverage baseline:", f"{baseline:.8f}%")
           print("Coverage regression floor: PASS")
           print("Coverage improvement target: 70%")
+          if capture_replay_evidence:
+              print("Replay broad collected-node count:", len(case_nodes) + matched_deselections)
+              print("Replay broad selected-node count:", len(case_nodes))
+              print("Replay broad passed-node count:", len(passed_nodes))
+              print("Replay broad governed xfail count:", len(xfailed_nodes))
+              print("Replay broad governed xfail nodes:", sorted(xfailed_nodes))
+              print("Replay broad matched deselection count:", matched_deselections)
+              print("Replay broad requested deselection nodes:", sorted(actual_deselections))
+              print("Replay broad selected-node fingerprint:", selected_fingerprint)
+              print("Replay broad passing-node fingerprint:", passed_fingerprint)
+              print("Replay broad permission registry blob:", registry_blob)
+              print("Replay broad authorization-contract test blob:", registry_test_blob)
+              print("Replay broad total coverage percentage:", f"{actual_percentage:.8f}")
+              print("Replay broad changed-production-line coverage: PASS")
+              raise SystemExit(
+                  "booking replay-equivalence broad evidence awaiting CTO admission"
+              )
           PY
 
       - name: Verify exact Batch 2 test and coverage contract

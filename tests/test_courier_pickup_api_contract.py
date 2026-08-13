@@ -1,3 +1,4 @@
+import logging
 from types import SimpleNamespace
 from typing import cast
 from uuid import UUID, uuid4
@@ -37,6 +38,9 @@ from BACKEND.routes.courier_pickup import (
     _merchant_command_result,
     _merchant_status,
     create_courier_pickup_router,
+)
+from BACKEND.routes.courier_pickup import (
+    logger as courier_pickup_logger,
 )
 from tests.test_courier_pickup_increment1 import application, subject
 
@@ -440,16 +444,37 @@ def test_reviewed_conflicts_have_explicit_minimal_public_mappings(
     assert captured.value.detail == {"code": public}
 
 
-def test_unknown_conflict_is_sanitized_and_safely_logged(caplog) -> None:
+def test_unknown_conflict_is_sanitized_and_safely_logged() -> None:
     sensitive = "unknown_actor_merchant_hash_table_trace"
+    records: list[logging.LogRecord] = []
+
+    class CaptureHandler(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            records.append(record)
 
     def fail() -> None:
         raise CourierPickupConflict(sensitive)
 
-    with caplog.at_level("ERROR"), pytest.raises(HTTPException) as captured:
-        _call(fail)
+    handler = CaptureHandler()
+    original_handlers = list(courier_pickup_logger.handlers)
+    original_level = courier_pickup_logger.level
+    original_propagate = courier_pickup_logger.propagate
+    try:
+        courier_pickup_logger.handlers = [handler]
+        courier_pickup_logger.setLevel(logging.ERROR)
+        courier_pickup_logger.propagate = False
+        with pytest.raises(HTTPException) as captured:
+            _call(fail)
+    finally:
+        courier_pickup_logger.handlers = original_handlers
+        courier_pickup_logger.setLevel(original_level)
+        courier_pickup_logger.propagate = original_propagate
+
     assert captured.value.status_code == 500
     assert captured.value.detail == {"code": "request_rejected"}
-    assert "unclassified courier pickup conflict" in caplog.text
-    assert sensitive not in caplog.text
+    messages = [record.getMessage() for record in records]
+    assert "unclassified courier pickup conflict" in messages
+    assert all(sensitive not in message for message in messages)
+    assert all(sensitive not in repr(record.args) for record in records)
+    assert all(sensitive not in repr(record.__dict__) for record in records)
     assert sensitive not in str(captured.value.detail)
