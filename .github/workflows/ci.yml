@@ -914,6 +914,7 @@ jobs:
       - name: Test all admitted non-PostgreSQL behavior with coverage
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && (steps.evidence_contract.outputs.mode == 'pre-batch2' || steps.evidence_contract.outputs.mode == 'booking-complete-replay-equivalence')
         env:
+          BOOKING_REPLAY_EVIDENCE_PATH: ${{ runner.temp }}/booking-replay-broad-evidence-v1.txt
           EVIDENCE_MODE: ${{ steps.evidence_contract.outputs.mode }}
           TRUSTED_COMPARISON_BASE_SHA: ${{ steps.trusted_comparison_base.outputs.sha }}
         run: |
@@ -940,7 +941,6 @@ jobs:
           import os
           import re
           import subprocess
-          import sys
           import xml.etree.ElementTree as ET
 
           approved_tree = "5c4895867a7cbf7537158ba41fa7a5361d1ddf31"
@@ -1315,23 +1315,35 @@ jobs:
                   "END_BOOKING_REPLAY_BROAD_EVIDENCE_V1",
               ]
               evidence_block = "\n".join(evidence_lines) + "\n"
-              sys.stdout.write(evidence_block)
-              sys.stdout.flush()
-              summary_path = os.environ.get("GITHUB_STEP_SUMMARY", "")
-              if not summary_path:
-                  raise SystemExit("GitHub step summary path is unavailable")
-              with open(summary_path, "a", encoding="utf-8", newline="\n") as summary:
-                  summary.write("## Booking replay-equivalence broad evidence\n\n```text\n")
-                  summary.write(evidence_block)
-                  summary.write("```\n")
-                  summary.flush()
-                  os.fsync(summary.fileno())
-              sys.stderr.write(
-                  "booking replay-equivalence broad evidence awaiting CTO admission\n"
-              )
-              sys.stderr.flush()
-              raise SystemExit(1)
+              evidence_path = os.environ.get("BOOKING_REPLAY_EVIDENCE_PATH", "")
+              if not evidence_path:
+                  raise SystemExit("booking replay evidence path is unavailable")
+              with open(evidence_path, "x", encoding="utf-8", newline="\n") as evidence_file:
+                  evidence_file.write(evidence_block)
+                  evidence_file.flush()
+                  os.fsync(evidence_file.fileno())
+              with open(evidence_path, encoding="utf-8", newline="") as evidence_file:
+                  retained_evidence = evidence_file.read()
+              if retained_evidence != evidence_block:
+                  raise SystemExit("booking replay evidence file verification failed")
           PY
+
+      - name: Upload Booking replay-equivalence broad evidence
+        if: steps.evidence_contract.outputs.mode == 'booking-complete-replay-equivalence'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: booking-replay-broad-evidence-${{ github.event_name }}-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ${{ runner.temp }}/booking-replay-broad-evidence-v1.txt
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+      - name: Await CTO admission of Booking replay-equivalence evidence
+        if: steps.evidence_contract.outputs.mode == 'booking-complete-replay-equivalence'
+        shell: bash
+        run: |
+          echo "booking replay-equivalence broad evidence awaiting CTO admission" >&2
+          exit 1
 
       - name: Verify exact Batch 2 test and coverage contract
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'batch2'
