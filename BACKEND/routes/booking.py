@@ -3,7 +3,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Header, HTTPException, Query, Request, status
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StrictBool
 
 from BACKEND.authorization.contracts import AuthorizationSubject
 from BACKEND.authorization.enforcement import (
@@ -40,6 +40,14 @@ class RoutePreviewRequest(BaseModel):
     service_type: str = Field(pattern=r"^immediate_standard$")
 
 
+class ConsentMetadataResponse(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    required_version: str
+    document_id: str
+    content_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
+    acknowledgment_required: bool
+
+
 class RoutePreviewResponse(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
     evidence_id: UUID
@@ -61,6 +69,7 @@ class RoutePreviewResponse(BaseModel):
     surge_applied: bool
     expires_at: datetime
     attribution: str
+    consent: ConsentMetadataResponse
 
 
 class ConfirmBookingRequest(BaseModel):
@@ -72,7 +81,9 @@ class ConfirmBookingRequest(BaseModel):
         min_length=32, max_length=128, pattern=r"^[A-Za-z0-9_-]+$"
     )
     client_request_id: UUID
-    consent_policy_version: str = Field(pattern=r"^[a-z][a-z0-9_.-]{2,62}$")
+    consent_policy_version: str | None = None
+    consent_document_hash: str | None = None
+    consent_acknowledged: StrictBool | None = None
 
 
 class ConfirmBookingResponse(BaseModel):
@@ -107,6 +118,8 @@ def _public_error(error: Exception) -> HTTPException:
         "booking_validation_failed",
         "temporarily_unavailable",
         "pricing_unavailable",
+        "consent_policy_unavailable",
+        "consent_policy_changed",
     }
     public = code if code in allowed else "temporarily_unavailable"
     statuses = {
@@ -119,6 +132,7 @@ def _public_error(error: Exception) -> HTTPException:
         "invalid_result_limit": status.HTTP_422_UNPROCESSABLE_ENTITY,
         "temporarily_unavailable": status.HTTP_503_SERVICE_UNAVAILABLE,
         "pricing_unavailable": status.HTTP_503_SERVICE_UNAVAILABLE,
+        "consent_policy_unavailable": status.HTTP_503_SERVICE_UNAVAILABLE,
     }
     return HTTPException(
         statuses.get(public, status.HTTP_409_CONFLICT), {"code": public}
@@ -194,6 +208,9 @@ def create_booking_router(
             surge_applied=False,
             expires_at=item.quote.expires_at,
             attribution=item.route.attribution,
+            consent=ConsentMetadataResponse.model_validate(
+                item.consent.public_metadata() if item.consent is not None else {}
+            ),
         )
 
     @router.post(

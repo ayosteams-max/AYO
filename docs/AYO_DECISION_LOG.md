@@ -911,3 +911,11 @@ Supersedes / superseded by:
 - **Authority and failure:** Booking orchestrates; Pricing owns fare lineage; Dispatch owns offers/assignment; Active Ride owns lifecycle; Post Trip owns cash evidence/receipts; Ledger and accounting remain internal authorities. Missing, foreign or contradictory confirmation evidence fails closed. Complete pricing lineage is mandatory for the public response. Cash evidence never implies digital settlement or AYO ownership.
 - **Risks and evidence:** Cross-rider lookup, response loss, duplicate tap, changed replay, stale version, polling load, partial historical lineage and misleading cash wording are mapped to authorization, idempotency, bounded query, fail-closed response and focused contract/PostgreSQL tests. Mobile device persistence, low-end device/network certification, Amharic review, support operations, legacy-route retirement and controlled activation remain separate gates.
 - **Reference:** `docs/AYO_IMMEDIATE_STANDARD_PUBLIC_CONTRACT_WEAK_NETWORK_ARCHITECTURE.md`.
+
+### AP-074 — Server-authoritative Immediate Standard booking consent metadata
+
+- **Date:** 2026-08-13
+- **Status:** Founder/CEO and CTO authorized bounded implementation; PRE-PRODUCTION review candidate. No public policy content or production activation is authorized.
+- **Problem:** First confirmation accepted a client-supplied consent-policy version without proving it matched a policy declared and bound by the server at preview time.
+- **Decision:** An explicitly composed immutable server registry owns version, document identity, content hash, effective interval, required acknowledgment, and immediate-mandatory rotation. Preview binds the complete metadata into canonical evidence and returns only bounded metadata. Confirmation validates acknowledgment and the exact still-current binding before side effects. Empty, duplicate, ambiguous, invalid, legacy, altered, unknown, or rotated evidence fails closed. Tests may inject deterministic synthetic manifests; runtime defaults to no active public policy.
+- **Boundary:** No legal prose is invented or published. No public policy endpoint, schema, migration, mobile/provider capability, deployment, flag activation, or production policy is included. Legal and native-language review remain mandatory pre-activation gates. See `docs/AYO_BOOKING_CONSENT_AUTHORITY_ARCHITECTURE.md`.

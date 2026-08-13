@@ -116,3 +116,7 @@ Deferred to separately authorized missions: Rider/Driver screens and navigation,
 device-side command storage, production offline synchronization, device/network matrix
 testing, native Amharic review, Support operations UI, legacy-route retirement, controlled
 environment activation and every production policy/provider decision.
+
+# Consent binding clarification
+
+Booking recovery does not authorize the client to invent consent metadata. A new route preview binds the server-required consent version and document hash into canonical route evidence. First confirmation must acknowledge that exact binding while it remains the current mandatory policy, before any mutable continuation. Immediate policy rotation requires a new preview and deliberate acknowledgment; a recovery `404`, expiry, or rotation never authorizes a replacement booking. Legacy unbound previews cannot be upgraded by assumption. Canonical confirmed recovery remains rider-scoped and read-only.

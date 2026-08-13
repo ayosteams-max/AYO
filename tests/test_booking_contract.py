@@ -12,10 +12,16 @@ from pydantic import ValidationError
 from BACKEND.audit.models import ActorType
 from BACKEND.authorization.contracts import AuthorizationSubject
 from BACKEND.authorization.enforcement import AuthorizationContextMiddleware
-from BACKEND.booking.application import BookingApplication, ConfirmBookingCommand
+from BACKEND.booking.application import (
+    BookingApplication,
+    ConfirmBookingCommand,
+    PreviewRouteCommand,
+)
+from BACKEND.booking.consent import ImmutableBookingConsentRegistry
 from BACKEND.booking.models import (
     BookingConfirmation,
     BookingConflict,
+    BookingConsentMetadata,
     BookingQuote,
     ProviderRouteEvidence,
     RoutePreview,
@@ -33,8 +39,9 @@ from BACKEND.ride_request.models import (
     PickupDefinition,
     PickupSafetyStatus,
     RideRequestState,
+    RideServiceType,
 )
-from BACKEND.routes.booking import create_booking_router
+from BACKEND.routes.booking import ConfirmBookingRequest, create_booking_router
 
 
 class FixedResolver:
@@ -120,10 +127,33 @@ def preview() -> RoutePreview:
             breakdown=breakdown,
             expires_at=now + timedelta(minutes=5),
         ),
+        consent=consent_policy(now=now),
         evidence_hash="b" * 64,
         created_at=now,
         expires_at=now + timedelta(minutes=5),
     )
+
+
+def consent_policy(
+    *,
+    now: datetime | None = None,
+    version: str = "booking.consent.v1",
+    content_hash: str = "e" * 64,
+) -> BookingConsentMetadata:
+    effective = now or datetime.now(UTC)
+    return BookingConsentMetadata(
+        required_version=version,
+        document_id="booking.immediate-standard",
+        content_hash=content_hash,
+        effective_from=effective - timedelta(days=1),
+        effective_until=effective + timedelta(days=1),
+        acknowledgment_required=True,
+    )
+
+
+def consent_registry(item: RoutePreview) -> ImmutableBookingConsentRegistry:
+    assert item.consent is not None
+    return ImmutableBookingConsentRegistry((item.consent,))
 
 
 class FixedApplication:
@@ -173,8 +203,9 @@ class FixedApplication:
 
 
 class FakeUnit:
-    def __init__(self, booking):
+    def __init__(self, booking, ride_requests=None):
         self.booking = booking
+        self.ride_requests = ride_requests
 
     def __enter__(self):
         return self
@@ -184,11 +215,12 @@ class FakeUnit:
 
 
 class FakeComposition:
-    def __init__(self, booking):
+    def __init__(self, booking, ride_requests=None):
         self.booking = booking
+        self.ride_requests = ride_requests
 
     def unit_of_work(self):
-        return FakeUnit(self.booking)
+        return FakeUnit(self.booking, self.ride_requests)
 
 
 class FakeBookingRepository:
@@ -199,7 +231,11 @@ class FakeBookingRepository:
 
     def get_preview(self, evidence_id, lock=False):
         del lock
-        return self.item if evidence_id == self.item.evidence_id else None
+        return (
+            self.item
+            if self.item is not None and evidence_id == self.item.evidence_id
+            else None
+        )
 
     def get_confirmation_for_evidence(self, evidence_id):
         return self.confirmation if evidence_id == self.item.evidence_id else None
@@ -229,6 +265,10 @@ class FakeBookingRepository:
     def add_confirmation(self, item):
         self.add_confirmation_calls += 1
         self.confirmation = item
+        return item
+
+    def add_preview(self, item):
+        self.item = item
         return item
 
 
@@ -269,6 +309,43 @@ class FakePricingAuthority:
             self.lineage_hash,
         )
 
+    def quote(self, **kwargs):
+        at = kwargs["at"]
+        item = preview()
+        return item.quote.model_copy(update={"expires_at": at + timedelta(minutes=5)})
+
+
+class PreviewRideRequests:
+    def __init__(self, zone_id):
+        self.zone = SimpleNamespace(
+            zone_id=zone_id,
+            version="addis.v1",
+            supported_service_types={RideServiceType.IMMEDIATE_STANDARD},
+        )
+
+    def find_zone(self, **kwargs):
+        del kwargs
+        return self.zone
+
+
+class PreviewRoutes:
+    def __init__(self, item):
+        self.item = item
+
+    def route(self, **kwargs):
+        del kwargs
+        return self.item.route
+
+
+class FailingConsentAuthority:
+    def required_policy(self, *, at: datetime) -> BookingConsentMetadata:
+        del at
+        raise BookingConflict("private consent authority state")
+
+    def policy_for_version(self, version: str) -> BookingConsentMetadata | None:
+        del version
+        raise BookingConflict("private consent authority state")
+
 
 class CountingDispatch:
     def __init__(self):
@@ -288,6 +365,53 @@ class FlakyDispatch:
         self.calls += 1
         if self.calls == 1:
             raise TimeoutError("route_intelligence_timeout")
+
+
+def first_confirmation_scenario():
+    booking_session = "s" * 32
+    item = preview().model_copy(
+        update={
+            "booking_session_hash": hashlib.sha256(booking_session.encode()).hexdigest()
+        }
+    )
+    rider = AuthorizationSubject(
+        identity_id=uuid4(),
+        identity_type=IdentityType.RIDER,
+        actor_type=ActorType.RIDER,
+    )
+    client_request_id = uuid4()
+    ride = SimpleNamespace(
+        request_id=uuid4(),
+        rider_identity_id=rider.identity_id,
+        client_request_id=client_request_id,
+        consent_policy_version="booking.consent.v1",
+        state=RideRequestState.READY_FOR_DISPATCH,
+    )
+    repository = FakeBookingRepository(item)
+    rides = FakeRideRequests(ride)
+    pricing = FakePricingAuthority()
+    dispatch = CountingDispatch()
+    application = BookingApplication(
+        FakeComposition(repository),
+        SimpleNamespace(),
+        pricing,
+        rides,
+        item.quote.policy_id,
+        dispatch,
+        consent=consent_registry(item),
+    )
+    command = ConfirmBookingCommand(
+        evidence_id=item.evidence_id,
+        evidence_hash=item.evidence_hash,
+        quote_id=item.quote.quote_id,
+        booking_session=booking_session,
+        client_request_id=client_request_id,
+        idempotency_key="booking-confirm-consent",
+        consent_policy_version="booking.consent.v1",
+        consent_document_hash=item.consent.content_hash,
+        consent_acknowledged=True,
+    )
+    return application, command, rider, item, repository, rides, pricing, dispatch
 
 
 def client(subject):
@@ -320,6 +444,12 @@ def test_guest_preview_exposes_transparent_unknown_toll_without_zero():
     assert response.json()["toll_amount_minor"] is None
     assert response.json()["estimated_fare_minor"] == 4000
     assert response.json()["surge_applied"] is False
+    assert response.json()["consent"] == {
+        "required_version": "booking.consent.v1",
+        "document_id": "booking.immediate-standard",
+        "content_hash": "e" * 64,
+        "acknowledgment_required": True,
+    }
 
 
 def test_confirmation_requires_identity_and_authorization_permission():
@@ -484,6 +614,275 @@ def test_toll_model_never_allows_unknown_zero():
         ProviderRouteEvidence(**{**item.route.model_dump(), "toll_amount_minor": 0})
 
 
+def preview_application(*, policies=None):
+    item = preview()
+    repository = FakeBookingRepository(item=None)
+    authority = (
+        None if policies is None else ImmutableBookingConsentRegistry(tuple(policies))
+    )
+    application = BookingApplication(
+        FakeComposition(repository, PreviewRideRequests(item.service_zone_id)),
+        PreviewRoutes(item),
+        FakePricingAuthority(),
+        FakeRideRequests(SimpleNamespace()),
+        item.quote.policy_id,
+        consent=authority,
+    )
+    command = PreviewRouteCommand(
+        client_preview_id=uuid4(),
+        booking_session="s" * 32,
+        pickup=item.pickup,
+        destination=item.destination,
+    )
+    return application, command, repository
+
+
+def test_preview_returns_server_owned_consent_and_binds_evidence_hash():
+    now = datetime.now(UTC)
+    policy = consent_policy(now=now)
+    application, command, _ = preview_application(policies=(policy,))
+
+    first = application.preview(command, subject=None, at=now)
+    assert first.consent == policy
+
+    changed = consent_policy(now=now, content_hash="f" * 64)
+    other, other_command, _ = preview_application(policies=(changed,))
+    second = other.preview(
+        other_command.model_copy(
+            update={"client_preview_id": command.client_preview_id}
+        ),
+        subject=None,
+        at=now,
+    )
+    assert first.evidence_hash != second.evidence_hash
+
+
+def test_preview_policy_is_not_client_selectable_and_absence_fails_closed():
+    application, command, _ = preview_application(policies=None)
+    with pytest.raises(BookingConflict, match="consent_policy_unavailable"):
+        application.preview(command, subject=None, at=datetime.now(UTC))
+    with pytest.raises(ValidationError, match="extra"):
+        PreviewRouteCommand(
+            **command.model_dump(), consent_policy_version="invented.v1"
+        )
+
+
+def test_consent_registry_rejects_duplicate_ambiguous_and_invalid_intervals():
+    now = datetime.now(UTC)
+    policy = consent_policy(now=now)
+    with pytest.raises(BookingConflict, match="consent_policy_unavailable"):
+        ImmutableBookingConsentRegistry((policy, policy))
+    overlapping = consent_policy(now=now, version="booking.consent.v2")
+    with pytest.raises(BookingConflict, match="consent_policy_unavailable"):
+        ImmutableBookingConsentRegistry((policy, overlapping)).required_policy(at=now)
+    with pytest.raises(ValidationError, match="interval"):
+        BookingConsentMetadata(
+            **policy.model_dump(exclude={"effective_until"}),
+            effective_until=policy.effective_from,
+        )
+
+
+def test_consent_metadata_validates_optional_interval_and_authority_invariants():
+    now = datetime.now(UTC)
+    open_ended = BookingConsentMetadata(
+        required_version="booking.consent.open-ended.v1",
+        document_id="booking.immediate-standard",
+        content_hash="e" * 64,
+        effective_from=now,
+        effective_until=None,
+        acknowledgment_required=True,
+    )
+    assert open_ended.effective_until is None
+
+    for update in (
+        {"effective_from": now.replace(tzinfo=None)},
+        {"effective_until": (now + timedelta(days=1)).replace(tzinfo=None)},
+        {"acknowledgment_required": False},
+    ):
+        with pytest.raises(ValidationError):
+            BookingConsentMetadata.model_validate({**open_ended.model_dump(), **update})
+
+
+def test_confirmation_authority_failure_is_generic_and_side_effect_free():
+    application, command, rider, _, repository, rides, pricing, dispatch = (
+        first_confirmation_scenario()
+    )
+    application._consent = FailingConsentAuthority()
+
+    with pytest.raises(BookingConflict) as raised:
+        application.confirm(command, subject=rider, at=datetime.now(UTC))
+
+    assert str(raised.value) == "consent_policy_changed"
+    assert "private" not in str(raised.value)
+    assert "version" not in str(raised.value)
+    assert "hash" not in str(raised.value)
+    assert rides.create_calls == 0
+    assert pricing.calls == 0
+    assert repository.add_confirmation_calls == 0
+    assert dispatch.calls == 0
+
+
+@pytest.mark.parametrize(
+    "updates",
+    (
+        {"consent_acknowledged": None},
+        {"consent_acknowledged": False},
+        {"consent_policy_version": None},
+        {"consent_policy_version": "malformed value"},
+        {"consent_policy_version": "booking.consent.unknown"},
+        {"consent_document_hash": None},
+        {"consent_document_hash": "altered"},
+    ),
+)
+def test_consent_rejection_is_generic_and_side_effect_free(updates):
+    application, command, rider, _, repository, rides, pricing, dispatch = (
+        first_confirmation_scenario()
+    )
+    with pytest.raises(BookingConflict) as raised:
+        application.confirm(
+            command.model_copy(update=updates), subject=rider, at=datetime.now(UTC)
+        )
+    assert str(raised.value) == "consent_policy_changed"
+    assert rides.create_calls == 0
+    assert pricing.calls == 0
+    assert repository.add_confirmation_calls == 0
+    assert dispatch.calls == 0
+
+
+@pytest.mark.parametrize(
+    "value",
+    (1, 0, "true", "false", "yes", "on", [], {}, [True]),
+)
+def test_consent_acknowledgment_rejects_non_boolean_values_before_dispatch(value):
+    application, command, rider, _, repository, rides, pricing, dispatch = (
+        first_confirmation_scenario()
+    )
+    request_payload = {
+        **command.model_dump(exclude={"idempotency_key"}),
+        "consent_acknowledged": value,
+    }
+    with pytest.raises(ValidationError):
+        ConfirmBookingRequest.model_validate(request_payload)
+    with pytest.raises(ValidationError):
+        ConfirmBookingCommand.model_validate(
+            {**command.model_dump(), "consent_acknowledged": value}
+        )
+    assert rides.create_calls == 0
+    assert pricing.calls == 0
+    assert repository.add_confirmation_calls == 0
+    assert dispatch.calls == 0
+
+
+def test_consent_acknowledgment_public_schema_is_boolean_and_true_is_accepted():
+    schema = ConfirmBookingRequest.model_json_schema()
+    acknowledgment = schema["properties"]["consent_acknowledged"]
+    assert {item.get("type") for item in acknowledgment["anyOf"]} == {
+        "boolean",
+        "null",
+    }
+    application, command, rider, _, repository, rides, pricing, dispatch = (
+        first_confirmation_scenario()
+    )
+    parsed = ConfirmBookingRequest.model_validate(
+        command.model_dump(exclude={"idempotency_key"})
+    )
+    confirmation, _ = application.confirm(
+        command.model_copy(update=parsed.model_dump()),
+        subject=rider,
+        at=datetime.now(UTC),
+    )
+    assert confirmation == repository.confirmation
+    assert rides.create_calls == 1
+    assert pricing.calls == 1
+    assert repository.add_confirmation_calls == 1
+    assert dispatch.calls == 1
+
+
+def test_mandatory_rotation_rejects_old_preview_and_new_preview_uses_new_policy():
+    application, command, rider, item, repository, rides, pricing, dispatch = (
+        first_confirmation_scenario()
+    )
+    now = datetime.now(UTC)
+    assert item.consent is not None
+    old = item.consent.model_copy(update={"effective_until": now})
+    rotated = BookingConsentMetadata(
+        required_version="booking.consent.v2",
+        document_id="booking.immediate-standard",
+        content_hash="f" * 64,
+        effective_from=now,
+        effective_until=now + timedelta(days=1),
+        acknowledgment_required=True,
+    )
+    application._consent = ImmutableBookingConsentRegistry((old, rotated))
+    with pytest.raises(BookingConflict, match="consent_policy_changed"):
+        application.confirm(command, subject=rider, at=now)
+    assert (
+        rides.create_calls,
+        pricing.calls,
+        repository.add_confirmation_calls,
+        dispatch.calls,
+    ) == (0, 0, 0, 0)
+
+    preview_app, preview_command, _ = preview_application(policies=(rotated,))
+    fresh = preview_app.preview(preview_command, subject=rider, at=now)
+    assert fresh.consent == rotated
+
+
+def test_legacy_unbound_preview_cannot_receive_a_guessed_policy():
+    application, command, rider, item, repository, rides, pricing, dispatch = (
+        first_confirmation_scenario()
+    )
+    repository.item = item.model_copy(update={"consent": None})
+    with pytest.raises(BookingConflict, match="consent_policy_changed"):
+        application.confirm(command, subject=rider, at=datetime.now(UTC))
+    assert (
+        rides.create_calls,
+        pricing.calls,
+        repository.add_confirmation_calls,
+        dispatch.calls,
+    ) == (0, 0, 0, 0)
+
+
+def test_successful_consent_uses_server_time_and_preserves_replay_and_recovery():
+    application, command, rider, item, repository, rides, pricing, dispatch = (
+        first_confirmation_scenario()
+    )
+    server_time = datetime.now(UTC)
+    confirmation, ride = application.confirm(command, subject=rider, at=server_time)
+    assert ride.consent_policy_version == item.consent.required_version
+    assert confirmation.confirmed_at == server_time
+    replayed = application.confirm(command, subject=rider, at=server_time)
+    assert replayed == (confirmation, ride)
+    assert application.recover_confirmation(
+        subject=rider, client_request_id=command.client_request_id
+    ) == (confirmation, ride)
+    assert rides.create_calls == 1
+    assert pricing.calls == 1
+    assert repository.add_confirmation_calls == 1
+    assert dispatch.calls == 2
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    (
+        ("consent_policy_version", "booking.consent.v2"),
+        ("consent_document_hash", "f" * 64),
+    ),
+)
+def test_canonical_replay_consent_change_is_generic(field, value):
+    application, command, rider, _, _, repository, rides, dispatch = replay_scenario()
+    with pytest.raises(BookingConflict) as raised:
+        application.confirm(
+            command.model_copy(update={field: value}),
+            subject=rider,
+            at=datetime.now(UTC),
+        )
+    assert str(raised.value) == "idempotency_conflict"
+    assert rides.create_calls == 0
+    assert repository.add_confirmation_calls == 0
+    assert dispatch.calls == 0
+
+
 def test_booking_activation_defaults_off_and_production_fails_closed():
     assert Settings(_env_file=None).RIDER_BOOKING_ENABLED is False
     with pytest.raises(ValidationError, match="production activation"):
@@ -515,6 +914,7 @@ def test_backend_rejects_expired_route_evidence_before_creating_ride():
         SimpleNamespace(),
         rides,
         uuid4(),
+        consent=consent_registry(item),
     )
     rider = AuthorizationSubject(
         identity_id=uuid4(),
@@ -529,6 +929,8 @@ def test_backend_rejects_expired_route_evidence_before_creating_ride():
         client_request_id=uuid4(),
         idempotency_key="booking-confirm-expired",
         consent_policy_version="booking.consent.v1",
+        consent_document_hash=item.consent.content_hash,
+        consent_acknowledged=True,
     )
     with pytest.raises(BookingConflict, match="route_evidence_expired"):
         application.confirm(command, subject=rider, at=now)
@@ -575,6 +977,7 @@ def replay_scenario():
         rides,
         uuid4(),
         dispatch,
+        consent=consent_registry(item),
     )
     command = ConfirmBookingCommand(
         evidence_id=item.evidence_id,
@@ -584,6 +987,8 @@ def replay_scenario():
         client_request_id=client_request_id,
         idempotency_key=key,
         consent_policy_version=consent_policy_version,
+        consent_document_hash=item.consent.content_hash,
+        consent_acknowledged=True,
     )
     return application, command, rider, confirmation, ride, repository, rides, dispatch
 
@@ -664,6 +1069,7 @@ def test_first_confirmation_returns_persisted_canonical_result_once():
         rides,
         item.quote.policy_id,
         dispatch,
+        consent=consent_registry(item),
     )
     command = ConfirmBookingCommand(
         evidence_id=item.evidence_id,
@@ -673,6 +1079,8 @@ def test_first_confirmation_returns_persisted_canonical_result_once():
         client_request_id=client_request_id,
         idempotency_key="booking-confirm-first-time",
         consent_policy_version="booking.consent.v1",
+        consent_document_hash=item.consent.content_hash,
+        consent_acknowledged=True,
     )
 
     confirmation, returned_ride = application.confirm(
@@ -793,6 +1201,7 @@ def test_application_recovers_only_the_authenticated_riders_confirmation():
         SimpleNamespace(),
         FakeRideRequests(ride),
         uuid4(),
+        consent=consent_registry(item),
     )
     recovered = application.recover_confirmation(
         subject=rider, client_request_id=uuid4()
@@ -848,6 +1257,7 @@ def test_persisted_booking_retries_same_dispatch_handoff_after_provider_timeout(
         FakeRideRequests(ride),
         uuid4(),
         dispatch,
+        consent=consent_registry(item),
     )
     command = ConfirmBookingCommand(
         evidence_id=item.evidence_id,
@@ -857,6 +1267,8 @@ def test_persisted_booking_retries_same_dispatch_handoff_after_provider_timeout(
         client_request_id=client_request_id,
         idempotency_key=key,
         consent_policy_version=consent_policy_version,
+        consent_document_hash=item.consent.content_hash,
+        consent_acknowledged=True,
     )
     with pytest.raises(BookingConflict, match="temporarily_unavailable"):
         application.confirm(command, subject=rider, at=datetime.now(UTC))

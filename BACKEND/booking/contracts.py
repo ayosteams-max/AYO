@@ -3,7 +3,12 @@ from typing import Protocol
 from uuid import UUID
 
 from BACKEND.authorization.contracts import AuthorizationSubject
-from BACKEND.booking.models import BookingQuote, PlaceCandidate, ProviderRouteEvidence
+from BACKEND.booking.models import (
+    BookingConsentMetadata,
+    BookingQuote,
+    PlaceCandidate,
+    ProviderRouteEvidence,
+)
 from BACKEND.pricing.models import EstimateAcceptance, FareEstimate, RouteMetrics
 from BACKEND.ride_request.models import Coordinate
 
@@ -52,3 +57,9 @@ class BookingDispatchStarter(Protocol):
         causation_id: UUID,
         at: datetime,
     ) -> object: ...
+
+
+class BookingConsentAuthority(Protocol):
+    def required_policy(self, *, at: datetime) -> BookingConsentMetadata: ...
+
+    def policy_for_version(self, version: str) -> BookingConsentMetadata | None: ...
