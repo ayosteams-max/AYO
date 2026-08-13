@@ -25,12 +25,14 @@ from BACKEND.booking.models import (
 from BACKEND.config.settings import AppEnvironment, Settings
 from BACKEND.identity.models import IdentityType
 from BACKEND.pricing.models import DataQuality, FareBreakdown, RouteMetrics
+from BACKEND.ride_request.application import RideRequestAccessDenied
 from BACKEND.ride_request.models import (
     Coordinate,
     DestinationDefinition,
     LocationSource,
     PickupDefinition,
     PickupSafetyStatus,
+    RideRequestState,
 )
 from BACKEND.routes.booking import create_booking_router
 
@@ -243,6 +245,29 @@ class FakeRideRequests:
         del kwargs
         self.create_calls += 1
         return self.ride
+
+
+class DenyingRideRequests(FakeRideRequests):
+    def get_owned(self, **kwargs):
+        del kwargs
+        raise RideRequestAccessDenied("private rider and request mismatch")
+
+
+class FakePricingAuthority:
+    def __init__(self):
+        self.calls = 0
+        self.estimate_id = uuid4()
+        self.acceptance_id = uuid4()
+        self.lineage_hash = "d" * 64
+
+    def establish_canonical_lineage(self, **kwargs):
+        del kwargs
+        self.calls += 1
+        return (
+            SimpleNamespace(estimate_id=self.estimate_id),
+            SimpleNamespace(acceptance_id=self.acceptance_id),
+            self.lineage_hash,
+        )
 
 
 class CountingDispatch:
@@ -581,6 +606,88 @@ def test_backend_duplicate_confirmation_returns_same_canonical_request():
     assert returned_ride is ride
     assert rides.create_calls == 0
     assert repository.add_confirmation_calls == 0
+    assert dispatch.calls == 1
+
+
+def test_canonical_replay_access_denial_is_generic_and_side_effect_free():
+    application, command, rider, _, ride, repository, _, dispatch = replay_scenario()
+    rides = DenyingRideRequests(ride)
+    application._ride_requests = rides
+
+    with pytest.raises(BookingConflict) as raised:
+        application.confirm(command, subject=rider, at=datetime.now(UTC))
+
+    assert str(raised.value) == "idempotency_conflict"
+    assert all(
+        detail not in str(raised.value)
+        for detail in (
+            str(rider.identity_id),
+            str(ride.request_id),
+            str(command.evidence_id),
+            command.idempotency_key,
+            "private rider and request mismatch",
+        )
+    )
+    assert rides.create_calls == 0
+    assert repository.add_confirmation_calls == 0
+    assert dispatch.calls == 0
+
+
+def test_first_confirmation_returns_persisted_canonical_result_once():
+    booking_session = "s" * 32
+    item = preview().model_copy(
+        update={
+            "booking_session_hash": hashlib.sha256(booking_session.encode()).hexdigest()
+        }
+    )
+    rider = AuthorizationSubject(
+        identity_id=uuid4(),
+        identity_type=IdentityType.RIDER,
+        actor_type=ActorType.RIDER,
+    )
+    client_request_id = uuid4()
+    ride = SimpleNamespace(
+        request_id=uuid4(),
+        rider_identity_id=rider.identity_id,
+        client_request_id=client_request_id,
+        consent_policy_version="booking.consent.v1",
+        state=RideRequestState.READY_FOR_DISPATCH,
+    )
+    repository = FakeBookingRepository(item)
+    rides = FakeRideRequests(ride)
+    pricing = FakePricingAuthority()
+    dispatch = CountingDispatch()
+    application = BookingApplication(
+        FakeComposition(repository),
+        SimpleNamespace(),
+        pricing,
+        rides,
+        item.quote.policy_id,
+        dispatch,
+    )
+    command = ConfirmBookingCommand(
+        evidence_id=item.evidence_id,
+        evidence_hash=item.evidence_hash,
+        quote_id=item.quote.quote_id,
+        booking_session=booking_session,
+        client_request_id=client_request_id,
+        idempotency_key="booking-confirm-first-time",
+        consent_policy_version="booking.consent.v1",
+    )
+
+    confirmation, returned_ride = application.confirm(
+        command, subject=rider, at=datetime.now(UTC)
+    )
+
+    assert confirmation is repository.confirmation
+    assert returned_ride is ride
+    assert confirmation.ride_request_id == ride.request_id
+    assert confirmation.fare_estimate_id == pricing.estimate_id
+    assert confirmation.estimate_acceptance_id == pricing.acceptance_id
+    assert confirmation.pricing_lineage_hash == pricing.lineage_hash
+    assert rides.create_calls == 1
+    assert pricing.calls == 1
+    assert repository.add_confirmation_calls == 1
     assert dispatch.calls == 1
 
 
