@@ -337,6 +337,16 @@ class PreviewRoutes:
         return self.item.route
 
 
+class FailingConsentAuthority:
+    def required_policy(self, *, at: datetime) -> BookingConsentMetadata:
+        del at
+        raise BookingConflict("private consent authority state")
+
+    def policy_for_version(self, version: str) -> BookingConsentMetadata | None:
+        del version
+        raise BookingConflict("private consent authority state")
+
+
 class CountingDispatch:
     def __init__(self):
         self.calls = 0
@@ -670,6 +680,46 @@ def test_consent_registry_rejects_duplicate_ambiguous_and_invalid_intervals():
             **policy.model_dump(exclude={"effective_until"}),
             effective_until=policy.effective_from,
         )
+
+
+def test_consent_metadata_validates_optional_interval_and_authority_invariants():
+    now = datetime.now(UTC)
+    open_ended = BookingConsentMetadata(
+        required_version="booking.consent.open-ended.v1",
+        document_id="booking.immediate-standard",
+        content_hash="e" * 64,
+        effective_from=now,
+        effective_until=None,
+        acknowledgment_required=True,
+    )
+    assert open_ended.effective_until is None
+
+    for update in (
+        {"effective_from": now.replace(tzinfo=None)},
+        {"effective_until": (now + timedelta(days=1)).replace(tzinfo=None)},
+        {"acknowledgment_required": False},
+    ):
+        with pytest.raises(ValidationError):
+            BookingConsentMetadata.model_validate({**open_ended.model_dump(), **update})
+
+
+def test_confirmation_authority_failure_is_generic_and_side_effect_free():
+    application, command, rider, _, repository, rides, pricing, dispatch = (
+        first_confirmation_scenario()
+    )
+    application._consent = FailingConsentAuthority()
+
+    with pytest.raises(BookingConflict) as raised:
+        application.confirm(command, subject=rider, at=datetime.now(UTC))
+
+    assert str(raised.value) == "consent_policy_changed"
+    assert "private" not in str(raised.value)
+    assert "version" not in str(raised.value)
+    assert "hash" not in str(raised.value)
+    assert rides.create_calls == 0
+    assert pricing.calls == 0
+    assert repository.add_confirmation_calls == 0
+    assert dispatch.calls == 0
 
 
 @pytest.mark.parametrize(

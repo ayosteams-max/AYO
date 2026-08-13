@@ -5,6 +5,7 @@ from uuid import uuid4
 
 import pytest
 from sqlalchemy import func, insert, select
+from sqlalchemy import update as sql_update
 
 from BACKEND.audit.models import ActorType
 from BACKEND.authorization.contracts import AuthorizationSubject
@@ -18,6 +19,7 @@ from BACKEND.booking.models import (
     BookingConfirmation,
     BookingConflict,
     BookingConsentMetadata,
+    PlaceCandidate,
     ProviderRouteEvidence,
     RoutePreview,
     TollEvidenceState,
@@ -77,6 +79,20 @@ class CountingBookingDispatch:
     def start(self, **kwargs) -> None:
         del kwargs
         self.calls += 1
+
+
+class ConfirmationOnlyRoutes:
+    def search_places(
+        self, *, query: str, locale: str, limit: int, at: datetime
+    ) -> tuple[PlaceCandidate, ...]:
+        del query, locale, limit, at
+        raise AssertionError("confirmation must not search for places")
+
+    def route(
+        self, *, origin: Coordinate, destination: Coordinate, at: datetime
+    ) -> ProviderRouteEvidence:
+        del origin, destination, at
+        raise AssertionError("confirmation must not request route intelligence")
 
 
 def consent_manifest(
@@ -238,7 +254,7 @@ def consent_booking_scenario(composition):
     dispatch = CountingBookingDispatch()
     application = BookingApplication(
         composition,
-        object(),
+        ConfirmationOnlyRoutes(),
         BookingPricingApplication(composition),
         RideRequestApplication(composition, POLICY),
         policy.policy_id,
@@ -575,6 +591,48 @@ def test_booking_consent_binding_reconstructs_across_units_of_work(
     assert all(item == preview for item in concurrent)
 
 
+def test_booking_consent_legacy_quote_payload_reconstructs_without_guessing(
+    postgres_composition,
+) -> None:
+    _, command, subject, preview, consent, dispatch = consent_booking_scenario(
+        postgres_composition
+    )
+    del consent
+    before = booking_side_effect_counts(postgres_composition)
+    with postgres_composition.unit_of_work() as unit:
+        unit.connection.execute(
+            sql_update(booking_route_evidence)
+            .where(booking_route_evidence.c.evidence_id == preview.evidence_id)
+            .values(quote_payload=preview.quote.model_dump(mode="json"))
+        )
+
+    after_legacy_write = booking_side_effect_counts(postgres_composition)
+    with postgres_composition.unit_of_work() as unit:
+        reconstructed = unit.booking.get_preview(preview.evidence_id)
+
+    assert reconstructed is not None
+    assert reconstructed.quote == preview.quote
+    assert reconstructed.consent is None
+    assert booking_side_effect_counts(postgres_composition) == after_legacy_write
+    assert after_legacy_write == before
+
+    assert preview.consent is not None
+    application = BookingApplication(
+        postgres_composition,
+        ConfirmationOnlyRoutes(),
+        BookingPricingApplication(postgres_composition),
+        RideRequestApplication(postgres_composition, POLICY),
+        preview.quote.policy_id,
+        dispatch,
+        consent=ImmutableBookingConsentRegistry((preview.consent,)),
+    )
+    with pytest.raises(BookingConflict) as raised:
+        application.confirm(command, subject=subject, at=NOW)
+    assert str(raised.value) == "consent_policy_changed"
+    assert booking_side_effect_counts(postgres_composition) == before
+    assert dispatch.calls == 0
+
+
 def booking_side_effect_counts(composition) -> dict[str, int]:
     tables = {
         "rides": canonical_ride_requests,
@@ -606,7 +664,7 @@ def test_booking_consent_confirmation_persists_authority_and_replays_canonically
 
     reconstructed = BookingApplication(
         postgres_composition,
-        object(),
+        ConfirmationOnlyRoutes(),
         BookingPricingApplication(postgres_composition),
         RideRequestApplication(postgres_composition, POLICY),
         preview.quote.policy_id,
@@ -621,7 +679,7 @@ def test_booking_consent_confirmation_persists_authority_and_replays_canonically
     def concurrent_replay(_: int):
         concurrent_application = BookingApplication(
             postgres_composition,
-            object(),
+            ConfirmationOnlyRoutes(),
             BookingPricingApplication(postgres_composition),
             RideRequestApplication(postgres_composition, POLICY),
             preview.quote.policy_id,
@@ -678,7 +736,7 @@ def test_booking_consent_rotation_and_legacy_reject_without_persisted_effects(
     )
     reconstructed = BookingApplication(
         postgres_composition,
-        object(),
+        ConfirmationOnlyRoutes(),
         BookingPricingApplication(postgres_composition),
         RideRequestApplication(postgres_composition, POLICY),
         preview.quote.policy_id,
@@ -746,7 +804,7 @@ def test_booking_consent_concurrent_stale_confirmation_cannot_bypass_rotation(
     def reject_stale(_: int) -> str:
         application = BookingApplication(
             postgres_composition,
-            object(),
+            ConfirmationOnlyRoutes(),
             BookingPricingApplication(postgres_composition),
             RideRequestApplication(postgres_composition, POLICY),
             preview.quote.policy_id,
@@ -779,7 +837,7 @@ def test_booking_consent_concurrent_first_confirmation_has_one_canonical_result(
             candidate = command.model_copy(update={"consent_document_hash": "f" * 64})
         application = BookingApplication(
             postgres_composition,
-            object(),
+            ConfirmationOnlyRoutes(),
             BookingPricingApplication(postgres_composition),
             RideRequestApplication(postgres_composition, POLICY),
             preview.quote.policy_id,
