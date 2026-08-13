@@ -4320,18 +4320,124 @@ jobs:
               raise SystemExit("combined evidence verification failed")
           PY
 
-      - name: Upload Booking consent authority evidence
+      - name: Verify admitted Booking consent authority evidence
         if: success() && steps.evidence_contract.outputs.mode == 'booking-consent-policy-authority'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: booking-consent-policy-authority-evidence-${{ github.event_name }}-${{ github.event.pull_request.head.sha || github.sha }}
-          path: ${{ runner.temp }}/booking-consent-policy-authority-evidence-v1.txt
-          if-no-files-found: error
-          retention-days: 1
-          compression-level: 0
-
-      - name: Await CTO admission of non-self-referential Booking consent authority evidence
-        if: steps.evidence_contract.outputs.mode == 'booking-consent-policy-authority'
+        env:
+          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          EVIDENCE_PATH: ${{ runner.temp }}/booking-consent-policy-authority-evidence-v1.txt
         run: |
-          echo "booking consent policy authority non-self-referential evidence awaiting CTO admission" >&2
-          exit 1
+          set -euo pipefail
+          uv run --locked python - <<'PY'
+          import os, re
+          from pathlib import Path
+
+          path = Path(os.environ["EVIDENCE_PATH"])
+          if not path.is_file() or path.is_symlink() or path.stat().st_size not in range(1, 65537):
+              raise SystemExit("admitted evidence file is missing or unsafe")
+          lines = path.read_text(encoding="utf-8").splitlines()
+          if (
+              lines[0] != "BOOKING_CONSENT_POLICY_AUTHORITY_EVIDENCE_V1"
+              or lines[-1] != "END_BOOKING_CONSENT_POLICY_AUTHORITY_EVIDENCE_V1"
+          ):
+              raise SystemExit("admitted evidence envelope drift")
+          expected_identity = [
+              "event_scope=push-and-pull-request-comparable",
+              f"candidate_sha={os.environ['CANDIDATE_SHA']}",
+              "governed_base=6613a936b0fe896308682c8fe038708876a06c02",
+              "tests_tree=2dbcb487bd27578a95d0db9a31c21ecde7032114",
+          ]
+          if lines[1:5] != expected_identity or any(line.startswith("event=") for line in lines):
+              raise SystemExit("admitted evidence identity drift")
+
+          def section(start, end):
+              if lines.count(start) != 1 or lines.count(end) != 1:
+                  raise SystemExit(f"admitted section marker drift: {start}")
+              first, last = lines.index(start), lines.index(end)
+              if last <= first:
+                  raise SystemExit(f"admitted section ordering drift: {start}")
+              pairs = {}
+              for line in lines[first + 1:last]:
+                  if "=" not in line:
+                      raise SystemExit(f"malformed admitted field: {start}")
+                  key, value = line.split("=", 1)
+                  if not key or key in pairs:
+                      raise SystemExit(f"duplicate admitted field: {start}")
+                  pairs[key] = value
+              return pairs
+
+          broad = section("BOOKING_CONSENT_BROAD_EVIDENCE_V1", "END_BOOKING_CONSENT_BROAD_EVIDENCE_V1")
+          expected_broad = {
+              "collected": "1035", "selected": "1033", "passed": "1032",
+              "failed": "0", "errors": "0", "skipped": "0", "xfail_count": "1",
+              "xfail_node": "tests/test_services.py::test_cash_commission_is_not_lost_on_repeated_wallet_refresh",
+              "xfail_reason": "Known prototype defect: cash commission is destructively netted twice",
+              "requested_deselections": "tests/test_app.py::test_openapi_preserves_current_route_inventory|tests/test_migration_foundation.py::test_migration_history_has_one_expected_head|tests/test_ride_flow.py::test_complete_current_ride_happy_path|tests/test_ride_flow.py::test_invalid_transition_remains_rejected",
+              "matched_deselection_count": "2",
+              "matched_deselection_identities": "not-deterministically-available",
+              "selected_node_fingerprint": "29843ff94719e22c12992a200f5d9c35f2499a2b383b6f5b447847193e0271b0",
+              "passing_node_fingerprint": "2aa4026c0bcc3f846dee8117e7ac5649e35414e4e13b539923d0d45c6f1c245e",
+              "permission_registry_blob": "8632e8b9df1a626901731c9c1905640f648788d5",
+              "authorization_contract_test_blob": "2d42f8e1c5ec3a167e6302acb6573bd5c4f8bf03",
+              "total_coverage_percentage": "79.89679939",
+              "coverage_semantic_fingerprint": "06de74da70f8c358139df24e67376ff0f4ba9cd7a759ac7cad01ca65b0258e3e",
+              "zero_coverage_inventory_fingerprint": "0e26b034f2917396e5de77fb38288b66b7390b59887e0bb1edae0506cd35b5a6",
+              "uncollected_inventory_fingerprint": "4fdce5bd16877e6e9b5d0359db7a4e19c36000a602a20ed004ebfbb129d318f0",
+              "changed_production_line_coverage": "PASS",
+          }
+          if broad != expected_broad:
+              raise SystemExit("admitted broad evidence drift")
+
+          postgresql = section("BOOKING_CONSENT_POSTGRESQL_EVIDENCE_V1", "END_BOOKING_CONSENT_POSTGRESQL_EVIDENCE_V1")
+          expected_postgresql = {
+              "collected": "229", "selected": "229", "passed": "229",
+              "failed": "0", "errors": "0", "skipped": "0", "xfailed": "0",
+              "selected_node_fingerprint": "a35c769a91e8083162841535cc57e8b01deb44d8f0c362265dac7944ecc62422",
+              "passing_node_fingerprint": "a35c769a91e8083162841535cc57e8b01deb44d8f0c362265dac7944ecc62422",
+              "required_consent_nodes": "PASS",
+          }
+          if postgresql != expected_postgresql:
+              raise SystemExit("admitted PostgreSQL evidence drift")
+
+          mypy = section("BOOKING_CONSENT_MYPY_EVIDENCE_V1", "END_BOOKING_CONSENT_MYPY_EVIDENCE_V1")
+          strict_codes = '{"no-any-return":198,"no-untyped-call":115,"no-untyped-def":63,"redundant-cast":4,"type-arg":3}'
+          configured_codes = '{"arg-type":12}'
+          expected_mypy = {
+              "strict_base_count": "383", "strict_candidate_count": "383",
+              "strict_base_files": "54", "strict_candidate_files": "54",
+              "strict_base_codes": strict_codes, "strict_candidate_codes": strict_codes,
+              "strict_base_fingerprint": "a7018245b4e9086aeca1d39d47903e5e98d0b62d",
+              "strict_candidate_fingerprint": "a7018245b4e9086aeca1d39d47903e5e98d0b62d",
+              "strict_base_only": "0", "strict_candidate_only": "0",
+              "configured_base_count": "12", "configured_candidate_count": "12",
+              "configured_base_files": "1", "configured_candidate_files": "1",
+              "configured_base_codes": configured_codes, "configured_candidate_codes": configured_codes,
+              "configured_base_fingerprint": "b50c53ef9a3bb574f36a8f6b489ec2b0c5285d08",
+              "configured_candidate_fingerprint": "b50c53ef9a3bb574f36a8f6b489ec2b0c5285d08",
+              "configured_base_only": "0", "configured_candidate_only": "0",
+          }
+          if mypy != expected_mypy:
+              raise SystemExit("admitted MyPy evidence drift")
+
+          inventory = section("BOOKING_CONSENT_INVENTORY_EVIDENCE_V1", "END_BOOKING_CONSENT_INVENTORY_EVIDENCE_V1")
+          expected_inventory = {
+              "scanner_version": "1.5.0",
+              "base_item_count": "42", "candidate_item_count": "44",
+              "base_inventory_digest": "2c584edb5d3ae2f63501cfe27d7fc4f86984169d9ac0ee6369af16fbb67479a4",
+              "candidate_inventory_digest": "69ed51370907f1872153b2638cd1b5b769fd681044911fb11af7a18104b11236",
+              "base_only_item_count": "0", "candidate_only_item_count": "2",
+              "defensive_boundary_check": "PASS",
+              "normalized_comparison": "COMPLETE_LINE_SENSITIVE_INVENTORY",
+          }
+          if inventory != expected_inventory:
+              raise SystemExit("admitted inventory evidence drift")
+
+          expected_tail = [
+              "canonical_migration_head=20260812_0060",
+              "backup_restore=PASS", "migration_round_trip=PASS",
+              "security_audit_dependency_checks=PASS", "cleanup=PASS",
+              "END_BOOKING_CONSENT_POLICY_AUTHORITY_EVIDENCE_V1",
+          ]
+          if lines[-6:] != expected_tail:
+              raise SystemExit("admitted migration, security, or cleanup evidence drift")
+          print("Booking consent policy authority exact evidence: PASS")
+          PY
