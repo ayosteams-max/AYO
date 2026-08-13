@@ -292,7 +292,7 @@ jobs:
             382a299236787d20a567cc5934a8f82d0147e7ad)
               mode=booking-complete-replay-equivalence
               ;;
-            16e1a683dec9be302f15f5d596e2e502d00c1b16)
+            2dbcb487bd27578a95d0db9a31c21ecde7032114)
               mode=booking-consent-policy-authority
               ;;
             *)
@@ -551,6 +551,7 @@ jobs:
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || '' }}
           EVENT_HEAD_SHA: ${{ github.sha }}
           DISPATCH_BASE_SHA: ${{ inputs.expected_base_sha || '' }}
+          EVIDENCE_MODE: ${{ steps.evidence_contract.outputs.mode }}
         run: |
           set -euo pipefail
           zero=0000000000000000000000000000000000000000
@@ -598,6 +599,27 @@ jobs:
                 }
                 comparison_sha="$EVENT_BEFORE"
                 mode=verified-push-before
+              elif [[ "$EVIDENCE_MODE" == "booking-consent-policy-authority" ]]; then
+                expected_base=6613a936b0fe896308682c8fe038708876a06c02
+                git fetch --no-tags origin \
+                  refs/heads/main:refs/remotes/origin/coverage-main
+                authoritative_main="$(git rev-parse refs/remotes/origin/coverage-main)"
+                require_commit "$authoritative_main" "authoritative remote main SHA"
+                if [[ "$authoritative_main" != "$expected_base" ]]; then
+                  echo "Booking consent authority first-push remote main drift" >&2
+                  exit 1
+                fi
+                merge_base="$(git merge-base "$EVENT_HEAD_SHA" "$authoritative_main")"
+                if [[ "$merge_base" != "$expected_base" ]]; then
+                  echo "Booking consent authority first-push merge-base drift" >&2
+                  exit 1
+                fi
+                git merge-base --is-ancestor "$expected_base" "$EVENT_HEAD_SHA" || {
+                  echo "Booking consent authority first-push base is not an ancestor" >&2
+                  exit 1
+                }
+                comparison_sha="$expected_base"
+                mode=verified-booking-consent-first-push-base
               else
                 mapfile -t parents < <(git show -s --format='%P' "$EVENT_HEAD_SHA" | tr ' ' '\n')
                 if [[ "${#parents[@]}" -ne 1 ]]; then
@@ -767,7 +789,7 @@ jobs:
           set -euo pipefail
           zero=0000000000000000000000000000000000000000
           expected_base=6613a936b0fe896308682c8fe038708876a06c02
-          expected_tests=16e1a683dec9be302f15f5d596e2e502d00c1b16
+          expected_tests=2dbcb487bd27578a95d0db9a31c21ecde7032114
           case "$EVENT_NAME" in
             pull_request)
               candidate="$PR_HEAD_SHA"
@@ -2019,6 +2041,7 @@ jobs:
           from pathlib import Path
           nodes = sorted(line.strip() for line in Path("booking-consent-postgresql-collect.txt").read_text().splitlines() if "::" in line)
           required = {
+              "tests/integration/test_dispatch_handoff_localization.py::test_booking_consent_legacy_quote_payload_reconstructs_without_guessing",
               "tests/integration/test_dispatch_handoff_localization.py::test_booking_consent_binding_reconstructs_across_units_of_work",
               "tests/integration/test_dispatch_handoff_localization.py::test_booking_consent_confirmation_persists_authority_and_replays_canonically",
               "tests/integration/test_dispatch_handoff_localization.py::test_booking_consent_rotation_and_legacy_reject_without_persisted_effects",
@@ -4204,7 +4227,7 @@ jobs:
               "BOOKING_CONSENT_POLICY_AUTHORITY_EVIDENCE_V1",
               f"event={os.environ['EVENT_NAME']}", f"candidate_sha={sha}",
               "governed_base=6613a936b0fe896308682c8fe038708876a06c02",
-              "tests_tree=16e1a683dec9be302f15f5d596e2e502d00c1b16",
+              "tests_tree=2dbcb487bd27578a95d0db9a31c21ecde7032114",
               *sections,
               "canonical_migration_head=20260812_0060",
               "backup_restore=PASS", "migration_round_trip=PASS",
