@@ -289,7 +289,7 @@ jobs:
             ab795c7d2e200dac15215770fefae48b515fca68)
               mode=immediate-standard-public-contract
               ;;
-            c51cbae572c09503b71d2836e2052468a7c21d34)
+            4f7ae505be15b659a21424f005bb5ca5749115ea)
               mode=booking-complete-replay-equivalence
               ;;
             *)
@@ -667,7 +667,7 @@ jobs:
           set -euo pipefail
           zero=0000000000000000000000000000000000000000
           expected_base=b79c7ae45f644dd1198f0b526bbda38bc2d11e23
-          expected_tests=c51cbae572c09503b71d2836e2052468a7c21d34
+          expected_tests=4f7ae505be15b659a21424f005bb5ca5749115ea
           case "$EVENT_NAME" in
             pull_request)
               candidate="$PR_HEAD_SHA"
