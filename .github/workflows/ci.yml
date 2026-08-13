@@ -4200,7 +4200,6 @@ jobs:
       - name: Assemble Booking consent authority evidence
         if: success() && steps.evidence_contract.outputs.mode == 'booking-consent-policy-authority'
         env:
-          EVENT_NAME: ${{ github.event_name }}
           CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           EVIDENCE_PATH: ${{ runner.temp }}/booking-consent-policy-authority-evidence-v1.txt
           BROAD_PATH: ${{ runner.temp }}/booking-consent-broad-v1.txt
@@ -4214,18 +4213,73 @@ jobs:
           from pathlib import Path
           sha = os.environ["CANDIDATE_SHA"]
           if not re.fullmatch(r"[0-9a-f]{40}", sha): raise SystemExit("malformed evidence candidate")
+          event_scope = "event_scope=push-and-pull-request-comparable"
+          section_contracts = {
+              "BROAD_PATH": (
+                  "BOOKING_CONSENT_BROAD_EVIDENCE_V1",
+                  "END_BOOKING_CONSENT_BROAD_EVIDENCE_V1",
+              ),
+              "POSTGRESQL_PATH": (
+                  "BOOKING_CONSENT_POSTGRESQL_EVIDENCE_V1",
+                  "END_BOOKING_CONSENT_POSTGRESQL_EVIDENCE_V1",
+              ),
+              "MYPY_PATH": (
+                  "BOOKING_CONSENT_MYPY_EVIDENCE_V1",
+                  "END_BOOKING_CONSENT_MYPY_EVIDENCE_V1",
+              ),
+              "SECRET_PATH": (
+                  "BOOKING_CONSENT_SECRET_EVIDENCE_V1",
+                  "END_BOOKING_CONSENT_SECRET_EVIDENCE_V1",
+              ),
+          }
+          def fields(value, start, end):
+              lines = value.splitlines()
+              if not lines or lines[0] != start or lines[-1] != end:
+                  raise SystemExit(f"malformed evidence section: {start}")
+              pairs = {}
+              for line in lines[1:-1]:
+                  if "=" not in line:
+                      raise SystemExit(f"malformed evidence field: {start}")
+                  key, content = line.split("=", 1)
+                  if not key or key in pairs:
+                      raise SystemExit(f"duplicate or empty evidence field: {start}")
+                  pairs[key] = content
+              return pairs
           sections = []
-          for variable in ("BROAD_PATH", "POSTGRESQL_PATH", "MYPY_PATH", "SECRET_PATH"):
+          parsed = {}
+          for variable, contract in section_contracts.items():
               path = Path(os.environ[variable])
               if not path.is_file() or path.is_symlink() or path.stat().st_size not in range(1, 65537):
                   raise SystemExit(f"missing or unsafe evidence section: {variable}")
               value = path.read_text(encoding="utf-8")
               if "BEGIN PRIVATE KEY" in value or "://" in value or "AYO_TEST_DATABASE_URL" in value:
                   raise SystemExit("unsafe evidence content")
+              parsed[variable] = fields(value, *contract)
               sections.append(value.rstrip("\n"))
+          broad = parsed["BROAD_PATH"]
+          broad_counts = {key: int(broad[key]) for key in (
+              "collected", "selected", "passed", "failed", "errors", "skipped", "xfail_count",
+          )}
+          if (
+              broad_counts["collected"] - broad_counts["selected"]
+              != int(broad["matched_deselection_count"])
+              or broad_counts["selected"]
+              != sum(broad_counts[key] for key in ("passed", "failed", "errors", "skipped", "xfail_count"))
+          ):
+              raise SystemExit("broad evidence arithmetic is inconsistent")
+          postgresql = parsed["POSTGRESQL_PATH"]
+          postgresql_counts = {key: int(postgresql[key]) for key in (
+              "collected", "selected", "passed", "failed", "errors", "skipped", "xfailed",
+          )}
+          if (
+              postgresql_counts["collected"] != postgresql_counts["selected"]
+              or postgresql_counts["selected"]
+              != sum(postgresql_counts[key] for key in ("passed", "failed", "errors", "skipped", "xfailed"))
+          ):
+              raise SystemExit("PostgreSQL evidence arithmetic is inconsistent")
           lines = [
               "BOOKING_CONSENT_POLICY_AUTHORITY_EVIDENCE_V1",
-              f"event={os.environ['EVENT_NAME']}", f"candidate_sha={sha}",
+              event_scope, f"candidate_sha={sha}",
               "governed_base=6613a936b0fe896308682c8fe038708876a06c02",
               "tests_tree=2dbcb487bd27578a95d0db9a31c21ecde7032114",
               *sections,
@@ -4235,6 +4289,8 @@ jobs:
               "END_BOOKING_CONSENT_POLICY_AUTHORITY_EVIDENCE_V1",
           ]
           block = "\n".join(lines) + "\n"; path = Path(os.environ["EVIDENCE_PATH"])
+          if block.count(event_scope + "\n") != 1 or re.search(r"(?m)^event=", block):
+              raise SystemExit("event comparison scope is missing, duplicated, or event-specific")
           if path.exists(): raise SystemExit("evidence output already exists")
           with path.open("x", encoding="utf-8", newline="\n") as output:
               output.write(block); output.flush(); os.fsync(output.fileno())
