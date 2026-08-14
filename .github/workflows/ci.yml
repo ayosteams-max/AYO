@@ -612,9 +612,10 @@ jobs:
             printf '%s\n' "$status" >"$output.status"
           }
           run_capture "$EVIDENCE_ROOT/focused-node.tap" node --experimental-strip-types --test \
+            --test-reporter=tap \
             tests/booking-api.test.ts tests/booking-contracts.test.ts \
             tests/booking-intent-controller.test.ts tests/booking-localization.test.ts
-          run_capture "$EVIDENCE_ROOT/complete-node.tap" npm test
+          run_capture "$EVIDENCE_ROOT/complete-node.tap" npm test -- --test-reporter=tap
           run_capture "$EVIDENCE_ROOT/focused-jest.log" npm run test:provider -- \
             tests/booking-intent-provider.test.tsx --json \
             --outputFile="$EVIDENCE_ROOT/focused-jest.json"
@@ -644,23 +645,66 @@ jobs:
               if not re.fullmatch(r"[0-9]+", value): raise SystemExit("malformed command status")
               return int(value)
           def node(name, output_name, files):
-              text = (root / f"{name}.tap").read_text(encoding="utf-8")
+              if status(name + ".tap"):
+                  raise SystemExit(f"Node command failed: {name}")
+              try:
+                  with open(root / f"{name}.tap", encoding="utf-8", newline="") as source:
+                      text = source.read()
+              except (OSError, UnicodeError):
+                  raise SystemExit(f"malformed Node TAP encoding: {name}") from None
+              if "\r" in text:
+                  raise SystemExit(f"malformed Node TAP encoding: {name}")
+              if len(re.findall(r"(?m)^TAP version 13$", text)) != 1:
+                  raise SystemExit(f"malformed Node TAP header: {name}")
+              plans = re.findall(r"(?m)^1\.\.([0-9]+)$", text)
+              if len(plans) != 1:
+                  raise SystemExit(f"malformed Node TAP plan: {name}")
+              plan = int(plans[0])
+              if plan <= 0:
+                  raise SystemExit(f"empty Node TAP plan: {name}")
               summaries = {}
               for key in ("tests", "pass", "fail", "cancelled", "skipped", "todo"):
-                  matches = re.findall(rf"(?m)^# {key} (\d+)$", text)
-                  if len(matches) != 1: raise SystemExit(f"malformed Node TAP summary: {name} {key}")
+                  matches = re.findall(rf"(?m)^# {key} ([0-9]+)$", text)
+                  if len(matches) != 1:
+                      raise SystemExit(f"malformed Node TAP summary: {name} {key}")
                   summaries[key] = int(matches[0])
-              selected = re.findall(r"(?m)^\s*# Subtest: (.+)$", text)
+              subtests = re.findall(r"(?m)^( *)# Subtest: ([^\r\n]+)$", text)
+              selected = [value for _, value in subtests]
+              top_level = [value for indent, value in subtests if not indent]
+              if any(len(indent) % 4 for indent, _ in subtests):
+                  raise SystemExit(f"ambiguous Node TAP nesting: {name}")
+              if len(top_level) != plan:
+                  raise SystemExit(f"Node TAP plan drift: {name}")
               if len(selected) != summaries["tests"] or len(selected) != len(set(selected)):
                   raise SystemExit(f"Node selected inventory drift: {name}")
               passed = re.findall(r"(?m)^\s*ok \d+ - (.+?)(?: #.*)?$", text)
               if len(passed) != summaries["pass"] or len(passed) != len(set(passed)):
                   raise SystemExit(f"Node passing inventory drift: {name}")
-              if status(name + ".tap") or any(summaries[key] for key in ("fail", "cancelled", "skipped", "todo")):
+              if any(summaries[key] for key in ("fail", "cancelled", "skipped", "todo")):
                   raise SystemExit(f"Node command did not pass exactly: {name}")
               if summaries["tests"] != sum(summaries[key] for key in ("pass", "fail", "cancelled", "skipped", "todo")):
                   raise SystemExit(f"Node arithmetic drift: {name}")
+              plan_end = re.search(r"(?m)^1\.\.[0-9]+$", text).end()
+              trailer = [line for line in text[plan_end:].splitlines() if line]
+              trailer_keys = ("tests", "suites", "pass", "fail", "cancelled", "skipped", "todo")
+              if (
+                  len(trailer) != len(trailer_keys) + 1
+                  or any(
+                      not re.fullmatch(rf"# {key} [0-9]+", line)
+                      for key, line in zip(trailer_keys, trailer[:-1], strict=True)
+                  )
+                  or not re.fullmatch(r"# duration_ms [0-9]+(?:\.[0-9]+)?", trailer[-1])
+              ):
+                  raise SystemExit(f"unknown Node TAP trailer: {name}")
               file_inventory = sorted(files)
+              required_focused_files = [
+                  "tests/booking-api.test.ts",
+                  "tests/booking-contracts.test.ts",
+                  "tests/booking-intent-controller.test.ts",
+                  "tests/booking-localization.test.ts",
+              ]
+              if name == "focused-node" and file_inventory != required_focused_files:
+                  raise SystemExit("focused Node file inventory drift")
               fields = [(key, summaries[key]) for key in ("tests", "pass", "fail", "cancelled", "skipped", "todo")]
               fields += [
                   ("test_file_count", len(file_inventory)),
@@ -671,7 +715,8 @@ jobs:
                   ("process_exit", 0),
                   ("node_version", node_version),
                   ("command_fingerprint", digest([
-                      "node --experimental-strip-types --test" if name == "focused-node" else "npm test",
+                      "node --experimental-strip-types --test --test-reporter=tap"
+                      if name == "focused-node" else "npm test -- --test-reporter=tap",
                       *file_inventory,
                   ])),
               ]
@@ -1548,6 +1593,7 @@ jobs:
           PY
 
       - name: Test all admitted non-PostgreSQL behavior with coverage
+        id: backend_broad_regression
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && (steps.evidence_contract.outputs.mode == 'pre-batch2' || steps.evidence_contract.outputs.mode == 'booking-complete-replay-equivalence' || steps.evidence_contract.outputs.mode == 'booking-consent-policy-authority' || steps.evidence_contract.outputs.mode == 'mobile-booking-intent-foundation')
         env:
           EVIDENCE_MODE: ${{ steps.evidence_contract.outputs.mode }}
@@ -2090,6 +2136,44 @@ jobs:
               if open(path, encoding="utf-8", newline="").read() != block:
                   raise SystemExit("Booking consent broad evidence retention failed")
           PY
+
+      - name: Remove Mobile Booking backend regression intermediates
+        if: always() && steps.evidence_contract.outputs.mode == 'mobile-booking-intent-foundation'
+        env:
+          BROAD_REGRESSION_OUTCOME: ${{ steps.backend_broad_regression.outcome }}
+        run: |
+          set -euo pipefail
+          repository_root="$(pwd -P)"
+          targets=(
+            batch1-coverage.json
+            batch1-deselections.txt
+            pytest-results.xml
+            batch1-coverage.log
+          )
+          for relative in "${targets[@]}"; do
+            target="$repository_root/$relative"
+            [[ "$(dirname -- "$target")" == "$repository_root" ]] || {
+              echo "Mobile Booking backend-intermediate parent drift" >&2; exit 1; }
+            if [[ "$BROAD_REGRESSION_OUTCOME" == "success" \
+              && ! -e "$target" && ! -L "$target" ]]; then
+              echo "Mobile Booking backend-intermediate missing after successful producer" >&2
+              exit 1
+            fi
+            if [[ -L "$target" ]]; then
+              rm -- "$target"
+            elif [[ -e "$target" ]]; then
+              [[ -f "$target" ]] || {
+                echo "Mobile Booking backend-intermediate is not a regular file" >&2; exit 1; }
+              rm -- "$target"
+            elif [[ "$BROAD_REGRESSION_OUTCOME" != "failure" \
+              && "$BROAD_REGRESSION_OUTCOME" != "skipped" ]]; then
+              echo "Mobile Booking backend-intermediate producer outcome drift" >&2
+              exit 1
+            fi
+            [[ ! -e "$target" && ! -L "$target" ]] || {
+              echo "Mobile Booking backend-intermediate cleanup failed" >&2; exit 1; }
+          done
+          echo "Mobile Booking backend regression intermediates removed"
 
       - name: Verify exact Batch 2 test and coverage contract
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'batch2'
@@ -4131,8 +4215,22 @@ jobs:
           resolver_id = "id: trusted_" + "comparison_base"
           if workflow.count(resolver_id) != 1:
               raise SystemExit("trusted comparison base resolver is not unique")
+          expected_consumer_steps = (
+              "Bind exact Booking replay-equivalence candidate identity",
+              "Bind exact Booking consent-policy-authority candidate identity",
+              "Bind exact Mobile Booking intent foundation candidate identity",
+              "Test all admitted non-PostgreSQL behavior with coverage",
+              "Verify exact Batch 2 test and coverage contract",
+          )
+          step_headers = list(re.finditer(r"(?m)^      - name: (.+)$", workflow))
+          consumer_steps = []
+          for index, match in enumerate(step_headers):
+              end = step_headers[index + 1].start() if index + 1 < len(step_headers) else len(workflow)
+              if authoritative_mapping in workflow[match.start():end]:
+                  consumer_steps.append(match.group(1))
           if (
-              workflow.count(authoritative_mapping) != 4
+              workflow.count(authoritative_mapping) != 5
+              or tuple(consumer_steps) != expected_consumer_steps
               or workflow.count(predecessor_mapping) != 2
           ):
               raise SystemExit("comparison-dependent gates do not share one resolver output")
