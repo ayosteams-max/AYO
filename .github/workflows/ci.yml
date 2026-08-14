@@ -623,7 +623,7 @@ jobs:
           run_capture "$EVIDENCE_ROOT/complete-jest.log" npm run test:provider -- \
             --json --outputFile="$EVIDENCE_ROOT/complete-jest.json"
           run_capture "$EVIDENCE_ROOT/typescript.log" npm run typecheck
-          run_capture "$EVIDENCE_ROOT/lint.log" npm run lint -- \
+          run_capture "$EVIDENCE_ROOT/lint.log" npm run lint -- -- \
             --format json --output-file "$EVIDENCE_ROOT/lint.json"
           EVIDENCE_ROOT="$EVIDENCE_ROOT" python - <<'PY'
           import hashlib, json, os, re, subprocess
@@ -793,7 +793,9 @@ jobs:
               ("eslint_version", lock["packages"]["node_modules/eslint"]["version"]),
               ("error_count", errors), ("warning_count", warnings),
               ("diagnostic_fingerprint", digest(diagnostics)), ("process_exit", 0),
-              ("command_fingerprint", digest(["npm run lint"])),
+              ("command_fingerprint", digest([
+                  "npm run lint -- -- --format json --output-file $EVIDENCE_ROOT/lint.json"
+              ])),
           ])
           for path in root.glob("*.json"): path.unlink()
           for path in root.glob("*.log"): path.unlink()
@@ -5025,6 +5027,35 @@ jobs:
           ):
               changed = copy.deepcopy(evidence); changed[key] = value
               reject(label, verify_evidence, changed)
+          lint_contract = {
+              "mode": "mobile-booking-intent-foundation",
+              "command": (
+                  "npm", "run", "lint", "--", "--", "--format", "json",
+                  "--output-file", "$EVIDENCE_ROOT/lint.json",
+              ),
+              "status": 0, "json_exists": True, "json_regular": True,
+              "json_schema": "VALID", "route": "mobile-only",
+              "fingerprint_source": (
+                  "npm run lint -- -- --format json --output-file "
+                  "$EVIDENCE_ROOT/lint.json"
+              ),
+          }
+          def verify_lint(value): assert value == lint_contract
+          lint_negatives = (
+              ("missing Expo forwarding delimiter", "command", lint_contract["command"][:4] + lint_contract["command"][5:]),
+              ("only one separator", "command", ("npm", "run", "lint", "--", "--format", "json", "--output-file", "$EVIDENCE_ROOT/lint.json")),
+              ("reversed formatter and separator", "command", ("npm", "run", "lint", "--", "--format", "json", "--", "--output-file", "$EVIDENCE_ROOT/lint.json")),
+              ("missing formatter", "command", ("npm", "run", "lint", "--", "--", "--output-file", "$EVIDENCE_ROOT/lint.json")),
+              ("missing output file", "command", lint_contract["command"][:-2]),
+              ("repository-local output", "command", lint_contract["command"][:-1] + ("AYO-Mobile/lint.json",)),
+              ("nonzero lint status", "status", 1), ("absent lint JSON", "json_exists", False),
+              ("unsafe lint JSON member", "json_regular", False), ("malformed lint JSON", "json_schema", "MALFORMED"),
+              ("command fingerprint drift", "fingerprint_source", "npm run lint"),
+              ("unknown evidence mode", "mode", "unknown"), ("historical routing drift", "route", "historical"),
+          )
+          for label, key, value in lint_negatives:
+              changed = copy.deepcopy(lint_contract); changed[key] = value
+              reject(label, verify_lint, changed)
           print("Mobile Booking evidence structural negative controls: PASS")
           PY
 
