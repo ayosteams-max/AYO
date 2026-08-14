@@ -5170,8 +5170,8 @@ jobs:
           if path.is_symlink() or path.read_bytes() != block.encode("utf-8") or not block.endswith("\n"):
               raise SystemExit("Mobile evidence reread verification failed")
           PY
-
       - name: Verify staged Mobile Booking evidence admission contract
+        id: mobile_booking_admission
         if: success() && steps.evidence_contract.outputs.mode == 'mobile-booking-intent-foundation'
         env:
           CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -5187,8 +5187,8 @@ jobs:
 
           CAPTURE_STATE = "CAPTURE_ONLY_PENDING_CTO_REVIEW"
           ACTIVE_STATE = "ADMITTED_PREPRODUCTION_EVIDENCE"
-          ADMISSION_STATE = CAPTURE_STATE
-          REVIEWED_COMMITMENT_BYTES = (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+          ADMISSION_STATE = ACTIVE_STATE
+          REVIEWED_COMMITMENT_BYTES = (22, 122, 173, 190, 10, 171, 86, 79, 117, 54, 191, 92, 208, 211, 23, 139, 13, 109, 237, 139, 59, 102, 101, 4, 240, 164, 85, 102, 56, 106, 211, 172)
           CAPTURE_COMMITMENT = bytes(32)
           REQUIRED_POLICY = (
               ("admission_scope", "PRE_PRODUCTION_ONLY"),
@@ -5500,11 +5500,11 @@ jobs:
           reject("duplicate evidence field", lambda: parse(data.replace(b"mode=mobile-booking-intent-foundation\n", b"mode=mobile-booking-intent-foundation\nmode=mobile-booking-intent-foundation\n", 1)))
           reject("noncanonical evidence count", lambda: validate(envelope, {**sections, "MOBILE_FOCUSED_NODE_V1": {**sections["MOBILE_FOCUSED_NODE_V1"], "tests": "032"}}, candidate))
           reject("unsafe CRLF evidence", lambda: parse(data.replace(b"\n", b"\r\n", 1)))
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8", newline="\n") as output: output.write(f"state={result}\n")
           print(f"Mobile Booking admission verifier structure: {result}")
           PY
-
       - name: Upload Mobile Booking intent foundation capture evidence
-        if: success() && steps.evidence_contract.outputs.mode == 'mobile-booking-intent-foundation'
+        if: success() && steps.evidence_contract.outputs.mode == 'mobile-booking-intent-foundation' && steps.mobile_booking_admission.outputs.state == 'CAPTURE_ONLY'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: mobile-booking-intent-foundation-evidence-${{ github.event_name }}-${{ github.event.pull_request.head.sha || github.sha }}
@@ -5514,7 +5514,7 @@ jobs:
           compression-level: 0
 
       - name: Stop Mobile Booking intent foundation pending CTO admission
-        if: success() && steps.evidence_contract.outputs.mode == 'mobile-booking-intent-foundation'
+        if: success() && steps.evidence_contract.outputs.mode == 'mobile-booking-intent-foundation' && steps.mobile_booking_admission.outputs.state == 'CAPTURE_ONLY'
         run: |
           echo "mobile booking intent foundation evidence awaiting CTO admission" >&2
           exit 1
