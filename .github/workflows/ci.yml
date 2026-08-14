@@ -3471,12 +3471,12 @@ jobs:
             echo "Historical MyPy debt unexpectedly disappeared" >&2
             exit 1
           fi
-          if [[ "${{ steps.evidence_contract.outputs.mode }}" != "courier-pickup-authorization-ordering" \
+          if [[ "$EVIDENCE_MODE" != "courier-pickup-authorization-ordering" \
             && "$source_configured_status" -eq 0 ]]; then
             echo "Historical configured MyPy debt unexpectedly disappeared" >&2
             exit 1
           fi
-          if [[ "${{ steps.evidence_contract.outputs.mode }}" == "pre-batch2" \
+          if [[ "$EVIDENCE_MODE" == "pre-batch2" \
             && "$candidate_configured_status" -eq 0 ]]; then
             echo "Pre-Batch-2 configured MyPy debt unexpectedly disappeared" >&2
             exit 1
