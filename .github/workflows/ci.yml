@@ -615,7 +615,8 @@ jobs:
             --test-reporter=tap \
             tests/booking-api.test.ts tests/booking-contracts.test.ts \
             tests/booking-intent-controller.test.ts tests/booking-localization.test.ts
-          run_capture "$EVIDENCE_ROOT/complete-node.tap" npm test -- --test-reporter=tap
+          run_capture "$EVIDENCE_ROOT/complete-node.tap" node --experimental-strip-types --test \
+            --test-reporter=tap tests/*.test.ts
           run_capture "$EVIDENCE_ROOT/focused-jest.log" npm run test:provider -- \
             tests/booking-intent-provider.test.tsx --json \
             --outputFile="$EVIDENCE_ROOT/focused-jest.json"
@@ -654,9 +655,19 @@ jobs:
                   raise SystemExit(f"malformed Node TAP encoding: {name}") from None
               if "\r" in text:
                   raise SystemExit(f"malformed Node TAP encoding: {name}")
-              if len(re.findall(r"(?m)^TAP version 13$", text)) != 1:
-                  raise SystemExit(f"malformed Node TAP header: {name}")
-              plans = re.findall(r"(?m)^1\.\.([0-9]+)$", text)
+              header_count = len(re.findall(r"(?m)^TAP version 13$", text))
+              top_level_plan_count = len(re.findall(r"(?m)^1\.\.(?:0|[1-9][0-9]*)$", text))
+              if header_count != 1:
+                  raise SystemExit(
+                      f"Node TAP failure: stream={name} category=header_cardinality "
+                      f"headers={header_count} top_level_plans={top_level_plan_count} status=zero"
+                  )
+              if not text.startswith("TAP version 13\n"):
+                  raise SystemExit(
+                      f"Node TAP failure: stream={name} category=document_prefix "
+                      f"headers={header_count} top_level_plans={top_level_plan_count} status=zero"
+                  )
+              plans = re.findall(r"(?m)^1\.\.(0|[1-9][0-9]*)$", text)
               if len(plans) != 1:
                   raise SystemExit(f"malformed Node TAP plan: {name}")
               plan = int(plans[0])
@@ -664,7 +675,7 @@ jobs:
                   raise SystemExit(f"empty Node TAP plan: {name}")
               summaries = {}
               for key in ("tests", "pass", "fail", "cancelled", "skipped", "todo"):
-                  matches = re.findall(rf"(?m)^# {key} ([0-9]+)$", text)
+                  matches = re.findall(rf"(?m)^# {key} (0|[1-9][0-9]*)$", text)
                   if len(matches) != 1:
                       raise SystemExit(f"malformed Node TAP summary: {name} {key}")
                   summaries[key] = int(matches[0])
@@ -684,13 +695,13 @@ jobs:
                   raise SystemExit(f"Node command did not pass exactly: {name}")
               if summaries["tests"] != sum(summaries[key] for key in ("pass", "fail", "cancelled", "skipped", "todo")):
                   raise SystemExit(f"Node arithmetic drift: {name}")
-              plan_end = re.search(r"(?m)^1\.\.[0-9]+$", text).end()
+              plan_end = re.search(r"(?m)^1\.\.(?:0|[1-9][0-9]*)$", text).end()
               trailer = [line for line in text[plan_end:].splitlines() if line]
               trailer_keys = ("tests", "suites", "pass", "fail", "cancelled", "skipped", "todo")
               if (
                   len(trailer) != len(trailer_keys) + 1
                   or any(
-                      not re.fullmatch(rf"# {key} [0-9]+", line)
+                      not re.fullmatch(rf"# {key} (?:0|[1-9][0-9]*)", line)
                       for key, line in zip(trailer_keys, trailer[:-1], strict=True)
                   )
                   or not re.fullmatch(r"# duration_ms [0-9]+(?:\.[0-9]+)?", trailer[-1])
@@ -716,7 +727,8 @@ jobs:
                   ("node_version", node_version),
                   ("command_fingerprint", digest([
                       "node --experimental-strip-types --test --test-reporter=tap"
-                      if name == "focused-node" else "npm test -- --test-reporter=tap",
+                      if name == "focused-node" else
+                      "node --experimental-strip-types --test --test-reporter=tap tests/*.test.ts",
                       *file_inventory,
                   ])),
               ]
