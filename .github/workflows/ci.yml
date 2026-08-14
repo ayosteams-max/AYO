@@ -273,6 +273,8 @@ jobs:
         run: |
           set -euo pipefail
           tests_tree="$(git rev-parse HEAD:tests)"
+          mobile_tests_tree=""
+          mobile_tree=""
           case "$tests_tree" in
             ffc42ae8b0d32093a03674f1ec0380bbc4a60486)
               mode=pre-batch2
@@ -293,7 +295,26 @@ jobs:
               mode=booking-complete-replay-equivalence
               ;;
             2dbcb487bd27578a95d0db9a31c21ecde7032114)
-              mode=booking-consent-policy-authority
+              mobile_candidate="$TESTED_COMMIT_SHA"
+              [[ "$mobile_candidate" =~ ^[0-9a-f]{40}$ \
+                && "$mobile_candidate" != 0000000000000000000000000000000000000000 ]] || {
+                echo "Mobile selector candidate is absent, malformed, or all-zero" >&2; exit 1; }
+              git cat-file -e "$mobile_candidate^{commit}" 2>/dev/null || {
+                echo "Mobile selector candidate is unavailable" >&2; exit 1; }
+              mobile_tests_tree="$(git rev-parse "$mobile_candidate:AYO-Mobile/tests")"
+              mobile_tree="$(git rev-parse "$mobile_candidate:AYO-Mobile")"
+              case "$mobile_tests_tree|$mobile_tree" in
+                d7143a733cf14e70851406dab8131ce7c69dd364\|da39714a911ffbf02171d28348c88a39eab2d938)
+                  mode=mobile-booking-intent-foundation
+                  ;;
+                53de44782c39f226918e719e2a05212f787fffcc\|6b46cae963c034aa2203e0e97c119fe68eadf908)
+                  mode=booking-consent-policy-authority
+                  ;;
+                *)
+                  echo "Unreviewed mobile identity for governed root tests tree" >&2
+                  exit 1
+                  ;;
+              esac
               ;;
             *)
               echo "Unreviewed tests tree: $tests_tree" >&2
@@ -302,6 +323,8 @@ jobs:
           esac
           echo "mode=$mode" >> "$GITHUB_OUTPUT"
           echo "tests_tree=$tests_tree" >> "$GITHUB_OUTPUT"
+          echo "mobile_tests_tree=$mobile_tests_tree" >> "$GITHUB_OUTPUT"
+          echo "mobile_tree=$mobile_tree" >> "$GITHUB_OUTPUT"
           echo "Governed evidence mode: $mode"
           echo "Governed tests tree: $tests_tree"
 
@@ -477,6 +500,427 @@ jobs:
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true'
         run: uv run --locked ruff check .
 
+      - name: Preflight Mobile Booking candidate authority before tooling
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'mobile-booking-intent-foundation'
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_BEFORE: ${{ github.event.before || '' }}
+          EVENT_HEAD_SHA: ${{ github.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || '' }}
+        run: |
+          set -euo pipefail
+          zero=0000000000000000000000000000000000000000
+          base=ee6650d7f6304e73c31aee8a1ab709cd3be1fbf0
+          require_commit() {
+            [[ "$1" =~ ^[0-9a-f]{40}$ && "$1" != "$zero" ]] || { echo "$2 is absent, malformed, or all-zero" >&2; exit 1; }
+            git cat-file -e "$1^{commit}" 2>/dev/null || { echo "$2 is unavailable" >&2; exit 1; }
+          }
+          case "$EVENT_NAME" in
+            pull_request)
+              require_commit "$PR_BASE_SHA" "Mobile PR base"; require_commit "$PR_HEAD_SHA" "Mobile PR head"
+              [[ "$PR_BASE_SHA" == "$base" ]] || { echo "Mobile PR base drift" >&2; exit 1; }
+              candidate="$PR_HEAD_SHA"
+              git merge-base --is-ancestor "$base" HEAD || { echo "Mobile base is not ancestral to tested merge" >&2; exit 1; }
+              git merge-base --is-ancestor "$candidate" HEAD || { echo "Mobile head is not ancestral to tested merge" >&2; exit 1; }
+              ;;
+            push)
+              require_commit "$EVENT_HEAD_SHA" "Mobile pushed head"
+              [[ "$EVENT_HEAD_SHA" == "$(git rev-parse HEAD)" ]] || { echo "Mobile pushed checkout drift" >&2; exit 1; }
+              candidate="$EVENT_HEAD_SHA"
+              if [[ -z "$EVENT_BEFORE" || "$EVENT_BEFORE" == "$zero" ]]; then
+                git fetch --no-tags origin refs/heads/main:refs/remotes/origin/mobile-evidence-main
+                remote_main="$(git rev-parse refs/remotes/origin/mobile-evidence-main)"
+                [[ "$remote_main" == "$base" && "$(git merge-base "$candidate" "$remote_main")" == "$base" ]] || {
+                  echo "Mobile first-publication main or merge-base drift" >&2; exit 1; }
+              else
+                require_commit "$EVENT_BEFORE" "Mobile push predecessor"
+                git merge-base --is-ancestor "$EVENT_BEFORE" "$candidate" || { echo "Mobile push predecessor is not ancestral" >&2; exit 1; }
+              fi
+              ;;
+            workflow_dispatch) echo "Mobile Booking capture rejects workflow_dispatch" >&2; exit 1 ;;
+            *) echo "Unsupported Mobile Booking event" >&2; exit 1 ;;
+          esac
+          require_commit "$candidate" "Mobile candidate"
+          git merge-base --is-ancestor "$base" "$candidate" || { echo "Mobile governed base is not ancestral" >&2; exit 1; }
+          expected=(
+            .github/workflows/ci.yml AYO-Mobile/contexts/booking-intent.tsx
+            AYO-Mobile/domain/booking-contracts.ts AYO-Mobile/domain/booking-intent.ts
+            AYO-Mobile/localization/booking-intent.ts AYO-Mobile/services/booking-api.ts
+            AYO-Mobile/services/booking-intent-controller.ts AYO-Mobile/services/booking-intent-store.ts
+            AYO-Mobile/tests/booking-api.test.ts AYO-Mobile/tests/booking-contracts.test.ts
+            AYO-Mobile/tests/booking-intent-controller.test.ts AYO-Mobile/tests/booking-intent-provider.test.tsx
+            AYO-Mobile/tests/booking-localization.test.ts docs/AYO_DECISION_LOG.md
+            docs/AYO_MOBILE_BOOKING_INTENT_FOUNDATION_ARCHITECTURE.md docs/AYO_ROADMAP.md
+          )
+          mapfile -t changed < <(git diff --name-only "$base" "$candidate")
+          [[ "${changed[*]}" == "${expected[*]}" ]] || { echo "Mobile pre-tooling manifest drift" >&2; exit 1; }
+          [[ "$(git rev-parse "$candidate:tests")" == 2dbcb487bd27578a95d0db9a31c21ecde7032114 \
+            && "$(git rev-parse "$candidate:AYO-Mobile/tests")" == d7143a733cf14e70851406dab8131ce7c69dd364 \
+            && "$(git rev-parse "$candidate:AYO-Mobile")" == da39714a911ffbf02171d28348c88a39eab2d938 \
+            && "$(git rev-parse "$candidate:BACKEND")" == 62500035ef60d94ccc6333f25cb3aa79ff5c3f21 \
+            && "$(git rev-parse "$candidate:database/migrations")" == 253ecedebe58c31077a0baa7d2532adc46464f70 \
+            && "$(git rev-parse "$candidate:AYO-Mobile/package.json")" == b4c26fea6a74ac9c1d3a442eb855cf63538fb5e2 \
+            && "$(git rev-parse "$candidate:AYO-Mobile/package-lock.json")" == ace7192e4a749f61a011f8e4293ccd1e053d648a ]] || {
+            echo "Mobile pre-tooling immutable identity drift" >&2; exit 1; }
+          git diff --quiet "$base" "$candidate" -- BACKEND database/migrations tests \
+            AYO-Mobile/package.json AYO-Mobile/package-lock.json AYO-Mobile/app AYO-Mobile/app.json \
+            AYO-Mobile/eslint.config.js AYO-Mobile/tsconfig.json .secrets.baseline || {
+            echo "Mobile pre-tooling immutable boundary drift" >&2; exit 1; }
+          echo "Mobile Booking candidate authority before tooling: PASS"
+
+      - name: Set up governed Mobile Booking Node runtime
+        if: success() && steps.evidence_contract.outputs.mode == 'mobile-booking-intent-foundation'
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24.18.0
+          cache: npm
+          cache-dependency-path: AYO-Mobile/package-lock.json
+
+      - name: Install locked Mobile Booking dependencies without lifecycle scripts
+        if: success() && steps.evidence_contract.outputs.mode == 'mobile-booking-intent-foundation'
+        working-directory: AYO-Mobile
+        run: |
+          set -euo pipefail
+          package_before="$(git hash-object package.json)"
+          lock_before="$(git hash-object package-lock.json)"
+          [[ "$package_before" == b4c26fea6a74ac9c1d3a442eb855cf63538fb5e2 ]]
+          [[ "$lock_before" == ace7192e4a749f61a011f8e4293ccd1e053d648a ]]
+          npm ci --ignore-scripts
+          [[ "$(git hash-object package.json)" == "$package_before" ]]
+          [[ "$(git hash-object package-lock.json)" == "$lock_before" ]]
+          [[ -z "$(git status --porcelain --untracked-files=all -- .)" ]]
+          node --version
+          npm --version
+
+      - name: Capture Mobile Booking Node Jest TypeScript and lint evidence
+        if: success() && steps.evidence_contract.outputs.mode == 'mobile-booking-intent-foundation'
+        working-directory: AYO-Mobile
+        env:
+          EVIDENCE_ROOT: ${{ runner.temp }}/mobile-booking-evidence-sections
+        run: |
+          set -euo pipefail
+          mkdir -p "$EVIDENCE_ROOT"
+          trap 'rm -f "$EVIDENCE_ROOT"/*.json "$EVIDENCE_ROOT"/*.log \
+            "$EVIDENCE_ROOT"/*.tap "$EVIDENCE_ROOT"/*.tap.status "$EVIDENCE_ROOT"/*.log.status' EXIT
+          run_capture() {
+            local output="$1"; shift
+            set +e
+            "$@" >"$output" 2>&1
+            local status=$?
+            set -e
+            printf '%s\n' "$status" >"$output.status"
+          }
+          run_capture "$EVIDENCE_ROOT/focused-node.tap" node --experimental-strip-types --test \
+            --test-reporter=tap \
+            tests/booking-api.test.ts tests/booking-contracts.test.ts \
+            tests/booking-intent-controller.test.ts tests/booking-localization.test.ts
+          run_capture "$EVIDENCE_ROOT/complete-node.tap" node --experimental-strip-types --test \
+            --test-reporter=tap tests/*.test.ts
+          run_capture "$EVIDENCE_ROOT/focused-jest.log" npm run test:provider -- \
+            tests/booking-intent-provider.test.tsx --json \
+            --outputFile="$EVIDENCE_ROOT/focused-jest.json"
+          run_capture "$EVIDENCE_ROOT/complete-jest.log" npm run test:provider -- \
+            --json --outputFile="$EVIDENCE_ROOT/complete-jest.json"
+          run_capture "$EVIDENCE_ROOT/typescript.log" npm run typecheck
+          run_capture "$EVIDENCE_ROOT/lint.log" npm run lint -- -- \
+            --format json --output-file "$EVIDENCE_ROOT/lint.json"
+          EVIDENCE_ROOT="$EVIDENCE_ROOT" python - <<'PY'
+          import hashlib, json, os, re, subprocess
+          from pathlib import Path
+
+          root = Path(os.environ["EVIDENCE_ROOT"])
+          node_version = subprocess.run(["node", "--version"], check=True, capture_output=True, text=True).stdout.strip()
+          if not re.fullmatch(r"v[0-9]+(?:\.[0-9]+){2}", node_version): raise SystemExit("Node version output drift")
+          package_lock = json.loads(Path("package-lock.json").read_text())
+          def digest(lines):
+              return hashlib.sha256("\n".join(lines).encode()).hexdigest()
+          def write(name, start, fields):
+              lines = [start, *(f"{key}={value}" for key, value in fields), f"END_{start}"]
+              path = root / name
+              block = "\n".join(lines) + "\n"
+              path.write_text(block, encoding="utf-8", newline="\n")
+              if path.read_text(encoding="utf-8") != block: raise SystemExit("mobile evidence write drift")
+          def status(name):
+              value = (root / f"{name}.status").read_text().strip()
+              if not re.fullmatch(r"[0-9]+", value): raise SystemExit("malformed command status")
+              return int(value)
+          def node(name, output_name, files):
+              if status(name + ".tap"):
+                  raise SystemExit(f"Node command failed: {name}")
+              try:
+                  with open(root / f"{name}.tap", encoding="utf-8", newline="") as source:
+                      text = source.read()
+              except (OSError, UnicodeError):
+                  raise SystemExit(f"malformed Node TAP encoding: {name}") from None
+              if "\r" in text:
+                  raise SystemExit(f"malformed Node TAP encoding: {name}")
+              header_count = len(re.findall(r"(?m)^TAP version 13$", text))
+              top_level_plan_count = len(re.findall(r"(?m)^1\.\.(?:0|[1-9][0-9]*)$", text))
+              if header_count != 1:
+                  raise SystemExit(
+                      f"Node TAP failure: stream={name} category=header_cardinality "
+                      f"headers={header_count} top_level_plans={top_level_plan_count} status=zero"
+                  )
+              if not text.startswith("TAP version 13\n"):
+                  raise SystemExit(
+                      f"Node TAP failure: stream={name} category=document_prefix "
+                      f"headers={header_count} top_level_plans={top_level_plan_count} status=zero"
+                  )
+              plans = re.findall(r"(?m)^1\.\.(0|[1-9][0-9]*)$", text)
+              if len(plans) != 1:
+                  raise SystemExit(f"malformed Node TAP plan: {name}")
+              plan = int(plans[0])
+              if plan <= 0:
+                  raise SystemExit(f"empty Node TAP plan: {name}")
+              summaries = {}
+              for key in ("tests", "pass", "fail", "cancelled", "skipped", "todo"):
+                  matches = re.findall(rf"(?m)^# {key} (0|[1-9][0-9]*)$", text)
+                  if len(matches) != 1:
+                      raise SystemExit(f"malformed Node TAP summary: {name} {key}")
+                  summaries[key] = int(matches[0])
+              subtests = re.findall(r"(?m)^( *)# Subtest: ([^\r\n]+)$", text)
+              selected = [value for _, value in subtests]
+              top_level = [value for indent, value in subtests if not indent]
+              if any(len(indent) % 4 for indent, _ in subtests):
+                  raise SystemExit(f"ambiguous Node TAP nesting: {name}")
+              if len(top_level) != plan:
+                  raise SystemExit(f"Node TAP plan drift: {name}")
+              if len(selected) != summaries["tests"] or len(selected) != len(set(selected)):
+                  raise SystemExit(f"Node selected inventory drift: {name}")
+              passed = re.findall(r"(?m)^\s*ok \d+ - (.+?)(?: #.*)?$", text)
+              if len(passed) != summaries["pass"] or len(passed) != len(set(passed)):
+                  raise SystemExit(f"Node passing inventory drift: {name}")
+              if any(summaries[key] for key in ("fail", "cancelled", "skipped", "todo")):
+                  raise SystemExit(f"Node command did not pass exactly: {name}")
+              if summaries["tests"] != sum(summaries[key] for key in ("pass", "fail", "cancelled", "skipped", "todo")):
+                  raise SystemExit(f"Node arithmetic drift: {name}")
+              plan_end = re.search(r"(?m)^1\.\.(?:0|[1-9][0-9]*)$", text).end()
+              trailer = [line for line in text[plan_end:].splitlines() if line]
+              trailer_keys = ("tests", "suites", "pass", "fail", "cancelled", "skipped", "todo")
+              if (
+                  len(trailer) != len(trailer_keys) + 1
+                  or any(
+                      not re.fullmatch(rf"# {key} (?:0|[1-9][0-9]*)", line)
+                      for key, line in zip(trailer_keys, trailer[:-1], strict=True)
+                  )
+                  or not re.fullmatch(r"# duration_ms [0-9]+(?:\.[0-9]+)?", trailer[-1])
+              ):
+                  raise SystemExit(f"unknown Node TAP trailer: {name}")
+              file_inventory = sorted(files)
+              required_focused_files = [
+                  "tests/booking-api.test.ts",
+                  "tests/booking-contracts.test.ts",
+                  "tests/booking-intent-controller.test.ts",
+                  "tests/booking-localization.test.ts",
+              ]
+              if name == "focused-node" and file_inventory != required_focused_files:
+                  raise SystemExit("focused Node file inventory drift")
+              fields = [(key, summaries[key]) for key in ("tests", "pass", "fail", "cancelled", "skipped", "todo")]
+              fields += [
+                  ("test_file_count", len(file_inventory)),
+                  ("test_file_fingerprint", digest(file_inventory)),
+                  ("selected_test_fingerprint", digest(sorted(selected))),
+                  ("passing_test_fingerprint", digest(sorted(passed))),
+                  ("required_inventory", "PASS"),
+                  ("process_exit", 0),
+                  ("node_version", node_version),
+                  ("command_fingerprint", digest([
+                      "node --experimental-strip-types --test --test-reporter=tap"
+                      if name == "focused-node" else
+                      "node --experimental-strip-types --test --test-reporter=tap tests/*.test.ts",
+                      *file_inventory,
+                  ])),
+              ]
+              write(output_name, output_name.removesuffix(".txt"), fields)
+          focused_files = [
+              "tests/booking-api.test.ts", "tests/booking-contracts.test.ts",
+              "tests/booking-intent-controller.test.ts", "tests/booking-localization.test.ts",
+          ]
+          complete_files = sorted(path.as_posix() for path in Path("tests").glob("*.test.ts"))
+          node("focused-node", "MOBILE_FOCUSED_NODE_V1.txt", focused_files)
+          node("complete-node", "MOBILE_COMPLETE_NODE_V1.txt", complete_files)
+          def jest(name, output_name, focused=False):
+              if status(name + ".log"): raise SystemExit(f"Jest command failed: {name}")
+              value = json.loads((root / f"{name}.json").read_text(encoding="utf-8"))
+              required = {"numTotalTestSuites", "numPassedTestSuites", "numFailedTestSuites", "numPendingTestSuites", "numTotalTests", "numPassedTests", "numFailedTests", "numPendingTests", "numTodoTests", "testResults"}
+              if not required.issubset(value): raise SystemExit(f"malformed Jest result: {name}")
+              suites = sorted(Path(item["name"]).relative_to(Path.cwd()).as_posix() for item in value["testResults"])
+              tests = sorted(f"{Path(item['name']).relative_to(Path.cwd()).as_posix()}::{case['fullName']}" for item in value["testResults"] for case in item["assertionResults"])
+              passing = sorted(f"{Path(item['name']).relative_to(Path.cwd()).as_posix()}::{case['fullName']}" for item in value["testResults"] for case in item["assertionResults"] if case["status"] == "passed")
+              if len(suites) != len(set(suites)) or len(tests) != len(set(tests)): raise SystemExit("duplicate Jest inventory")
+              if value["numFailedTestSuites"] or value["numPendingTestSuites"] or value["numFailedTests"] or value["numPendingTests"] or value["numTodoTests"]: raise SystemExit("unexpected Jest result")
+              required_suite = "tests/booking-intent-provider.test.tsx"
+              if focused and suites != [required_suite]: raise SystemExit("focused Booking provider suite drift")
+              log = (root / f"{name}.log").read_text(encoding="utf-8", errors="replace")
+              warning_categories = sorted(re.findall(r"(?m)^\s*console\.(warn|error)$", log))
+              fields = [
+                  ("suites_total", value["numTotalTestSuites"]), ("suites_passed", value["numPassedTestSuites"]),
+                  ("suites_failed", value["numFailedTestSuites"]), ("suites_pending", value["numPendingTestSuites"]),
+                  ("tests_total", value["numTotalTests"]), ("tests_passed", value["numPassedTests"]),
+                  ("tests_failed", value["numFailedTests"]), ("tests_pending", value["numPendingTests"]),
+                  ("tests_todo", value["numTodoTests"]), ("suite_fingerprint", digest(suites)),
+                  ("selected_test_fingerprint", digest(tests)), ("passing_test_fingerprint", digest(passing)),
+                  ("warning_category_count", len(warning_categories)), ("warning_category_fingerprint", digest(warning_categories)),
+                  ("focused_booking_provider", "PASS" if focused else "NOT_APPLICABLE"),
+                  ("process_exit", 0), ("jest_version", package_lock["packages"]["node_modules/jest"]["version"]),
+                  ("command_fingerprint", digest([
+                      "npm run test:provider -- tests/booking-intent-provider.test.tsx"
+                      if focused else "npm run test:provider"
+                  ])),
+              ]
+              write(output_name, output_name.removesuffix(".txt"), fields)
+          jest("focused-jest", "MOBILE_FOCUSED_PROVIDER_JEST_V1.txt", True)
+          jest("complete-jest", "MOBILE_COMPLETE_PROVIDER_JEST_V1.txt")
+          if status("typescript.log"): raise SystemExit("TypeScript command failed")
+          tsc_lines = [line for line in (root / "typescript.log").read_text(encoding="utf-8").splitlines() if line and not line.startswith(">")]
+          diagnostic = [line for line in tsc_lines if re.search(r"\([0-9]+,[0-9]+\): error TS[0-9]+:", line)]
+          if diagnostic or tsc_lines: raise SystemExit("unknown TypeScript output")
+          write("MOBILE_TYPESCRIPT_V1.txt", "MOBILE_TYPESCRIPT_V1", [
+              ("typescript_version", package_lock["packages"]["node_modules/typescript"]["version"]),
+              ("diagnostic_count", len(diagnostic)), ("affected_file_count", 0),
+              ("diagnostic_fingerprint", digest(diagnostic)), ("process_exit", 0),
+              ("command_fingerprint", digest(["npm run typecheck"])),
+          ])
+          if status("lint.log"): raise SystemExit("mobile lint command failed")
+          lint = json.loads((root / "lint.json").read_text(encoding="utf-8"))
+          diagnostics = sorted(f"{Path(item['filePath']).relative_to(Path.cwd()).as_posix()}|{message['ruleId']}|{message['severity']}|{message['line']}|{message['column']}|{' '.join(message['message'].split())}" for item in lint for message in item["messages"])
+          errors = sum(item["errorCount"] for item in lint); warnings = sum(item["warningCount"] for item in lint)
+          if errors or warnings: raise SystemExit("mobile lint diagnostics are not clean")
+          lock = package_lock
+          write("MOBILE_LINT_V1.txt", "MOBILE_LINT_V1", [
+              ("expo_version", lock["packages"]["node_modules/expo"]["version"]),
+              ("eslint_version", lock["packages"]["node_modules/eslint"]["version"]),
+              ("error_count", errors), ("warning_count", warnings),
+              ("diagnostic_fingerprint", digest(diagnostics)), ("process_exit", 0),
+              ("command_fingerprint", digest([
+                  "npm run lint -- -- --format json --output-file $EVIDENCE_ROOT/lint.json"
+              ])),
+          ])
+          for path in root.glob("*.json"): path.unlink()
+          for path in root.glob("*.log"): path.unlink()
+          for path in root.glob("*.tap*"): path.unlink()
+          PY
+
+      - name: Capture Mobile Booking npm dependency audit evidence
+        if: success() && steps.evidence_contract.outputs.mode == 'mobile-booking-intent-foundation'
+        working-directory: AYO-Mobile
+        env:
+          EVIDENCE_ROOT: ${{ runner.temp }}/mobile-booking-evidence-sections
+        run: |
+          set -euo pipefail
+          npm --version >"$EVIDENCE_ROOT/npm-version.txt"
+          trap 'rm -f "$EVIDENCE_ROOT"/npm-version.txt "$EVIDENCE_ROOT"/npm-audit-all.json \
+            "$EVIDENCE_ROOT"/npm-audit-production.json "$EVIDENCE_ROOT"/npm-audit-all.err \
+            "$EVIDENCE_ROOT"/npm-audit-production.err' EXIT
+          set +e
+          npm audit --json >"$EVIDENCE_ROOT/npm-audit-all.json" 2>"$EVIDENCE_ROOT/npm-audit-all.err"
+          all_status=$?
+          npm audit --omit=dev --json >"$EVIDENCE_ROOT/npm-audit-production.json" 2>"$EVIDENCE_ROOT/npm-audit-production.err"
+          production_status=$?
+          set -e
+          ALL_STATUS="$all_status" PRODUCTION_STATUS="$production_status" EVIDENCE_ROOT="$EVIDENCE_ROOT" python - <<'PY'
+          import hashlib, json, os, re
+          from pathlib import Path
+          root = Path(os.environ["EVIDENCE_ROOT"])
+          def load(name, status):
+              if status not in (0, 1): raise SystemExit("npm audit infrastructure status drift")
+              value = json.loads((root / name).read_text(encoding="utf-8"))
+              if value.get("error") or not isinstance(value.get("metadata"), dict): raise SystemExit("npm audit incomplete")
+              vulnerabilities = value["metadata"].get("vulnerabilities")
+              dependencies = value["metadata"].get("dependencies")
+              if not isinstance(vulnerabilities, dict) or not isinstance(dependencies, dict): raise SystemExit("npm audit metadata malformed")
+              severities = ["info", "low", "moderate", "high", "critical", "total"]
+              if any(type(vulnerabilities.get(key)) is not int or vulnerabilities[key] < 0 for key in severities): raise SystemExit("npm audit vulnerability counts malformed")
+              dep_keys = sorted(key for key, item in dependencies.items() if type(item) is int and item >= 0)
+              if not dep_keys: raise SystemExit("npm audit dependency population absent")
+              dep_lines = [f"{key}={dependencies[key]}" for key in dep_keys]
+              return vulnerabilities, dependencies, hashlib.sha256("\n".join(dep_lines).encode()).hexdigest()
+          all_v, all_d, all_fp = load("npm-audit-all.json", int(os.environ["ALL_STATUS"]))
+          prod_v, prod_d, prod_fp = load("npm-audit-production.json", int(os.environ["PRODUCTION_STATUS"]))
+          npm_version = (root / "npm-version.txt").read_text().strip()
+          if not re.fullmatch(r"[0-9]+(?:\.[0-9]+){2}", npm_version): raise SystemExit("npm version output drift")
+          lines = ["MOBILE_DEPENDENCY_AUDIT_V1", f"npm_version={npm_version}"]
+          for prefix, values in (("all", all_v), ("production", prod_v)):
+              lines.extend(f"{prefix}_{key}={values[key]}" for key in ("info", "low", "moderate", "high", "critical", "total"))
+          for prefix, values in (("all", all_d), ("production", prod_d)):
+              lines.extend(
+                  f"{prefix}_dependency_{key}={values[key]}"
+                  for key in sorted(values) if type(values[key]) is int and values[key] >= 0
+              )
+          lines += [f"all_dependency_population_fingerprint={all_fp}", f"production_dependency_population_fingerprint={prod_fp}", "audit_completion=PASS", "END_MOBILE_DEPENDENCY_AUDIT_V1"]
+          block = "\n".join(lines) + "\n"; path = root / "MOBILE_DEPENDENCY_AUDIT_V1.txt"
+          path.write_text(block, encoding="utf-8", newline="\n")
+          if path.read_text(encoding="utf-8") != block: raise SystemExit("npm audit evidence retention failed")
+          for name in ("npm-version.txt", "npm-audit-all.json", "npm-audit-production.json", "npm-audit-all.err", "npm-audit-production.err"): (root / name).unlink(missing_ok=True)
+          PY
+
+      - name: Verify Mobile Booking preview-only source safety
+        if: success() && steps.evidence_contract.outputs.mode == 'mobile-booking-intent-foundation'
+        env:
+          EVIDENCE_PATH: ${{ runner.temp }}/mobile-booking-evidence-sections/MOBILE_SOURCE_SAFETY_V1.txt
+        run: |
+          set -euo pipefail
+          EVIDENCE_PATH="$EVIDENCE_PATH" python - <<'PY'
+          import hashlib, json, os, re, subprocess
+          from pathlib import Path
+
+          production = [
+              Path("AYO-Mobile/contexts/booking-intent.tsx"),
+              *sorted(Path("AYO-Mobile/domain").glob("booking-*.ts")),
+              Path("AYO-Mobile/localization/booking-intent.ts"),
+              *sorted(Path("AYO-Mobile/services").glob("booking-*.ts")),
+          ]
+          corpus = "\n".join(path.read_text(encoding="utf-8") for path in production)
+          forbidden = {
+              "confirmation_endpoint": r"/mobile/booking/confirm(?:ations)?(?:/|['\"])",
+              "confirmation_or_recovery_surface": r"\b(?:confirmBooking|recoverConfirmation|confirmationPending|outcomeUnknown)\b",
+              "test_or_environment_unlock": r"\b(?:createTestBookingIntentController|process\.env|EXPO_PUBLIC_)\b",
+              "durable_storage": r"\b(?:AsyncStorage|SecureStore|localStorage|sessionStorage)\b",
+              "sensitive_logging": r"\bconsole\.(?:log|info|warn|error|debug)\b",
+              "unsafe_suppression": r"(?:@ts-ignore|@ts-expect-error|eslint-disable|\bas\s+any\b|\bas\s+never\b)",
+              "provider_payment_notification_analytics": r"\b(?:Stripe|Payment|Notifications?|Analytics|Crashlytics|Dispatch)\b",
+          }
+          for label, pattern in forbidden.items():
+              if re.search(pattern, corpus, re.IGNORECASE):
+                  raise SystemExit(f"Mobile Booking source-safety failure: {label}")
+          context = Path("AYO-Mobile/contexts/booking-intent.tsx").read_text(encoding="utf-8")
+          provider_props = next(
+              (line for line in context.splitlines() if line.startswith("type BookingIntentProviderProps=")), ""
+          )
+          if not provider_props or re.search(r"(?:controller|continuity|store|state)\s*[?:]", provider_props):
+              raise SystemExit("Mobile Booking provider exposes authority injection")
+          candidate = os.environ.get("TESTED_COMMIT_SHA", "")
+          if not re.fullmatch(r"[0-9a-f]{40}", candidate):
+              raise SystemExit("Mobile source-safety candidate identity drift")
+          changed = set(subprocess.run(
+              ["git", "diff", "--name-only", "ee6650d7f6304e73c31aee8a1ab709cd3be1fbf0", candidate],
+              check=True, capture_output=True, text=True,
+          ).stdout.splitlines())
+          if any(path.startswith("AYO-Mobile/app/") or path in {
+              "AYO-Mobile/app.json", "AYO-Mobile/package.json", "AYO-Mobile/package-lock.json"
+          } for path in changed):
+              raise SystemExit("Mobile Booking screen navigation or configuration drift")
+          fields = [
+              "confirmation_recovery_authority=ABSENT", "capability_unlock=ABSENT",
+              "provider_composition_wiring=ABSENT", "context_authority_injection=ABSENT",
+              "caller_selected_identity=ABSENT", "durable_storage=ABSENT",
+              "sensitive_logging=ABSENT", "external_activation=ABSENT",
+              "screen_navigation_change=ABSENT", "production_activation=ABSENT",
+              "unsafe_authority_suppression=ABSENT", "mobile_changed_line_coverage=NOT_AVAILABLE_COMMITTED_TOOLING",
+              "complete_check_execution=COMPONENT_COMMANDS_EXECUTED_WITHOUT_DOUBLE_COUNTING",
+              "complete_check_script_fingerprint=" + hashlib.sha256(
+                  json.loads(Path("AYO-Mobile/package.json").read_text(encoding="utf-8"))["scripts"]["check"].encode()
+              ).hexdigest(),
+          ]
+          block = "MOBILE_SOURCE_SAFETY_V1\n" + "\n".join(fields) + "\nEND_MOBILE_SOURCE_SAFETY_V1\n"
+          path = Path(os.environ["EVIDENCE_PATH"]); path.parent.mkdir(parents=True, exist_ok=True)
+          with path.open("x", encoding="utf-8", newline="\n") as output:
+              output.write(block); output.flush(); os.fsync(output.fileno())
+          if path.read_text(encoding="utf-8") != block:
+              raise SystemExit("Mobile source-safety evidence retention failed")
+          PY
+
       - name: Verify exact historical non-PostgreSQL debt
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'pre-batch2'
         run: |
@@ -599,27 +1043,36 @@ jobs:
                 }
                 comparison_sha="$EVENT_BEFORE"
                 mode=verified-push-before
-              elif [[ "$EVIDENCE_MODE" == "booking-consent-policy-authority" ]]; then
-                expected_base=6613a936b0fe896308682c8fe038708876a06c02
+              elif [[ "$EVIDENCE_MODE" == "booking-consent-policy-authority" \
+                || "$EVIDENCE_MODE" == "mobile-booking-intent-foundation" ]]; then
+                if [[ "$EVIDENCE_MODE" == "mobile-booking-intent-foundation" ]]; then
+                  expected_base=ee6650d7f6304e73c31aee8a1ab709cd3be1fbf0
+                  label="Mobile Booking intent foundation"
+                  first_push_mode=verified-mobile-booking-intent-first-push-base
+                else
+                  expected_base=6613a936b0fe896308682c8fe038708876a06c02
+                  label="Booking consent authority"
+                  first_push_mode=verified-booking-consent-first-push-base
+                fi
                 git fetch --no-tags origin \
                   refs/heads/main:refs/remotes/origin/coverage-main
                 authoritative_main="$(git rev-parse refs/remotes/origin/coverage-main)"
                 require_commit "$authoritative_main" "authoritative remote main SHA"
                 if [[ "$authoritative_main" != "$expected_base" ]]; then
-                  echo "Booking consent authority first-push remote main drift" >&2
+                  echo "$label first-push remote main drift" >&2
                   exit 1
                 fi
                 merge_base="$(git merge-base "$EVENT_HEAD_SHA" "$authoritative_main")"
                 if [[ "$merge_base" != "$expected_base" ]]; then
-                  echo "Booking consent authority first-push merge-base drift" >&2
+                  echo "$label first-push merge-base drift" >&2
                   exit 1
                 fi
                 git merge-base --is-ancestor "$expected_base" "$EVENT_HEAD_SHA" || {
-                  echo "Booking consent authority first-push base is not an ancestor" >&2
+                  echo "$label first-push base is not an ancestor" >&2
                   exit 1
                 }
                 comparison_sha="$expected_base"
-                mode=verified-booking-consent-first-push-base
+                mode="$first_push_mode"
               else
                 mapfile -t parents < <(git show -s --format='%P' "$EVENT_HEAD_SHA" | tr ' ' '\n')
                 if [[ "${#parents[@]}" -ne 1 ]]; then
@@ -888,6 +1341,111 @@ jobs:
           done
           echo "Booking consent-policy-authority exact candidate identity: PASS"
 
+      - name: Bind exact Mobile Booking intent foundation candidate identity
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'mobile-booking-intent-foundation'
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_BEFORE: ${{ github.event.before || '' }}
+          EVENT_HEAD_SHA: ${{ github.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || '' }}
+          TRUSTED_COMPARISON_BASE_SHA: ${{ steps.trusted_comparison_base.outputs.sha }}
+        run: |
+          set -euo pipefail
+          zero=0000000000000000000000000000000000000000
+          expected_base=ee6650d7f6304e73c31aee8a1ab709cd3be1fbf0
+          expected_tests=2dbcb487bd27578a95d0db9a31c21ecde7032114
+          expected_mobile_tests=d7143a733cf14e70851406dab8131ce7c69dd364
+          expected_mobile=da39714a911ffbf02171d28348c88a39eab2d938
+          case "$EVENT_NAME" in
+            pull_request)
+              candidate="$PR_HEAD_SHA"
+              if [[ "$PR_BASE_SHA" != "$expected_base" \
+                || "$TRUSTED_COMPARISON_BASE_SHA" != "$expected_base" ]]; then
+                echo "Mobile Booking intent PR base identity drift" >&2; exit 1
+              fi
+              git merge-base --is-ancestor "$expected_base" HEAD || {
+                echo "Mobile Booking intent base is not ancestral to tested merge" >&2; exit 1; }
+              git merge-base --is-ancestor "$candidate" HEAD || {
+                echo "Mobile Booking intent PR head is not ancestral to tested merge" >&2; exit 1; }
+              ;;
+            push)
+              candidate="$EVENT_HEAD_SHA"
+              [[ "$candidate" == "$(git rev-parse HEAD)" ]] || {
+                echo "Mobile Booking intent pushed candidate identity drift" >&2; exit 1; }
+              if [[ -n "$EVENT_BEFORE" && "$EVENT_BEFORE" != "$zero" ]]; then
+                [[ "$EVENT_BEFORE" =~ ^[0-9a-f]{40}$ ]] || {
+                  echo "Mobile Booking intent push predecessor is malformed" >&2; exit 1; }
+                git cat-file -e "$EVENT_BEFORE^{commit}" 2>/dev/null || {
+                  echo "Mobile Booking intent push predecessor is unavailable" >&2; exit 1; }
+                [[ "$TRUSTED_COMPARISON_BASE_SHA" == "$EVENT_BEFORE" ]] || {
+                  echo "Mobile Booking intent push predecessor identity drift" >&2; exit 1; }
+                git merge-base --is-ancestor "$EVENT_BEFORE" "$candidate" || {
+                  echo "Mobile Booking intent push predecessor is not ancestral" >&2; exit 1; }
+              else
+                [[ "$TRUSTED_COMPARISON_BASE_SHA" == "$expected_base" ]] || {
+                  echo "Mobile Booking intent first-push base identity drift" >&2; exit 1; }
+              fi
+              ;;
+            workflow_dispatch)
+              echo "Mobile Booking intent foundation does not authorize workflow_dispatch" >&2
+              exit 1
+              ;;
+            *) echo "Unsupported Mobile Booking intent event" >&2; exit 1 ;;
+          esac
+          [[ "$candidate" =~ ^[0-9a-f]{40}$ && "$candidate" != "$zero" ]] || {
+            echo "Mobile Booking intent candidate is absent, malformed, or all-zero" >&2; exit 1; }
+          for commit in "$candidate" "$expected_base"; do
+            git cat-file -e "$commit^{commit}" 2>/dev/null || {
+              echo "Mobile Booking intent governed commit is unavailable" >&2; exit 1; }
+          done
+          git merge-base --is-ancestor "$expected_base" "$candidate" || {
+            echo "Mobile Booking intent candidate does not descend from base" >&2; exit 1; }
+          mapfile -t changed < <(git diff --name-only "$expected_base" "$candidate")
+          expected=(
+            .github/workflows/ci.yml
+            AYO-Mobile/contexts/booking-intent.tsx
+            AYO-Mobile/domain/booking-contracts.ts
+            AYO-Mobile/domain/booking-intent.ts
+            AYO-Mobile/localization/booking-intent.ts
+            AYO-Mobile/services/booking-api.ts
+            AYO-Mobile/services/booking-intent-controller.ts
+            AYO-Mobile/services/booking-intent-store.ts
+            AYO-Mobile/tests/booking-api.test.ts
+            AYO-Mobile/tests/booking-contracts.test.ts
+            AYO-Mobile/tests/booking-intent-controller.test.ts
+            AYO-Mobile/tests/booking-intent-provider.test.tsx
+            AYO-Mobile/tests/booking-localization.test.ts
+            docs/AYO_DECISION_LOG.md
+            docs/AYO_MOBILE_BOOKING_INTENT_FOUNDATION_ARCHITECTURE.md
+            docs/AYO_ROADMAP.md
+          )
+          [[ "${changed[*]}" == "${expected[*]}" ]] || {
+            printf 'Mobile Booking intent manifest drift: %s\n' "${changed[*]}" >&2; exit 1; }
+          [[ "$(git rev-parse "${candidate}:tests")" == "$expected_tests" \
+            && "$(git rev-parse "${candidate}:AYO-Mobile/tests")" == "$expected_mobile_tests" \
+            && "$(git rev-parse "${candidate}:AYO-Mobile")" == "$expected_mobile" \
+            && "$(git rev-parse "${candidate}:BACKEND")" == "62500035ef60d94ccc6333f25cb3aa79ff5c3f21" \
+            && "$(git rev-parse "${candidate}:database/migrations")" == "253ecedebe58c31077a0baa7d2532adc46464f70" \
+            && "$(git rev-parse "${candidate}:AYO-Mobile/package.json")" == "b4c26fea6a74ac9c1d3a442eb855cf63538fb5e2" \
+            && "$(git rev-parse "${candidate}:AYO-Mobile/package-lock.json")" == "ace7192e4a749f61a011f8e4293ccd1e053d648a" ]] || {
+            echo "Mobile Booking intent immutable identity drift" >&2; exit 1; }
+          for path in BACKEND tests database/migrations AYO-Mobile/package.json \
+            AYO-Mobile/package-lock.json AYO-Mobile/app AYO-Mobile/app.json \
+            AYO-Mobile/eslint.config.js AYO-Mobile/tsconfig.json .secrets.baseline; do
+            if [[ "$path" == AYO-Mobile/app || "$path" == AYO-Mobile/app.json \
+              || "$path" == AYO-Mobile/eslint.config.js || "$path" == AYO-Mobile/tsconfig.json ]]; then
+              git diff --quiet "$expected_base" "$candidate" -- "$path" || {
+                echo "Mobile Booking intent configuration or screen drift: $path" >&2; exit 1; }
+            elif [[ "$path" != AYO-Mobile/package.json && "$path" != AYO-Mobile/package-lock.json ]]; then
+              [[ "$(git rev-parse "${expected_base}:$path")" == "$(git rev-parse "${candidate}:$path")" ]] || {
+                echo "Mobile Booking intent immutable boundary drift: $path" >&2; exit 1; }
+            fi
+          done
+          git diff --quiet "$expected_base" "$candidate" -- BACKEND || {
+            echo "Mobile Booking intent backend diff is nonempty" >&2; exit 1; }
+          echo "Mobile Booking intent exact candidate identity: PASS"
+
       - name: Bind tested Courier Pickup tree to trusted authoritative base
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'courier-pickup-idempotency-v1'
         id: courier_pickup_v1_content
@@ -1049,11 +1607,13 @@ jobs:
           PY
 
       - name: Test all admitted non-PostgreSQL behavior with coverage
-        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && (steps.evidence_contract.outputs.mode == 'pre-batch2' || steps.evidence_contract.outputs.mode == 'booking-complete-replay-equivalence' || steps.evidence_contract.outputs.mode == 'booking-consent-policy-authority')
+        id: backend_broad_regression
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && (steps.evidence_contract.outputs.mode == 'pre-batch2' || steps.evidence_contract.outputs.mode == 'booking-complete-replay-equivalence' || steps.evidence_contract.outputs.mode == 'booking-consent-policy-authority' || steps.evidence_contract.outputs.mode == 'mobile-booking-intent-foundation')
         env:
           EVIDENCE_MODE: ${{ steps.evidence_contract.outputs.mode }}
           TRUSTED_COMPARISON_BASE_SHA: ${{ steps.trusted_comparison_base.outputs.sha }}
           BOOKING_CONSENT_BROAD_EVIDENCE_PATH: ${{ runner.temp }}/booking-consent-broad-v1.txt
+          MOBILE_BACKEND_BROAD_EVIDENCE_PATH: ${{ runner.temp }}/mobile-backend-broad-v1.txt
         run: |
           set +e
           set -o pipefail
@@ -1076,6 +1636,7 @@ jobs:
           import hashlib
           import json
           import os
+          from collections import Counter
           import re
           import subprocess
           import xml.etree.ElementTree as ET
@@ -1207,8 +1768,10 @@ jobs:
           governed_replay_evidence = mode in {
               "booking-complete-replay-equivalence",
               "booking-consent-policy-authority",
+              "mobile-booking-intent-foundation",
           }
           capture_consent_evidence = mode == "booking-consent-policy-authority"
+          capture_mobile_evidence = mode == "mobile-booking-intent-foundation"
           new_registry_node = (
               "tests/test_authorization_contracts.py::"
               "test_permission_registry_contains_exact_reconciled_production_inventory"
@@ -1372,6 +1935,9 @@ jobs:
                   raise SystemExit(f"historical uncollected-file inventory drift: {sorted(uncollected)!r}")
           else:
               compare_sha = (
+                  "ee6650d7f6304e73c31aee8a1ab709cd3be1fbf0"
+                  if capture_mobile_evidence
+                  else
                   "6613a936b0fe896308682c8fe038708876a06c02"
                   if capture_consent_evidence
                   else "b79c7ae45f644dd1198f0b526bbda38bc2d11e23"
@@ -1401,6 +1967,9 @@ jobs:
                       ).stdout.splitlines()
                   )
                   required_backend_paths = (
+                      set()
+                      if capture_mobile_evidence
+                      else
                       {
                           "BACKEND/booking/application.py",
                           "BACKEND/booking/consent.py",
@@ -1419,6 +1988,8 @@ jobs:
                       raise SystemExit(
                           "governed booking production diff is empty or incomplete"
                       )
+                  if capture_mobile_evidence and changed_backend_paths:
+                      raise SystemExit("Mobile Booking intent backend diff is not empty")
               changed = subprocess.run(
                   ["git", "diff", "--unified=0", compare_sha, "HEAD", "--", "BACKEND"],
                   check=True, capture_output=True, text=True,
@@ -1522,7 +2093,7 @@ jobs:
               if actual_inventory["skipped"] != 0 or actual_inventory["xfailed"] != 1:
                   raise SystemExit("Booking replay-equivalence skip or xfail drift")
               print("Booking replay-equivalence exact broad evidence: PASS")
-          elif capture_consent_evidence:
+          elif capture_consent_evidence or capture_mobile_evidence:
               xfail_nodes = sorted(xfailed_nodes)
               xfail_reason = " ".join(
                   xfailed[0].find("skipped").get("message", "").split()
@@ -1536,8 +2107,16 @@ jobs:
                   or actual_percentage < 70.0
               ):
                   raise SystemExit("Booking consent broad evidence is not admissible")
+              start = (
+                  "MOBILE_BACKEND_BROAD_REGRESSION_V1"
+                  if capture_mobile_evidence else "BOOKING_CONSENT_BROAD_EVIDENCE_V1"
+              )
+              end = (
+                  "END_MOBILE_BACKEND_BROAD_REGRESSION_V1"
+                  if capture_mobile_evidence else "END_BOOKING_CONSENT_BROAD_EVIDENCE_V1"
+              )
               lines = [
-                  "BOOKING_CONSENT_BROAD_EVIDENCE_V1",
+                  start,
                   f"collected={len(case_nodes) + matched_deselections}",
                   f"selected={len(case_nodes)}",
                   f"passed={len(passed_nodes)}",
@@ -1558,16 +2137,57 @@ jobs:
                   f"coverage_semantic_fingerprint={fingerprint}",
                   f"zero_coverage_inventory_fingerprint={hashlib.sha256(chr(10).join(sorted(zero_coverage)).encode()).hexdigest()}",
                   f"uncollected_inventory_fingerprint={hashlib.sha256(chr(10).join(sorted(uncollected)).encode()).hexdigest()}",
-                  "changed_production_line_coverage=PASS",
-                  "END_BOOKING_CONSENT_BROAD_EVIDENCE_V1",
+                  "changed_production_line_coverage=" + ("NOT_APPLICABLE_EMPTY_BACKEND_DIFF" if capture_mobile_evidence else "PASS"),
+                  end,
               ]
               block = "\n".join(lines) + "\n"
-              path = os.environ["BOOKING_CONSENT_BROAD_EVIDENCE_PATH"]
+              path = os.environ[
+                  "MOBILE_BACKEND_BROAD_EVIDENCE_PATH"
+                  if capture_mobile_evidence else "BOOKING_CONSENT_BROAD_EVIDENCE_PATH"
+              ]
               with open(path, "x", encoding="utf-8", newline="\n") as output:
                   output.write(block); output.flush(); os.fsync(output.fileno())
               if open(path, encoding="utf-8", newline="").read() != block:
                   raise SystemExit("Booking consent broad evidence retention failed")
           PY
+
+      - name: Remove Mobile Booking backend regression intermediates
+        if: always() && steps.evidence_contract.outputs.mode == 'mobile-booking-intent-foundation'
+        env:
+          BROAD_REGRESSION_OUTCOME: ${{ steps.backend_broad_regression.outcome }}
+        run: |
+          set -euo pipefail
+          repository_root="$(pwd -P)"
+          targets=(
+            batch1-coverage.json
+            batch1-deselections.txt
+            pytest-results.xml
+            batch1-coverage.log
+          )
+          for relative in "${targets[@]}"; do
+            target="$repository_root/$relative"
+            [[ "$(dirname -- "$target")" == "$repository_root" ]] || {
+              echo "Mobile Booking backend-intermediate parent drift" >&2; exit 1; }
+            if [[ "$BROAD_REGRESSION_OUTCOME" == "success" \
+              && ! -e "$target" && ! -L "$target" ]]; then
+              echo "Mobile Booking backend-intermediate missing after successful producer" >&2
+              exit 1
+            fi
+            if [[ -L "$target" ]]; then
+              rm -- "$target"
+            elif [[ -e "$target" ]]; then
+              [[ -f "$target" ]] || {
+                echo "Mobile Booking backend-intermediate is not a regular file" >&2; exit 1; }
+              rm -- "$target"
+            elif [[ "$BROAD_REGRESSION_OUTCOME" != "failure" \
+              && "$BROAD_REGRESSION_OUTCOME" != "skipped" ]]; then
+              echo "Mobile Booking backend-intermediate producer outcome drift" >&2
+              exit 1
+            fi
+            [[ ! -e "$target" && ! -L "$target" ]] || {
+              echo "Mobile Booking backend-intermediate cleanup failed" >&2; exit 1; }
+          done
+          echo "Mobile Booking backend regression intermediates removed"
 
       - name: Verify exact Batch 2 test and coverage contract
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'batch2'
@@ -2024,7 +2644,7 @@ jobs:
           PY
 
       - name: Verify PostgreSQL 17/PostGIS integration tests without skips
-        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-policy-authority'
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-policy-authority' && steps.evidence_contract.outputs.mode != 'mobile-booking-intent-foundation'
         run: uv run --locked pytest -m "integration and not migration" --no-cov -q
 
       - name: Capture Booking consent authority PostgreSQL evidence
@@ -2067,6 +2687,58 @@ jobs:
           if open(path, encoding="utf-8", newline="").read() != block: raise SystemExit("PostgreSQL evidence retention failed")
           PY
           rm booking-consent-postgresql-collect.txt booking-consent-postgresql.xml
+
+      - name: Capture Mobile Booking backend PostgreSQL regression evidence
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'mobile-booking-intent-foundation'
+        env:
+          EVIDENCE_PATH: ${{ runner.temp }}/mobile-booking-evidence-sections/BACKEND_POSTGRESQL_REGRESSION_V1.txt
+        run: |
+          set -euo pipefail
+          collect_file="$(mktemp)"
+          junit_file="$(mktemp)"
+          trap 'rm -f "$collect_file" "$junit_file"' EXIT
+          uv run --locked pytest -m "integration and not migration" --collect-only -q > "$collect_file"
+          uv run --locked pytest -m "integration and not migration" --no-cov -q \
+            --junitxml="$junit_file"
+          COLLECT_FILE="$collect_file" JUNIT_FILE="$junit_file" EVIDENCE_PATH="$EVIDENCE_PATH" \
+            uv run --locked python - <<'PY'
+          import hashlib, os, xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          nodes = sorted(
+              line.strip() for line in Path(os.environ["COLLECT_FILE"]).read_text().splitlines()
+              if "::" in line
+          )
+          if not nodes or len(nodes) != len(set(nodes)):
+              raise SystemExit("Mobile regression PostgreSQL collection is empty or duplicated")
+          cases = ET.parse(os.environ["JUNIT_FILE"]).getroot().findall(".//testcase")
+          def node(case):
+              return f"{case.get('classname').replace('.', '/')}.py::{case.get('name')}"
+          selected = sorted(node(case) for case in cases)
+          failed = sum(case.find("failure") is not None for case in cases)
+          errors = sum(case.find("error") is not None for case in cases)
+          skipped = sum(case.find("skipped") is not None for case in cases)
+          passed = sorted(node(case) for case in cases if all(case.find(kind) is None for kind in ("failure", "error", "skipped")))
+          if selected != nodes or failed or errors or skipped or passed != selected:
+              raise SystemExit("Mobile regression PostgreSQL result drift")
+          digest = lambda values: hashlib.sha256("\n".join(values).encode()).hexdigest()
+          lines = [
+              "BACKEND_POSTGRESQL_REGRESSION_V1",
+              f"collected={len(nodes)}", f"selected={len(selected)}", f"passed={len(passed)}",
+              f"failed={failed}", f"errors={errors}", f"skipped={skipped}", "xfailed=0",
+              f"selected_node_fingerprint={digest(selected)}",
+              f"passing_node_fingerprint={digest(passed)}",
+              "new_mobile_required_node_contract=NOT_APPLICABLE",
+              "END_BACKEND_POSTGRESQL_REGRESSION_V1",
+          ]
+          block = "\n".join(lines) + "\n"
+          path = Path(os.environ["EVIDENCE_PATH"])
+          path.parent.mkdir(parents=True, exist_ok=True)
+          with path.open("x", encoding="utf-8", newline="\n") as output:
+              output.write(block); output.flush(); os.fsync(output.fileno())
+          if path.read_text(encoding="utf-8") != block:
+              raise SystemExit("Mobile regression PostgreSQL evidence retention failed")
+          PY
 
       - name: Verify exact Courier Pickup PostgreSQL inventory
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'courier-pickup-idempotency-v1'
@@ -2482,6 +3154,7 @@ jobs:
         env:
           EVIDENCE_MODE: ${{ steps.evidence_contract.outputs.mode }}
           BOOKING_CONSENT_MYPY_EVIDENCE_PATH: ${{ runner.temp }}/booking-consent-mypy-v1.txt
+          MOBILE_MYPY_EVIDENCE_PATH: ${{ runner.temp }}/mobile-booking-evidence-sections/BACKEND_MYPY_EQUIVALENCE_V1.txt
         run: |
           set -euo pipefail
           source_dir="$(mktemp -d)"
@@ -2496,6 +3169,8 @@ jobs:
             source_sha=b79c7ae45f644dd1198f0b526bbda38bc2d11e23
           elif [[ "$EVIDENCE_MODE" == "booking-consent-policy-authority" ]]; then
             source_sha=6613a936b0fe896308682c8fe038708876a06c02
+          elif [[ "$EVIDENCE_MODE" == "mobile-booking-intent-foundation" ]]; then
+            source_sha=ee6650d7f6304e73c31aee8a1ab709cd3be1fbf0
           fi
           git archive "$source_sha" | tar -x -C "$source_dir"
           UV_PROJECT_ENVIRONMENT="$mypy_environment" uv sync --locked --all-groups
@@ -2667,7 +3342,7 @@ jobs:
           source_strict = normalized("source-strict.txt")
           candidate_strict = normalized("candidate-strict.txt")
           mode = os.environ["EVIDENCE_MODE"]
-          if mode == "booking-consent-policy-authority":
+          if mode in {"booking-consent-policy-authority", "mobile-booking-intent-foundation"}:
               report("Source strict backend", source_strict)
               report("Candidate strict backend", candidate_strict)
               source_only_strict = sorted(set(source_strict) - set(candidate_strict))
@@ -2742,7 +3417,7 @@ jobs:
               "booking-complete-replay-equivalence",
           }:
               compare("strict backend", source_strict, candidate_strict)
-          elif mode != "booking-consent-policy-authority":
+          elif mode not in {"booking-consent-policy-authority", "mobile-booking-intent-foundation"}:
               compare("strict backend", source_strict, candidate_strict)
           strict_files = {item.path for item in candidate_strict}
           if mode in {
@@ -2764,7 +3439,7 @@ jobs:
                   )
               if fingerprint(candidate_strict) != "a7018245b4e9086aeca1d39d47903e5e98d0b62d":
                   raise SystemExit("Immediate Standard strict MyPy fingerprint drift")
-          elif mode != "booking-consent-policy-authority":
+          elif mode not in {"booking-consent-policy-authority", "mobile-booking-intent-foundation"}:
               if len(candidate_strict) != 387 or len(strict_files) != 52:
                   raise SystemExit("strict backend MyPy historical count drift")
               expected_strict_codes = {
@@ -2782,6 +3457,7 @@ jobs:
               "immediate-standard-public-contract",
               "booking-complete-replay-equivalence",
               "booking-consent-policy-authority",
+              "mobile-booking-intent-foundation",
           }:
               strict_fingerprint = fingerprint(candidate_strict)
               if strict_fingerprint != "6257a24b9c057c822e45a041519a849c471f6c48":
@@ -2820,10 +3496,11 @@ jobs:
               "immediate-standard-public-contract",
               "booking-complete-replay-equivalence",
               "booking-consent-policy-authority",
+              "mobile-booking-intent-foundation",
           }:
               compare("configured", source_configured, candidate_configured)
               configured_files = {item.path for item in candidate_configured}
-              if mode != "booking-consent-policy-authority":
+              if mode not in {"booking-consent-policy-authority", "mobile-booking-intent-foundation"}:
                   if len(candidate_configured) != 12 or configured_files != {
                       "tests/test_merchant_generative_provider_evaluation.py"
                   }:
@@ -2842,8 +3519,10 @@ jobs:
                   import json
                   strict_equal = source_strict == candidate_strict
                   configured_equal = source_configured == candidate_configured
+                  mobile_capture = mode == "mobile-booking-intent-foundation"
+                  marker = "BACKEND_MYPY_EQUIVALENCE_V1" if mobile_capture else "BOOKING_CONSENT_MYPY_EVIDENCE_V1"
                   lines = [
-                      "BOOKING_CONSENT_MYPY_EVIDENCE_V1",
+                      marker,
                       f"strict_base_count={len(source_strict)}",
                       f"strict_candidate_count={len(candidate_strict)}",
                       f"strict_base_files={len({item.path for item in source_strict})}",
@@ -2864,13 +3543,16 @@ jobs:
                       f"configured_candidate_fingerprint={fingerprint(candidate_configured)}",
                       f"configured_base_only={len(set(source_configured)-set(candidate_configured))}",
                       f"configured_candidate_only={len(set(candidate_configured)-set(source_configured))}",
-                      "END_BOOKING_CONSENT_MYPY_EVIDENCE_V1",
+                      "END_" + marker,
                   ]
-                  block = "\n".join(lines) + "\n"; path = os.environ["BOOKING_CONSENT_MYPY_EVIDENCE_PATH"]
+                  block = "\n".join(lines) + "\n"; path = os.environ[
+                      "MOBILE_MYPY_EVIDENCE_PATH" if mobile_capture else "BOOKING_CONSENT_MYPY_EVIDENCE_PATH"
+                  ]
+                  Path(path).parent.mkdir(parents=True, exist_ok=True)
                   with open(path, "x", encoding="utf-8", newline="\n") as output: output.write(block); output.flush(); os.fsync(output.fileno())
                   if open(path, encoding="utf-8", newline="").read() != block: raise SystemExit("MyPy evidence retention failed")
                   if not strict_equal or not configured_equal:
-                      raise SystemExit("Booking consent MyPy evidence differs from governed base")
+                      raise SystemExit("Governed MyPy evidence differs from fixed base")
           elif mode == "pre-batch2":
               compare(
                   "configured", source_configured, candidate_configured,
@@ -2887,12 +3569,12 @@ jobs:
             echo "Historical MyPy debt unexpectedly disappeared" >&2
             exit 1
           fi
-          if [[ "${{ steps.evidence_contract.outputs.mode }}" != "courier-pickup-authorization-ordering" \
+          if [[ "$EVIDENCE_MODE" != "courier-pickup-authorization-ordering" \
             && "$source_configured_status" -eq 0 ]]; then
             echo "Historical configured MyPy debt unexpectedly disappeared" >&2
             exit 1
           fi
-          if [[ "${{ steps.evidence_contract.outputs.mode }}" == "pre-batch2" \
+          if [[ "$EVIDENCE_MODE" == "pre-batch2" \
             && "$candidate_configured_status" -eq 0 ]]; then
             echo "Pre-Batch-2 configured MyPy debt unexpectedly disappeared" >&2
             exit 1
@@ -2904,6 +3586,7 @@ jobs:
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true'
         env:
           BOOKING_CONSENT_SECRET_EVIDENCE_PATH: ${{ runner.temp }}/booking-consent-secrets-v1.txt
+          MOBILE_SECRET_EVIDENCE_PATH: ${{ runner.temp }}/mobile-booking-evidence-sections/MOBILE_SECRET_INVENTORY_V1.txt
         run: |
           set -euo pipefail
           scanner_version="$(uv tool run --from 'detect-secrets==1.5.0' detect-secrets --version)"
@@ -2915,9 +3598,15 @@ jobs:
               --all-files --exclude-files '^\.git/'
           ) > candidate-secrets.json
           rm -rf "$scan_root"
-          if [[ "${{ steps.evidence_contract.outputs.mode }}" == "booking-consent-policy-authority" ]]; then
+          if [[ "${{ steps.evidence_contract.outputs.mode }}" == "booking-consent-policy-authority" \
+            || "${{ steps.evidence_contract.outputs.mode }}" == "mobile-booking-intent-foundation" ]]; then
             base_root="$(mktemp -d)"
-            git archive 6613a936b0fe896308682c8fe038708876a06c02 | tar -x -C "$base_root"
+            if [[ "${{ steps.evidence_contract.outputs.mode }}" == "mobile-booking-intent-foundation" ]]; then
+              secret_base=ee6650d7f6304e73c31aee8a1ab709cd3be1fbf0
+            else
+              secret_base=6613a936b0fe896308682c8fe038708876a06c02
+            fi
+            git archive "$secret_base" | tar -x -C "$base_root"
             (cd "$base_root" && uv tool run --from 'detect-secrets==1.5.0' detect-secrets scan --all-files --exclude-files '^\.git/') > base-secrets.json
             rm -rf "$base_root"
           fi
@@ -2928,6 +3617,7 @@ jobs:
           fi
           test "$(git hash-object reviewed-secrets-baseline.json)" = "71770a9e529e9af0c9ed5c72549b3a2f7ddcfb02"
           SCANNER_VERSION="$scanner_version" EVIDENCE_MODE="${{ steps.evidence_contract.outputs.mode }}" uv run --locked python - <<'PY'
+          from collections import Counter
           import hashlib
           import json
           import os
@@ -3159,6 +3849,47 @@ jobs:
               with open(path, "x", encoding="utf-8", newline="\n") as output: output.write(block); output.flush(); os.fsync(output.fileno())
               if open(path, encoding="utf-8", newline="").read() != block: raise SystemExit("inventory evidence retention failed")
               selected = "unadmitted Booking consent base/candidate inventory"
+          elif mode == "mobile-booking-intent-foundation":
+              base = scan_inventory(load("base-secrets.json").get("results"))
+              base_only = sorted(set(base) - set(actual))
+              candidate_only = sorted(set(actual) - set(base))
+              base_workflow_semantics = Counter(
+                  (path, detector, digest, verified)
+                  for path, _, detector, digest, verified in base
+                  if path == ".github/workflows/ci.yml"
+              )
+              candidate_workflow_semantics = Counter(
+                  (path, detector, digest, verified)
+                  for path, _, detector, digest, verified in actual
+                  if path == ".github/workflows/ci.yml"
+              )
+              boundary_result = "PASS" if (
+                  base_workflow_semantics
+                  and not (base_workflow_semantics - candidate_workflow_semantics)
+              ) else "FAIL"
+              if boundary_result != "PASS":
+                  raise SystemExit("Mobile defensive artifact boundary drift")
+              lines = [
+                  "MOBILE_SECRET_INVENTORY_V1",
+                  f"scanner_version={VERSION}",
+                  f"base_item_count={len(base)}",
+                  f"candidate_item_count={len(actual)}",
+                  f"base_inventory_digest={fingerprint(base)}",
+                  f"candidate_inventory_digest={fingerprint(actual)}",
+                  f"base_only_item_count={len(base_only)}",
+                  f"candidate_only_item_count={len(candidate_only)}",
+                  f"defensive_boundary_check={boundary_result}",
+                  "normalized_comparison=COMPLETE_LINE_SENSITIVE_INVENTORY",
+                  "END_MOBILE_SECRET_INVENTORY_V1",
+              ]
+              block = "\n".join(lines) + "\n"
+              path = Path(os.environ["MOBILE_SECRET_EVIDENCE_PATH"])
+              path.parent.mkdir(parents=True, exist_ok=True)
+              with path.open("x", encoding="utf-8", newline="\n") as output:
+                  output.write(block); output.flush(); os.fsync(output.fileno())
+              if path.read_text(encoding="utf-8") != block:
+                  raise SystemExit("Mobile secret inventory evidence retention failed")
+              selected = "unadmitted Mobile complete base/candidate inventory"
           elif mode == "pre-batch2":
               exact("pre-Batch-2 reviewed projection", actual, pre_batch2)
               selected = "pre-Batch-2 exact 11-finding projection"
@@ -3498,8 +4229,22 @@ jobs:
           resolver_id = "id: trusted_" + "comparison_base"
           if workflow.count(resolver_id) != 1:
               raise SystemExit("trusted comparison base resolver is not unique")
+          expected_consumer_steps = (
+              "Bind exact Booking replay-equivalence candidate identity",
+              "Bind exact Booking consent-policy-authority candidate identity",
+              "Bind exact Mobile Booking intent foundation candidate identity",
+              "Test all admitted non-PostgreSQL behavior with coverage",
+              "Verify exact Batch 2 test and coverage contract",
+          )
+          step_headers = list(re.finditer(r"(?m)^      - name: (.+)$", workflow))
+          consumer_steps = []
+          for index, match in enumerate(step_headers):
+              end = step_headers[index + 1].start() if index + 1 < len(step_headers) else len(workflow)
+              if authoritative_mapping in workflow[match.start():end]:
+                  consumer_steps.append(match.group(1))
           if (
-              workflow.count(authoritative_mapping) != 4
+              workflow.count(authoritative_mapping) != 5
+              or tuple(consumer_steps) != expected_consumer_steps
               or workflow.count(predecessor_mapping) != 2
           ):
               raise SystemExit("comparison-dependent gates do not share one resolver output")
@@ -4196,7 +4941,584 @@ jobs:
             echo "Certified candidate tracked tree is not clean" >&2
             exit 1
           fi
+          if [[ "${{ steps.evidence_contract.outputs.mode }}" == "mobile-booking-intent-foundation" \
+            && -n "$(git status --porcelain --untracked-files=all)" ]]; then
+            git status --short --untracked-files=all
+            echo "Mobile Booking candidate generated Git-visible artifacts" >&2
+            exit 1
+          fi
           echo "Certified candidate tracked tree cleanliness: PASS"
+
+      - name: Verify Mobile Booking evidence structural negative controls
+        if: success() && steps.evidence_contract.outputs.mode == 'mobile-booking-intent-foundation'
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import copy, re
+          from pathlib import Path
+
+          workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
+          required = [
+              "mobile-booking-intent-foundation",
+              "MOBILE_BOOKING_INTENT_EVIDENCE_V1",
+              "event_scope=push-and-pull-request-comparable",
+              "npm ci --ignore-scripts",
+              "mobile booking intent foundation evidence awaiting CTO admission",
+              "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+          ]
+          if any(workflow.count(value) < 1 for value in required):
+              raise SystemExit("Mobile Booking structural contract is incomplete")
+          manifest = [
+              ".github/workflows/ci.yml", "AYO-Mobile/contexts/booking-intent.tsx",
+              "AYO-Mobile/domain/booking-contracts.ts", "AYO-Mobile/domain/booking-intent.ts",
+              "AYO-Mobile/localization/booking-intent.ts", "AYO-Mobile/services/booking-api.ts",
+              "AYO-Mobile/services/booking-intent-controller.ts", "AYO-Mobile/services/booking-intent-store.ts",
+              "AYO-Mobile/tests/booking-api.test.ts", "AYO-Mobile/tests/booking-contracts.test.ts",
+              "AYO-Mobile/tests/booking-intent-controller.test.ts", "AYO-Mobile/tests/booking-intent-provider.test.tsx",
+              "AYO-Mobile/tests/booking-localization.test.ts", "docs/AYO_DECISION_LOG.md",
+              "docs/AYO_MOBILE_BOOKING_INTENT_FOUNDATION_ARCHITECTURE.md", "docs/AYO_ROADMAP.md",
+          ]
+          def reject(label, verifier, value):
+              try: verifier(value)
+              except (AssertionError, ValueError): return
+              raise SystemExit(f"Mobile negative control admitted: {label}")
+          verify_manifest = lambda value: (_ for _ in ()).throw(ValueError()) if value != manifest else None
+          for label, value in (
+              ("missing manifest path", manifest[:-1]), ("extra manifest path", manifest + ["extra"]),
+              ("reordered manifest", list(reversed(manifest))),
+          ): reject(label, verify_manifest, value)
+          tuple_contract = (
+              "2dbcb487bd27578a95d0db9a31c21ecde7032114",
+              "d7143a733cf14e70851406dab8131ce7c69dd364",
+              "da39714a911ffbf02171d28348c88a39eab2d938",
+          )
+          verify_tuple = lambda value: (_ for _ in ()).throw(ValueError()) if value != tuple_contract else None
+          reject("unknown mobile tests tree", verify_tuple, (tuple_contract[0], "0" * 40, tuple_contract[2]))
+          reject("wrong mobile tree", verify_tuple, (tuple_contract[0], tuple_contract[1], "0" * 40))
+          identity = {
+              "base": "e" * 40, "candidate": "a" * 40, "candidate_matches_event": True,
+              "base_ancestral": True, "predecessor_available": True, "predecessor_ancestral": True,
+              "package": "b" * 40, "lockfile": "c" * 40, "backend": "d" * 40,
+              "migration": "f" * 40, "backend_diff": 0, "dispatch": False,
+          }
+          def verify_identity(value):
+              assert value == identity and re.fullmatch(r"[0-9a-f]{40}", value["candidate"])
+          for label, key, value in (
+              ("wrong fixed base", "base", "0" * 40), ("malformed candidate", "candidate", "bad"),
+              ("candidate mismatch", "candidate_matches_event", False), ("non-ancestor base", "base_ancestral", False),
+              ("unavailable predecessor", "predecessor_available", False), ("non-ancestral predecessor", "predecessor_ancestral", False),
+              ("wrong package", "package", "0" * 40), ("wrong lockfile", "lockfile", "0" * 40),
+              ("wrong backend", "backend", "0" * 40), ("wrong migration", "migration", "0" * 40),
+              ("nonempty backend diff", "backend_diff", 1), ("workflow dispatch", "dispatch", True),
+          ):
+              changed = copy.deepcopy(identity); changed[key] = value
+              reject(label, verify_identity, changed)
+          evidence = {"sections": 13, "unique": True, "arithmetic": True, "tooling": True, "audit_complete": True,
+                      "secret_complete": True, "safe": True, "regular_member": True, "single_member": True,
+                      "uploaded": True, "stop_after_upload": True, "cleanup": True}
+          def verify_evidence(value): assert value == evidence
+          for label, key, value in (
+              ("missing section", "sections", 12), ("duplicate section", "unique", False),
+              ("test inventory arithmetic drift", "arithmetic", False), ("TypeScript or lint tool drift", "tooling", False),
+              ("dependency audit infrastructure drift", "audit_complete", False), ("secret inventory drift", "secret_complete", False),
+              ("unsafe raw payload", "safe", False), ("artifact symlink or traversal", "regular_member", False),
+              ("extra artifact member", "single_member", False), ("artifact absence", "uploaded", False),
+              ("stop ordering", "stop_after_upload", False), ("cleanup failure", "cleanup", False),
+          ):
+              changed = copy.deepcopy(evidence); changed[key] = value
+              reject(label, verify_evidence, changed)
+          lint_contract = {
+              "mode": "mobile-booking-intent-foundation",
+              "command": (
+                  "npm", "run", "lint", "--", "--", "--format", "json",
+                  "--output-file", "$EVIDENCE_ROOT/lint.json",
+              ),
+              "status": 0, "json_exists": True, "json_regular": True,
+              "json_schema": "VALID", "route": "mobile-only",
+              "fingerprint_source": (
+                  "npm run lint -- -- --format json --output-file "
+                  "$EVIDENCE_ROOT/lint.json"
+              ),
+          }
+          def verify_lint(value): assert value == lint_contract
+          lint_negatives = (
+              ("missing Expo forwarding delimiter", "command", lint_contract["command"][:4] + lint_contract["command"][5:]),
+              ("only one separator", "command", ("npm", "run", "lint", "--", "--format", "json", "--output-file", "$EVIDENCE_ROOT/lint.json")),
+              ("reversed formatter and separator", "command", ("npm", "run", "lint", "--", "--format", "json", "--", "--output-file", "$EVIDENCE_ROOT/lint.json")),
+              ("missing formatter", "command", ("npm", "run", "lint", "--", "--", "--output-file", "$EVIDENCE_ROOT/lint.json")),
+              ("missing output file", "command", lint_contract["command"][:-2]),
+              ("repository-local output", "command", lint_contract["command"][:-1] + ("AYO-Mobile/lint.json",)),
+              ("nonzero lint status", "status", 1), ("absent lint JSON", "json_exists", False),
+              ("unsafe lint JSON member", "json_regular", False), ("malformed lint JSON", "json_schema", "MALFORMED"),
+              ("command fingerprint drift", "fingerprint_source", "npm run lint"),
+              ("unknown evidence mode", "mode", "unknown"), ("historical routing drift", "route", "historical"),
+          )
+          for label, key, value in lint_negatives:
+              changed = copy.deepcopy(lint_contract); changed[key] = value
+              reject(label, verify_lint, changed)
+          print("Mobile Booking evidence structural negative controls: PASS")
+          PY
+
+      - name: Assemble Mobile Booking intent foundation capture evidence
+        if: success() && steps.evidence_contract.outputs.mode == 'mobile-booking-intent-foundation'
+        env:
+          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          EVIDENCE_ROOT: ${{ runner.temp }}/mobile-booking-evidence-sections
+          EVIDENCE_PATH: ${{ runner.temp }}/mobile-booking-intent-foundation-evidence-v1.txt
+          BROAD_PATH: ${{ runner.temp }}/mobile-backend-broad-v1.txt
+        run: |
+          set -euo pipefail
+          CANDIDATE_SHA="$CANDIDATE_SHA" EVIDENCE_ROOT="$EVIDENCE_ROOT" \
+            EVIDENCE_PATH="$EVIDENCE_PATH" BROAD_PATH="$BROAD_PATH" python - <<'PY'
+          import hashlib, os, re
+          from pathlib import Path
+          from subprocess import run
+
+          candidate = os.environ["CANDIDATE_SHA"]
+          if not re.fullmatch(r"[0-9a-f]{40}", candidate) or candidate == "0" * 40:
+              raise SystemExit("malformed Mobile evidence candidate")
+          base = "ee6650d7f6304e73c31aee8a1ab709cd3be1fbf0"
+          expected_manifest = [
+              ".github/workflows/ci.yml", "AYO-Mobile/contexts/booking-intent.tsx",
+              "AYO-Mobile/domain/booking-contracts.ts", "AYO-Mobile/domain/booking-intent.ts",
+              "AYO-Mobile/localization/booking-intent.ts", "AYO-Mobile/services/booking-api.ts",
+              "AYO-Mobile/services/booking-intent-controller.ts", "AYO-Mobile/services/booking-intent-store.ts",
+              "AYO-Mobile/tests/booking-api.test.ts", "AYO-Mobile/tests/booking-contracts.test.ts",
+              "AYO-Mobile/tests/booking-intent-controller.test.ts", "AYO-Mobile/tests/booking-intent-provider.test.tsx",
+              "AYO-Mobile/tests/booking-localization.test.ts", "docs/AYO_DECISION_LOG.md",
+              "docs/AYO_MOBILE_BOOKING_INTENT_FOUNDATION_ARCHITECTURE.md", "docs/AYO_ROADMAP.md",
+          ]
+          manifest = run(["git", "diff", "--name-only", base, candidate], check=True, capture_output=True, text=True).stdout.splitlines()
+          if manifest != expected_manifest: raise SystemExit("Mobile evidence manifest drift")
+          rev = lambda path: run(["git", "rev-parse", f"{candidate}:{path}"], check=True, capture_output=True, text=True).stdout.strip()
+          identities = {
+              "root_tests_tree": rev("tests"), "mobile_tree": rev("AYO-Mobile"),
+              "mobile_tests_tree": rev("AYO-Mobile/tests"), "package_blob": rev("AYO-Mobile/package.json"),
+              "lockfile_blob": rev("AYO-Mobile/package-lock.json"), "backend_tree": rev("BACKEND"),
+              "migration_tree": rev("database/migrations"),
+          }
+          expected = {
+              "root_tests_tree": "2dbcb487bd27578a95d0db9a31c21ecde7032114",
+              "mobile_tree": "da39714a911ffbf02171d28348c88a39eab2d938",
+              "mobile_tests_tree": "d7143a733cf14e70851406dab8131ce7c69dd364",
+              "package_blob": "b4c26fea6a74ac9c1d3a442eb855cf63538fb5e2",
+              "lockfile_blob": "ace7192e4a749f61a011f8e4293ccd1e053d648a",
+              "backend_tree": "62500035ef60d94ccc6333f25cb3aa79ff5c3f21",
+              "migration_tree": "253ecedebe58c31077a0baa7d2532adc46464f70",
+          }
+          if identities != expected: raise SystemExit("Mobile evidence immutable identity drift")
+          contracts = [
+              ("MOBILE_FOCUSED_NODE_V1", Path(os.environ["EVIDENCE_ROOT"]) / "MOBILE_FOCUSED_NODE_V1.txt"),
+              ("MOBILE_COMPLETE_NODE_V1", Path(os.environ["EVIDENCE_ROOT"]) / "MOBILE_COMPLETE_NODE_V1.txt"),
+              ("MOBILE_FOCUSED_PROVIDER_JEST_V1", Path(os.environ["EVIDENCE_ROOT"]) / "MOBILE_FOCUSED_PROVIDER_JEST_V1.txt"),
+              ("MOBILE_COMPLETE_PROVIDER_JEST_V1", Path(os.environ["EVIDENCE_ROOT"]) / "MOBILE_COMPLETE_PROVIDER_JEST_V1.txt"),
+              ("MOBILE_TYPESCRIPT_V1", Path(os.environ["EVIDENCE_ROOT"]) / "MOBILE_TYPESCRIPT_V1.txt"),
+              ("MOBILE_LINT_V1", Path(os.environ["EVIDENCE_ROOT"]) / "MOBILE_LINT_V1.txt"),
+              ("MOBILE_SOURCE_SAFETY_V1", Path(os.environ["EVIDENCE_ROOT"]) / "MOBILE_SOURCE_SAFETY_V1.txt"),
+              ("MOBILE_BACKEND_BROAD_REGRESSION_V1", Path(os.environ["BROAD_PATH"])),
+              ("BACKEND_POSTGRESQL_REGRESSION_V1", Path(os.environ["EVIDENCE_ROOT"]) / "BACKEND_POSTGRESQL_REGRESSION_V1.txt"),
+              ("BACKEND_MYPY_EQUIVALENCE_V1", Path(os.environ["EVIDENCE_ROOT"]) / "BACKEND_MYPY_EQUIVALENCE_V1.txt"),
+              ("MOBILE_DEPENDENCY_AUDIT_V1", Path(os.environ["EVIDENCE_ROOT"]) / "MOBILE_DEPENDENCY_AUDIT_V1.txt"),
+              ("MOBILE_SECRET_INVENTORY_V1", Path(os.environ["EVIDENCE_ROOT"]) / "MOBILE_SECRET_INVENTORY_V1.txt"),
+          ]
+          sections = []
+          hex_fields = re.compile(r"(?:fingerprint|digest)$")
+          for marker, path in contracts:
+              if not path.is_file() or path.is_symlink() or path.stat().st_size not in range(1, 65537):
+                  raise SystemExit(f"missing or unsafe Mobile evidence section: {marker}")
+              value = path.read_text(encoding="utf-8")
+              lines = value.splitlines()
+              if lines[0] != marker or lines[-1] != "END_" + marker:
+                  raise SystemExit(f"Mobile evidence marker drift: {marker}")
+              names = set()
+              for line in lines[1:-1]:
+                  if "=" not in line: raise SystemExit(f"malformed Mobile evidence field: {marker}")
+                  name, content = line.split("=", 1)
+                  if not name or name in names or "\r" in content: raise SystemExit(f"duplicate Mobile evidence field: {marker}")
+                  names.add(name)
+                  if name.endswith(("count", "total", "passed", "failed", "errors", "skipped", "todo", "pending", "cancelled", "files")) and not re.fullmatch(r"0|[1-9][0-9]*", content):
+                      raise SystemExit(f"noncanonical Mobile evidence count: {name}")
+                  if hex_fields.search(name) and not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", content):
+                      raise SystemExit(f"malformed Mobile evidence digest: {name}")
+              sections.append(value.rstrip("\n"))
+          migration = "\n".join([
+              "MIGRATION_SECURITY_CLEANUP_V1", "canonical_migration_head=20260812_0060",
+              "backup_restore=PASS", "migration_round_trip=PASS", "ruff=PASS", "bandit=PASS",
+              "python_dependency_audit=PASS", "authentication_authorization_support=PASS",
+              "postgresql_cleanup=PASS", "container_shutdown=PASS",
+              "backend_intermediate_cleanup=PASS", "mobile_raw_output_cleanup=PASS",
+              "candidate_tree_cleanliness=PASS",
+              "END_MIGRATION_SECURITY_CLEANUP_V1",
+          ])
+          manifest_fp = hashlib.sha256("\n".join(manifest).encode()).hexdigest()
+          lines = [
+              "MOBILE_BOOKING_INTENT_EVIDENCE_V1", "event_scope=push-and-pull-request-comparable",
+              "mode=mobile-booking-intent-foundation", f"candidate_sha={candidate}", f"governed_base={base}",
+              *(f"{key}={value}" for key, value in identities.items()),
+              "manifest_count=16", f"manifest_fingerprint={manifest_fp}", *sections, migration,
+              "END_MOBILE_BOOKING_INTENT_EVIDENCE_V1",
+          ]
+          block = "\n".join(lines) + "\n"
+          if block.count("event_scope=push-and-pull-request-comparable\n") != 1 or re.search(r"(?m)^event=", block):
+              raise SystemExit("Mobile evidence event normalization drift")
+          forbidden = ("http://", "https://", "Traceback (most recent call last)", "npm ERR!", "detect-secrets")
+          if any(value in block for value in forbidden): raise SystemExit("unsafe raw content entered Mobile evidence")
+          if len(block.encode("utf-8")) > 262144: raise SystemExit("Mobile evidence is oversized")
+          path = Path(os.environ["EVIDENCE_PATH"])
+          with path.open("x", encoding="utf-8", newline="\n") as output:
+              output.write(block); output.flush(); os.fsync(output.fileno())
+          if path.is_symlink() or path.read_bytes() != block.encode("utf-8") or not block.endswith("\n"):
+              raise SystemExit("Mobile evidence reread verification failed")
+          PY
+      - name: Verify staged Mobile Booking evidence admission contract
+        id: mobile_booking_admission
+        if: success() && steps.evidence_contract.outputs.mode == 'mobile-booking-intent-foundation'
+        env:
+          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          EVIDENCE_PATH: ${{ runner.temp }}/mobile-booking-intent-foundation-evidence-v1.txt
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import copy
+          import hashlib
+          import os
+          import re
+          from pathlib import Path
+
+          CAPTURE_STATE = "CAPTURE_ONLY_PENDING_CTO_REVIEW"
+          ACTIVE_STATE = "ADMITTED_PREPRODUCTION_EVIDENCE"
+          ADMISSION_STATE = ACTIVE_STATE
+          REVIEWED_COMMITMENT_BYTES = (22, 122, 173, 190, 10, 171, 86, 79, 117, 54, 191, 92, 208, 211, 23, 139, 13, 109, 237, 139, 59, 102, 101, 4, 240, 164, 85, 102, 56, 106, 211, 172)
+          CAPTURE_COMMITMENT = bytes(32)
+          REQUIRED_POLICY = (
+              ("admission_scope", "PRE_PRODUCTION_ONLY"),
+              ("dependency_debt_reviewed", "PASS"),
+              ("production_release_blocked", "PASS"),
+              ("fresh_online_advisory_review_before_release", "REQUIRED"),
+              ("runtime_trusted_build_reachability_review_before_release", "REQUIRED"),
+              ("automatic_audit_fix", "PROHIBITED"),
+              ("zero_runtime_vulnerability_claim", "PROHIBITED"),
+          )
+          POLICY = dict(REQUIRED_POLICY)
+          SECTION_FIELDS = {
+              "MOBILE_FOCUSED_NODE_V1": {
+                  "tests", "pass", "fail", "cancelled", "skipped", "todo",
+                  "test_file_count", "test_file_fingerprint", "selected_test_fingerprint",
+                  "passing_test_fingerprint", "required_inventory", "process_exit",
+                  "node_version", "command_fingerprint",
+              },
+              "MOBILE_COMPLETE_NODE_V1": {
+                  "tests", "pass", "fail", "cancelled", "skipped", "todo",
+                  "test_file_count", "test_file_fingerprint", "selected_test_fingerprint",
+                  "passing_test_fingerprint", "required_inventory", "process_exit",
+                  "node_version", "command_fingerprint",
+              },
+              "MOBILE_FOCUSED_PROVIDER_JEST_V1": {
+                  "suites_total", "suites_passed", "suites_failed", "suites_pending",
+                  "tests_total", "tests_passed", "tests_failed", "tests_pending", "tests_todo",
+                  "suite_fingerprint", "selected_test_fingerprint", "passing_test_fingerprint",
+                  "warning_category_count", "warning_category_fingerprint",
+                  "focused_booking_provider", "process_exit", "jest_version", "command_fingerprint",
+              },
+              "MOBILE_COMPLETE_PROVIDER_JEST_V1": {
+                  "suites_total", "suites_passed", "suites_failed", "suites_pending",
+                  "tests_total", "tests_passed", "tests_failed", "tests_pending", "tests_todo",
+                  "suite_fingerprint", "selected_test_fingerprint", "passing_test_fingerprint",
+                  "warning_category_count", "warning_category_fingerprint",
+                  "focused_booking_provider", "process_exit", "jest_version", "command_fingerprint",
+              },
+              "MOBILE_TYPESCRIPT_V1": {
+                  "typescript_version", "diagnostic_count", "affected_file_count",
+                  "diagnostic_fingerprint", "process_exit", "command_fingerprint",
+              },
+              "MOBILE_LINT_V1": {
+                  "expo_version", "eslint_version", "error_count", "warning_count",
+                  "diagnostic_fingerprint", "process_exit", "command_fingerprint",
+              },
+              "MOBILE_SOURCE_SAFETY_V1": {
+                  "confirmation_recovery_authority", "capability_unlock",
+                  "provider_composition_wiring", "context_authority_injection",
+                  "caller_selected_identity", "durable_storage", "sensitive_logging",
+                  "external_activation", "screen_navigation_change", "production_activation",
+                  "unsafe_authority_suppression", "mobile_changed_line_coverage",
+                  "complete_check_execution", "complete_check_script_fingerprint",
+              },
+              "MOBILE_BACKEND_BROAD_REGRESSION_V1": {
+                  "collected", "selected", "passed", "failed", "errors", "skipped",
+                  "xfail_count", "xfail_node", "xfail_reason", "requested_deselections",
+                  "matched_deselection_count", "matched_deselection_identities",
+                  "selected_node_fingerprint", "passing_node_fingerprint",
+                  "permission_registry_blob", "authorization_contract_test_blob",
+                  "total_coverage_percentage", "coverage_semantic_fingerprint",
+                  "zero_coverage_inventory_fingerprint", "uncollected_inventory_fingerprint",
+                  "changed_production_line_coverage",
+              },
+              "BACKEND_POSTGRESQL_REGRESSION_V1": {
+                  "collected", "selected", "passed", "failed", "errors", "skipped", "xfailed",
+                  "selected_node_fingerprint", "passing_node_fingerprint",
+                  "new_mobile_required_node_contract",
+              },
+              "BACKEND_MYPY_EQUIVALENCE_V1": {
+                  "strict_base_count", "strict_candidate_count", "strict_base_files",
+                  "strict_candidate_files", "strict_base_codes", "strict_candidate_codes",
+                  "strict_base_fingerprint", "strict_candidate_fingerprint", "strict_base_only",
+                  "strict_candidate_only", "configured_base_count", "configured_candidate_count",
+                  "configured_base_files", "configured_candidate_files", "configured_base_codes",
+                  "configured_candidate_codes", "configured_base_fingerprint",
+                  "configured_candidate_fingerprint", "configured_base_only", "configured_candidate_only",
+              },
+              "MOBILE_DEPENDENCY_AUDIT_V1": {
+                  "npm_version", "all_info", "all_low", "all_moderate", "all_high",
+                  "all_critical", "all_total", "production_info", "production_low",
+                  "production_moderate", "production_high", "production_critical",
+                  "production_total", "all_dependency_dev", "all_dependency_optional",
+                  "all_dependency_peer", "all_dependency_peerOptional", "all_dependency_prod",
+                  "all_dependency_total", "production_dependency_dev",
+                  "production_dependency_optional", "production_dependency_peer",
+                  "production_dependency_peerOptional", "production_dependency_prod",
+                  "production_dependency_total", "all_dependency_population_fingerprint",
+                  "production_dependency_population_fingerprint", "audit_completion",
+              },
+              "MOBILE_SECRET_INVENTORY_V1": {
+                  "scanner_version", "base_item_count", "candidate_item_count",
+                  "base_inventory_digest", "candidate_inventory_digest", "base_only_item_count",
+                  "candidate_only_item_count", "defensive_boundary_check", "normalized_comparison",
+              },
+              "MIGRATION_SECURITY_CLEANUP_V1": {
+                  "canonical_migration_head", "backup_restore", "migration_round_trip", "ruff",
+                  "bandit", "python_dependency_audit", "authentication_authorization_support",
+                  "postgresql_cleanup", "container_shutdown", "backend_intermediate_cleanup",
+                  "mobile_raw_output_cleanup", "candidate_tree_cleanliness",
+              },
+          }
+          SECTION_ORDER = tuple(SECTION_FIELDS)
+          ENVELOPE_FIELDS = {
+              "event_scope", "mode", "candidate_sha", "governed_base", "root_tests_tree",
+              "mobile_tree", "mobile_tests_tree", "package_blob", "lockfile_blob",
+              "backend_tree", "migration_tree", "manifest_count", "manifest_fingerprint",
+          }
+          DECIMAL = re.compile(r"0|[1-9][0-9]*")
+          HEX40 = re.compile(r"[0-9a-f]{40}")
+          HEX64 = re.compile(r"[0-9a-f]{64}")
+
+          def fields(lines, label):
+              result = {}
+              for line in lines:
+                  if "=" not in line:
+                      raise ValueError(f"malformed {label} field")
+                  name, value = line.split("=", 1)
+                  if not name or name in result or "\r" in value:
+                      raise ValueError(f"duplicate {label} field")
+                  result[name] = value
+              return result
+
+          def parse(data):
+              if not data or b"\r" in data or not data.endswith(b"\n"):
+                  raise ValueError("evidence encoding or newline drift")
+              forbidden = (b"http://", b"https://", b"Traceback (most recent call last)", b"npm ERR!", b"detect-secrets")
+              if any(value in data for value in forbidden):
+                  raise ValueError("unsafe content entered staged evidence")
+              try:
+                  text = data.decode("utf-8")
+              except UnicodeError as error:
+                  raise ValueError("evidence UTF-8 drift") from error
+              lines = text.splitlines()
+              if lines[0] != "MOBILE_BOOKING_INTENT_EVIDENCE_V1" or lines[-1] != "END_MOBILE_BOOKING_INTENT_EVIDENCE_V1":
+                  raise ValueError("evidence envelope drift")
+              starts = [index for index, line in enumerate(lines) if line in SECTION_FIELDS]
+              if [lines[index] for index in starts] != list(SECTION_ORDER):
+                  raise ValueError("evidence section order drift")
+              envelope = fields(lines[1:starts[0]], "envelope")
+              if set(envelope) != ENVELOPE_FIELDS:
+                  raise ValueError("evidence envelope fields drift")
+              sections = {}
+              for position, marker in enumerate(SECTION_ORDER):
+                  start = starts[position]
+                  end = lines.index("END_" + marker, start + 1)
+                  if position + 1 < len(starts) and end + 1 != starts[position + 1]:
+                      raise ValueError("evidence section boundary drift")
+                  if position + 1 == len(starts) and end + 1 != len(lines) - 1:
+                      raise ValueError("evidence trailing field drift")
+                  sections[marker] = fields(lines[start + 1:end], marker)
+                  if set(sections[marker]) != SECTION_FIELDS[marker]:
+                      raise ValueError(f"evidence field inventory drift: {marker}")
+                  for name, value in sections[marker].items():
+                      if name.endswith(("fingerprint", "digest")) and not (HEX40.fullmatch(value) or HEX64.fullmatch(value)):
+                          raise ValueError("evidence digest format drift")
+                      if name.endswith("_blob") and not HEX40.fullmatch(value):
+                          raise ValueError("evidence blob format drift")
+              return envelope, sections
+
+          def number(value):
+              if not DECIMAL.fullmatch(value):
+                  raise ValueError("noncanonical evidence count")
+              return int(value)
+
+          def validate(envelope, sections, candidate, policy=POLICY):
+              if tuple(policy.items()) != REQUIRED_POLICY:
+                  raise ValueError("Mobile admission policy drift")
+              if envelope["event_scope"] != "push-and-pull-request-comparable" or envelope["mode"] != "mobile-booking-intent-foundation":
+                  raise ValueError("Mobile admission scope drift")
+              if envelope["candidate_sha"] != candidate or not HEX40.fullmatch(candidate) or candidate == "0" * 40:
+                  raise ValueError("Mobile admission candidate drift")
+              if not HEX40.fullmatch(envelope["governed_base"]) or envelope["manifest_count"] != "16":
+                  raise ValueError("Mobile admission identity drift")
+              for name in ("root_tests_tree", "mobile_tree", "mobile_tests_tree", "package_blob", "lockfile_blob", "backend_tree", "migration_tree"):
+                  if not HEX40.fullmatch(envelope[name]):
+                      raise ValueError("Mobile admission object identity drift")
+              if not HEX64.fullmatch(envelope["manifest_fingerprint"]):
+                  raise ValueError("Mobile admission manifest fingerprint drift")
+              for marker in ("MOBILE_FOCUSED_NODE_V1", "MOBILE_COMPLETE_NODE_V1"):
+                  item = sections[marker]
+                  values = {name: number(item[name]) for name in ("tests", "pass", "fail", "cancelled", "skipped", "todo")}
+                  if values["tests"] != sum(values[name] for name in ("pass", "fail", "cancelled", "skipped", "todo")):
+                      raise ValueError("Node evidence arithmetic drift")
+                  if item["required_inventory"] != "PASS" or item["process_exit"] != "0" or number(item["test_file_count"]) == 0:
+                      raise ValueError("Node evidence result drift")
+              for marker in ("MOBILE_FOCUSED_PROVIDER_JEST_V1", "MOBILE_COMPLETE_PROVIDER_JEST_V1"):
+                  item = sections[marker]
+                  if number(item["suites_total"]) != sum(number(item[name]) for name in ("suites_passed", "suites_failed", "suites_pending")):
+                      raise ValueError("Jest suite arithmetic drift")
+                  if number(item["tests_total"]) != sum(number(item[name]) for name in ("tests_passed", "tests_failed", "tests_pending", "tests_todo")):
+                      raise ValueError("Jest test arithmetic drift")
+                  if item["process_exit"] != "0":
+                      raise ValueError("Jest process drift")
+              focused = sections["MOBILE_FOCUSED_PROVIDER_JEST_V1"]
+              if focused["warning_category_count"] != "0" or focused["focused_booking_provider"] != "PASS":
+                  raise ValueError("focused Booking warning drift")
+              source = sections["MOBILE_SOURCE_SAFETY_V1"]
+              absent = set(source) - {"mobile_changed_line_coverage", "complete_check_execution", "complete_check_script_fingerprint"}
+              if any(source[name] != "ABSENT" for name in absent):
+                  raise ValueError("Mobile source-safety drift")
+              audit = sections["MOBILE_DEPENDENCY_AUDIT_V1"]
+              for prefix in ("all", "production"):
+                  if number(audit[f"{prefix}_total"]) != sum(number(audit[f"{prefix}_{severity}"]) for severity in ("info", "low", "moderate", "high", "critical")):
+                      raise ValueError("dependency audit arithmetic drift")
+              if audit["audit_completion"] != "PASS":
+                  raise ValueError("dependency audit completion drift")
+              broad = sections["MOBILE_BACKEND_BROAD_REGRESSION_V1"]
+              if number(broad["selected"]) != sum(number(broad[name]) for name in ("passed", "failed", "errors", "skipped", "xfail_count")):
+                  raise ValueError("backend broad arithmetic drift")
+              if number(broad["collected"]) != number(broad["selected"]) + number(broad["matched_deselection_count"]):
+                  raise ValueError("backend collection arithmetic drift")
+              if broad["changed_production_line_coverage"] != "NOT_APPLICABLE_EMPTY_BACKEND_DIFF":
+                  raise ValueError("empty backend coverage boundary drift")
+              postgres = sections["BACKEND_POSTGRESQL_REGRESSION_V1"]
+              if number(postgres["selected"]) != sum(number(postgres[name]) for name in ("passed", "failed", "errors", "skipped", "xfailed")):
+                  raise ValueError("PostgreSQL arithmetic drift")
+              if postgres["new_mobile_required_node_contract"] != "NOT_APPLICABLE":
+                  raise ValueError("Mobile PostgreSQL scope drift")
+              mypy = sections["BACKEND_MYPY_EQUIVALENCE_V1"]
+              for prefix in ("strict", "configured"):
+                  if mypy[f"{prefix}_base_count"] != mypy[f"{prefix}_candidate_count"] or mypy[f"{prefix}_base_files"] != mypy[f"{prefix}_candidate_files"] or mypy[f"{prefix}_base_codes"] != mypy[f"{prefix}_candidate_codes"] or mypy[f"{prefix}_base_fingerprint"] != mypy[f"{prefix}_candidate_fingerprint"] or mypy[f"{prefix}_base_only"] != "0" or mypy[f"{prefix}_candidate_only"] != "0":
+                      raise ValueError("MyPy equivalence drift")
+              inventory = sections["MOBILE_SECRET_INVENTORY_V1"]
+              if inventory["scanner_version"] != "1.5.0" or inventory["defensive_boundary_check"] != "PASS" or inventory["normalized_comparison"] != "COMPLETE_LINE_SENSITIVE_INVENTORY":
+                  raise ValueError("secret inventory governance drift")
+              cleanup = sections["MIGRATION_SECURITY_CLEANUP_V1"]
+              if any(cleanup[name] != "PASS" for name in set(cleanup) - {"canonical_migration_head"}) or cleanup["canonical_migration_head"] != "20260812_0060":
+                  raise ValueError("migration security cleanup drift")
+
+          def canonical_commitment(data, candidate):
+              text = data.decode("utf-8")
+              expected = f"candidate_sha={candidate}\n"
+              if text.count(expected) != 1:
+                  raise ValueError("candidate normalization drift")
+              return hashlib.sha256(text.replace(expected, "candidate_sha=" + "0" * 40 + "\n", 1).encode()).digest()
+
+          def admission_gate(state, commitment, payload_digest):
+              if len(commitment) != 32:
+                  raise ValueError("admission commitment width drift")
+              if state == CAPTURE_STATE:
+                  if commitment != CAPTURE_COMMITMENT:
+                      raise ValueError("capture-only commitment is not neutral")
+                  return "CAPTURE_ONLY"
+              if state == ACTIVE_STATE:
+                  if commitment == CAPTURE_COMMITMENT or commitment != payload_digest:
+                      raise ValueError("admitted Mobile evidence commitment drift")
+                  return "ADMITTED"
+              raise ValueError("unknown Mobile admission state")
+
+          def sentinel_contract(workflow):
+              state_assignments = re.findall(
+                  r"(?m)^          ADMISSION_STATE = (?:CAPTURE_STATE|ACTIVE_STATE)$",
+                  workflow,
+              )
+              if workflow.count(CAPTURE_STATE) != 1 or len(state_assignments) != 1:
+                  raise ValueError("Mobile admission sentinel cardinality drift")
+
+          path = Path(os.environ["EVIDENCE_PATH"])
+          workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
+          try:
+              sentinel_contract(workflow)
+          except ValueError as error:
+              raise SystemExit(str(error)) from None
+          if not path.is_file() or path.is_symlink() or path.stat().st_size not in range(1, 262145):
+              raise SystemExit("unsafe staged Mobile evidence file")
+          data = path.read_bytes()
+          candidate = os.environ["CANDIDATE_SHA"]
+          try:
+              envelope, sections = parse(data)
+              validate(envelope, sections, candidate)
+              payload_digest = canonical_commitment(data, candidate)
+              result = admission_gate(ADMISSION_STATE, bytes(REVIEWED_COMMITMENT_BYTES), payload_digest)
+          except ValueError as error:
+              raise SystemExit(str(error)) from None
+          expected_result = "CAPTURE_ONLY" if ADMISSION_STATE == CAPTURE_STATE else "ADMITTED"
+          if result != expected_result:
+              raise SystemExit("Mobile admission state/result mismatch")
+
+          def reject(label, action):
+              try:
+                  action()
+              except ValueError:
+                  return
+              raise SystemExit(f"Mobile admission negative control accepted: {label}")
+
+          reject("unknown admission state", lambda: admission_gate("UNKNOWN", CAPTURE_COMMITMENT, payload_digest))
+          reject("active admission with neutral commitment", lambda: admission_gate(ACTIVE_STATE, CAPTURE_COMMITMENT, payload_digest))
+          reject("active admission with wrong commitment", lambda: admission_gate(ACTIVE_STATE, bytes([1]) * 32, payload_digest))
+          reject("malformed commitment", lambda: admission_gate(ADMISSION_STATE, bytes(31), payload_digest))
+          reject("missing capture sentinel", lambda: sentinel_contract(workflow.replace(CAPTURE_STATE, "", 1)))
+          reject("duplicate capture sentinel", lambda: sentinel_contract(workflow + CAPTURE_STATE))
+          mutated_digest = canonical_commitment(data.replace(b"manifest_count=16\n", b"manifest_count=15\n", 1), candidate)
+          reject("exact admitted evidence drift", lambda: admission_gate(ACTIVE_STATE, payload_digest, mutated_digest))
+          for name, value in POLICY.items():
+              changed = copy.deepcopy(POLICY)
+              changed[name] = "FAIL" if value != "PROHIBITED" else "ALLOWED"
+              reject(f"policy drift: {name}", lambda changed=changed: validate(envelope, sections, candidate, changed))
+          changed = copy.deepcopy(sections)
+          changed["MOBILE_FOCUSED_PROVIDER_JEST_V1"]["warning_category_count"] = "1"
+          reject("focused Booking warning", lambda: validate(envelope, changed, candidate))
+          changed = copy.deepcopy(sections)
+          changed["MOBILE_DEPENDENCY_AUDIT_V1"]["production_high"] = str(number(changed["MOBILE_DEPENDENCY_AUDIT_V1"]["production_high"]) + 1)
+          reject("dependency evidence drift", lambda: validate(envelope, changed, candidate))
+          changed = copy.deepcopy(sections)
+          changed["MOBILE_SECRET_INVENTORY_V1"]["scanner_version"] = "0.0.0"
+          reject("scanner version drift", lambda: validate(envelope, changed, candidate))
+          reject("missing evidence section", lambda: parse(data.replace(b"MOBILE_LINT_V1\n", b"", 1)))
+          reject("duplicate evidence field", lambda: parse(data.replace(b"mode=mobile-booking-intent-foundation\n", b"mode=mobile-booking-intent-foundation\nmode=mobile-booking-intent-foundation\n", 1)))
+          reject("noncanonical evidence count", lambda: validate(envelope, {**sections, "MOBILE_FOCUSED_NODE_V1": {**sections["MOBILE_FOCUSED_NODE_V1"], "tests": "032"}}, candidate))
+          reject("unsafe CRLF evidence", lambda: parse(data.replace(b"\n", b"\r\n", 1)))
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8", newline="\n") as output: output.write(f"state={result}\n")
+          print(f"Mobile Booking admission verifier structure: {result}")
+          PY
+      - name: Upload Mobile Booking intent foundation capture evidence
+        if: success() && steps.evidence_contract.outputs.mode == 'mobile-booking-intent-foundation' && steps.mobile_booking_admission.outputs.state == 'CAPTURE_ONLY'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: mobile-booking-intent-foundation-evidence-${{ github.event_name }}-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ${{ runner.temp }}/mobile-booking-intent-foundation-evidence-v1.txt
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+      - name: Stop Mobile Booking intent foundation pending CTO admission
+        if: success() && steps.evidence_contract.outputs.mode == 'mobile-booking-intent-foundation' && steps.mobile_booking_admission.outputs.state == 'CAPTURE_ONLY'
+        run: |
+          echo "mobile booking intent foundation evidence awaiting CTO admission" >&2
+          exit 1
+
       - name: Assemble Booking consent authority evidence
         if: success() && steps.evidence_contract.outputs.mode == 'booking-consent-policy-authority'
         env:
