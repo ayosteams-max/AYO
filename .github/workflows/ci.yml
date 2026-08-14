@@ -5145,7 +5145,9 @@ jobs:
               "MIGRATION_SECURITY_CLEANUP_V1", "canonical_migration_head=20260812_0060",
               "backup_restore=PASS", "migration_round_trip=PASS", "ruff=PASS", "bandit=PASS",
               "python_dependency_audit=PASS", "authentication_authorization_support=PASS",
-              "postgresql_cleanup=PASS", "candidate_tree_cleanliness=PASS",
+              "postgresql_cleanup=PASS", "container_shutdown=PASS",
+              "backend_intermediate_cleanup=PASS", "mobile_raw_output_cleanup=PASS",
+              "candidate_tree_cleanliness=PASS",
               "END_MIGRATION_SECURITY_CLEANUP_V1",
           ])
           manifest_fp = hashlib.sha256("\n".join(manifest).encode()).hexdigest()
@@ -5167,6 +5169,338 @@ jobs:
               output.write(block); output.flush(); os.fsync(output.fileno())
           if path.is_symlink() or path.read_bytes() != block.encode("utf-8") or not block.endswith("\n"):
               raise SystemExit("Mobile evidence reread verification failed")
+          PY
+
+      - name: Verify staged Mobile Booking evidence admission contract
+        if: success() && steps.evidence_contract.outputs.mode == 'mobile-booking-intent-foundation'
+        env:
+          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          EVIDENCE_PATH: ${{ runner.temp }}/mobile-booking-intent-foundation-evidence-v1.txt
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import copy
+          import hashlib
+          import os
+          import re
+          from pathlib import Path
+
+          CAPTURE_STATE = "CAPTURE_ONLY_PENDING_CTO_REVIEW"
+          ACTIVE_STATE = "ADMITTED_PREPRODUCTION_EVIDENCE"
+          ADMISSION_STATE = CAPTURE_STATE
+          REVIEWED_COMMITMENT_BYTES = (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+          CAPTURE_COMMITMENT = bytes(32)
+          REQUIRED_POLICY = (
+              ("admission_scope", "PRE_PRODUCTION_ONLY"),
+              ("dependency_debt_reviewed", "PASS"),
+              ("production_release_blocked", "PASS"),
+              ("fresh_online_advisory_review_before_release", "REQUIRED"),
+              ("runtime_trusted_build_reachability_review_before_release", "REQUIRED"),
+              ("automatic_audit_fix", "PROHIBITED"),
+              ("zero_runtime_vulnerability_claim", "PROHIBITED"),
+          )
+          POLICY = dict(REQUIRED_POLICY)
+          SECTION_FIELDS = {
+              "MOBILE_FOCUSED_NODE_V1": {
+                  "tests", "pass", "fail", "cancelled", "skipped", "todo",
+                  "test_file_count", "test_file_fingerprint", "selected_test_fingerprint",
+                  "passing_test_fingerprint", "required_inventory", "process_exit",
+                  "node_version", "command_fingerprint",
+              },
+              "MOBILE_COMPLETE_NODE_V1": {
+                  "tests", "pass", "fail", "cancelled", "skipped", "todo",
+                  "test_file_count", "test_file_fingerprint", "selected_test_fingerprint",
+                  "passing_test_fingerprint", "required_inventory", "process_exit",
+                  "node_version", "command_fingerprint",
+              },
+              "MOBILE_FOCUSED_PROVIDER_JEST_V1": {
+                  "suites_total", "suites_passed", "suites_failed", "suites_pending",
+                  "tests_total", "tests_passed", "tests_failed", "tests_pending", "tests_todo",
+                  "suite_fingerprint", "selected_test_fingerprint", "passing_test_fingerprint",
+                  "warning_category_count", "warning_category_fingerprint",
+                  "focused_booking_provider", "process_exit", "jest_version", "command_fingerprint",
+              },
+              "MOBILE_COMPLETE_PROVIDER_JEST_V1": {
+                  "suites_total", "suites_passed", "suites_failed", "suites_pending",
+                  "tests_total", "tests_passed", "tests_failed", "tests_pending", "tests_todo",
+                  "suite_fingerprint", "selected_test_fingerprint", "passing_test_fingerprint",
+                  "warning_category_count", "warning_category_fingerprint",
+                  "focused_booking_provider", "process_exit", "jest_version", "command_fingerprint",
+              },
+              "MOBILE_TYPESCRIPT_V1": {
+                  "typescript_version", "diagnostic_count", "affected_file_count",
+                  "diagnostic_fingerprint", "process_exit", "command_fingerprint",
+              },
+              "MOBILE_LINT_V1": {
+                  "expo_version", "eslint_version", "error_count", "warning_count",
+                  "diagnostic_fingerprint", "process_exit", "command_fingerprint",
+              },
+              "MOBILE_SOURCE_SAFETY_V1": {
+                  "confirmation_recovery_authority", "capability_unlock",
+                  "provider_composition_wiring", "context_authority_injection",
+                  "caller_selected_identity", "durable_storage", "sensitive_logging",
+                  "external_activation", "screen_navigation_change", "production_activation",
+                  "unsafe_authority_suppression", "mobile_changed_line_coverage",
+                  "complete_check_execution", "complete_check_script_fingerprint",
+              },
+              "MOBILE_BACKEND_BROAD_REGRESSION_V1": {
+                  "collected", "selected", "passed", "failed", "errors", "skipped",
+                  "xfail_count", "xfail_node", "xfail_reason", "requested_deselections",
+                  "matched_deselection_count", "matched_deselection_identities",
+                  "selected_node_fingerprint", "passing_node_fingerprint",
+                  "permission_registry_blob", "authorization_contract_test_blob",
+                  "total_coverage_percentage", "coverage_semantic_fingerprint",
+                  "zero_coverage_inventory_fingerprint", "uncollected_inventory_fingerprint",
+                  "changed_production_line_coverage",
+              },
+              "BACKEND_POSTGRESQL_REGRESSION_V1": {
+                  "collected", "selected", "passed", "failed", "errors", "skipped", "xfailed",
+                  "selected_node_fingerprint", "passing_node_fingerprint",
+                  "new_mobile_required_node_contract",
+              },
+              "BACKEND_MYPY_EQUIVALENCE_V1": {
+                  "strict_base_count", "strict_candidate_count", "strict_base_files",
+                  "strict_candidate_files", "strict_base_codes", "strict_candidate_codes",
+                  "strict_base_fingerprint", "strict_candidate_fingerprint", "strict_base_only",
+                  "strict_candidate_only", "configured_base_count", "configured_candidate_count",
+                  "configured_base_files", "configured_candidate_files", "configured_base_codes",
+                  "configured_candidate_codes", "configured_base_fingerprint",
+                  "configured_candidate_fingerprint", "configured_base_only", "configured_candidate_only",
+              },
+              "MOBILE_DEPENDENCY_AUDIT_V1": {
+                  "npm_version", "all_info", "all_low", "all_moderate", "all_high",
+                  "all_critical", "all_total", "production_info", "production_low",
+                  "production_moderate", "production_high", "production_critical",
+                  "production_total", "all_dependency_dev", "all_dependency_optional",
+                  "all_dependency_peer", "all_dependency_peerOptional", "all_dependency_prod",
+                  "all_dependency_total", "production_dependency_dev",
+                  "production_dependency_optional", "production_dependency_peer",
+                  "production_dependency_peerOptional", "production_dependency_prod",
+                  "production_dependency_total", "all_dependency_population_fingerprint",
+                  "production_dependency_population_fingerprint", "audit_completion",
+              },
+              "MOBILE_SECRET_INVENTORY_V1": {
+                  "scanner_version", "base_item_count", "candidate_item_count",
+                  "base_inventory_digest", "candidate_inventory_digest", "base_only_item_count",
+                  "candidate_only_item_count", "defensive_boundary_check", "normalized_comparison",
+              },
+              "MIGRATION_SECURITY_CLEANUP_V1": {
+                  "canonical_migration_head", "backup_restore", "migration_round_trip", "ruff",
+                  "bandit", "python_dependency_audit", "authentication_authorization_support",
+                  "postgresql_cleanup", "container_shutdown", "backend_intermediate_cleanup",
+                  "mobile_raw_output_cleanup", "candidate_tree_cleanliness",
+              },
+          }
+          SECTION_ORDER = tuple(SECTION_FIELDS)
+          ENVELOPE_FIELDS = {
+              "event_scope", "mode", "candidate_sha", "governed_base", "root_tests_tree",
+              "mobile_tree", "mobile_tests_tree", "package_blob", "lockfile_blob",
+              "backend_tree", "migration_tree", "manifest_count", "manifest_fingerprint",
+          }
+          DECIMAL = re.compile(r"0|[1-9][0-9]*")
+          HEX40 = re.compile(r"[0-9a-f]{40}")
+          HEX64 = re.compile(r"[0-9a-f]{64}")
+
+          def fields(lines, label):
+              result = {}
+              for line in lines:
+                  if "=" not in line:
+                      raise ValueError(f"malformed {label} field")
+                  name, value = line.split("=", 1)
+                  if not name or name in result or "\r" in value:
+                      raise ValueError(f"duplicate {label} field")
+                  result[name] = value
+              return result
+
+          def parse(data):
+              if not data or b"\r" in data or not data.endswith(b"\n"):
+                  raise ValueError("evidence encoding or newline drift")
+              forbidden = (b"http://", b"https://", b"Traceback (most recent call last)", b"npm ERR!", b"detect-secrets")
+              if any(value in data for value in forbidden):
+                  raise ValueError("unsafe content entered staged evidence")
+              try:
+                  text = data.decode("utf-8")
+              except UnicodeError as error:
+                  raise ValueError("evidence UTF-8 drift") from error
+              lines = text.splitlines()
+              if lines[0] != "MOBILE_BOOKING_INTENT_EVIDENCE_V1" or lines[-1] != "END_MOBILE_BOOKING_INTENT_EVIDENCE_V1":
+                  raise ValueError("evidence envelope drift")
+              starts = [index for index, line in enumerate(lines) if line in SECTION_FIELDS]
+              if [lines[index] for index in starts] != list(SECTION_ORDER):
+                  raise ValueError("evidence section order drift")
+              envelope = fields(lines[1:starts[0]], "envelope")
+              if set(envelope) != ENVELOPE_FIELDS:
+                  raise ValueError("evidence envelope fields drift")
+              sections = {}
+              for position, marker in enumerate(SECTION_ORDER):
+                  start = starts[position]
+                  end = lines.index("END_" + marker, start + 1)
+                  if position + 1 < len(starts) and end + 1 != starts[position + 1]:
+                      raise ValueError("evidence section boundary drift")
+                  if position + 1 == len(starts) and end + 1 != len(lines) - 1:
+                      raise ValueError("evidence trailing field drift")
+                  sections[marker] = fields(lines[start + 1:end], marker)
+                  if set(sections[marker]) != SECTION_FIELDS[marker]:
+                      raise ValueError(f"evidence field inventory drift: {marker}")
+                  for name, value in sections[marker].items():
+                      if name.endswith(("fingerprint", "digest")) and not (HEX40.fullmatch(value) or HEX64.fullmatch(value)):
+                          raise ValueError("evidence digest format drift")
+                      if name.endswith("_blob") and not HEX40.fullmatch(value):
+                          raise ValueError("evidence blob format drift")
+              return envelope, sections
+
+          def number(value):
+              if not DECIMAL.fullmatch(value):
+                  raise ValueError("noncanonical evidence count")
+              return int(value)
+
+          def validate(envelope, sections, candidate, policy=POLICY):
+              if tuple(policy.items()) != REQUIRED_POLICY:
+                  raise ValueError("Mobile admission policy drift")
+              if envelope["event_scope"] != "push-and-pull-request-comparable" or envelope["mode"] != "mobile-booking-intent-foundation":
+                  raise ValueError("Mobile admission scope drift")
+              if envelope["candidate_sha"] != candidate or not HEX40.fullmatch(candidate) or candidate == "0" * 40:
+                  raise ValueError("Mobile admission candidate drift")
+              if not HEX40.fullmatch(envelope["governed_base"]) or envelope["manifest_count"] != "16":
+                  raise ValueError("Mobile admission identity drift")
+              for name in ("root_tests_tree", "mobile_tree", "mobile_tests_tree", "package_blob", "lockfile_blob", "backend_tree", "migration_tree"):
+                  if not HEX40.fullmatch(envelope[name]):
+                      raise ValueError("Mobile admission object identity drift")
+              if not HEX64.fullmatch(envelope["manifest_fingerprint"]):
+                  raise ValueError("Mobile admission manifest fingerprint drift")
+              for marker in ("MOBILE_FOCUSED_NODE_V1", "MOBILE_COMPLETE_NODE_V1"):
+                  item = sections[marker]
+                  values = {name: number(item[name]) for name in ("tests", "pass", "fail", "cancelled", "skipped", "todo")}
+                  if values["tests"] != sum(values[name] for name in ("pass", "fail", "cancelled", "skipped", "todo")):
+                      raise ValueError("Node evidence arithmetic drift")
+                  if item["required_inventory"] != "PASS" or item["process_exit"] != "0" or number(item["test_file_count"]) == 0:
+                      raise ValueError("Node evidence result drift")
+              for marker in ("MOBILE_FOCUSED_PROVIDER_JEST_V1", "MOBILE_COMPLETE_PROVIDER_JEST_V1"):
+                  item = sections[marker]
+                  if number(item["suites_total"]) != sum(number(item[name]) for name in ("suites_passed", "suites_failed", "suites_pending")):
+                      raise ValueError("Jest suite arithmetic drift")
+                  if number(item["tests_total"]) != sum(number(item[name]) for name in ("tests_passed", "tests_failed", "tests_pending", "tests_todo")):
+                      raise ValueError("Jest test arithmetic drift")
+                  if item["process_exit"] != "0":
+                      raise ValueError("Jest process drift")
+              focused = sections["MOBILE_FOCUSED_PROVIDER_JEST_V1"]
+              if focused["warning_category_count"] != "0" or focused["focused_booking_provider"] != "PASS":
+                  raise ValueError("focused Booking warning drift")
+              source = sections["MOBILE_SOURCE_SAFETY_V1"]
+              absent = set(source) - {"mobile_changed_line_coverage", "complete_check_execution", "complete_check_script_fingerprint"}
+              if any(source[name] != "ABSENT" for name in absent):
+                  raise ValueError("Mobile source-safety drift")
+              audit = sections["MOBILE_DEPENDENCY_AUDIT_V1"]
+              for prefix in ("all", "production"):
+                  if number(audit[f"{prefix}_total"]) != sum(number(audit[f"{prefix}_{severity}"]) for severity in ("info", "low", "moderate", "high", "critical")):
+                      raise ValueError("dependency audit arithmetic drift")
+              if audit["audit_completion"] != "PASS":
+                  raise ValueError("dependency audit completion drift")
+              broad = sections["MOBILE_BACKEND_BROAD_REGRESSION_V1"]
+              if number(broad["selected"]) != sum(number(broad[name]) for name in ("passed", "failed", "errors", "skipped", "xfail_count")):
+                  raise ValueError("backend broad arithmetic drift")
+              if number(broad["collected"]) != number(broad["selected"]) + number(broad["matched_deselection_count"]):
+                  raise ValueError("backend collection arithmetic drift")
+              if broad["changed_production_line_coverage"] != "NOT_APPLICABLE_EMPTY_BACKEND_DIFF":
+                  raise ValueError("empty backend coverage boundary drift")
+              postgres = sections["BACKEND_POSTGRESQL_REGRESSION_V1"]
+              if number(postgres["selected"]) != sum(number(postgres[name]) for name in ("passed", "failed", "errors", "skipped", "xfailed")):
+                  raise ValueError("PostgreSQL arithmetic drift")
+              if postgres["new_mobile_required_node_contract"] != "NOT_APPLICABLE":
+                  raise ValueError("Mobile PostgreSQL scope drift")
+              mypy = sections["BACKEND_MYPY_EQUIVALENCE_V1"]
+              for prefix in ("strict", "configured"):
+                  if mypy[f"{prefix}_base_count"] != mypy[f"{prefix}_candidate_count"] or mypy[f"{prefix}_base_files"] != mypy[f"{prefix}_candidate_files"] or mypy[f"{prefix}_base_codes"] != mypy[f"{prefix}_candidate_codes"] or mypy[f"{prefix}_base_fingerprint"] != mypy[f"{prefix}_candidate_fingerprint"] or mypy[f"{prefix}_base_only"] != "0" or mypy[f"{prefix}_candidate_only"] != "0":
+                      raise ValueError("MyPy equivalence drift")
+              inventory = sections["MOBILE_SECRET_INVENTORY_V1"]
+              if inventory["scanner_version"] != "1.5.0" or inventory["defensive_boundary_check"] != "PASS" or inventory["normalized_comparison"] != "COMPLETE_LINE_SENSITIVE_INVENTORY":
+                  raise ValueError("secret inventory governance drift")
+              cleanup = sections["MIGRATION_SECURITY_CLEANUP_V1"]
+              if any(cleanup[name] != "PASS" for name in set(cleanup) - {"canonical_migration_head"}) or cleanup["canonical_migration_head"] != "20260812_0060":
+                  raise ValueError("migration security cleanup drift")
+
+          def canonical_commitment(data, candidate):
+              text = data.decode("utf-8")
+              expected = f"candidate_sha={candidate}\n"
+              if text.count(expected) != 1:
+                  raise ValueError("candidate normalization drift")
+              return hashlib.sha256(text.replace(expected, "candidate_sha=" + "0" * 40 + "\n", 1).encode()).digest()
+
+          def admission_gate(state, commitment, payload_digest):
+              if len(commitment) != 32:
+                  raise ValueError("admission commitment width drift")
+              if state == CAPTURE_STATE:
+                  if commitment != CAPTURE_COMMITMENT:
+                      raise ValueError("capture-only commitment is not neutral")
+                  return "CAPTURE_ONLY"
+              if state == ACTIVE_STATE:
+                  if commitment == CAPTURE_COMMITMENT or commitment != payload_digest:
+                      raise ValueError("admitted Mobile evidence commitment drift")
+                  return "ADMITTED"
+              raise ValueError("unknown Mobile admission state")
+
+          def sentinel_contract(workflow):
+              state_assignments = re.findall(
+                  r"(?m)^          ADMISSION_STATE = (?:CAPTURE_STATE|ACTIVE_STATE)$",
+                  workflow,
+              )
+              if workflow.count(CAPTURE_STATE) != 1 or len(state_assignments) != 1:
+                  raise ValueError("Mobile admission sentinel cardinality drift")
+
+          path = Path(os.environ["EVIDENCE_PATH"])
+          workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
+          try:
+              sentinel_contract(workflow)
+          except ValueError as error:
+              raise SystemExit(str(error)) from None
+          if not path.is_file() or path.is_symlink() or path.stat().st_size not in range(1, 262145):
+              raise SystemExit("unsafe staged Mobile evidence file")
+          data = path.read_bytes()
+          candidate = os.environ["CANDIDATE_SHA"]
+          try:
+              envelope, sections = parse(data)
+              validate(envelope, sections, candidate)
+              payload_digest = canonical_commitment(data, candidate)
+              result = admission_gate(ADMISSION_STATE, bytes(REVIEWED_COMMITMENT_BYTES), payload_digest)
+          except ValueError as error:
+              raise SystemExit(str(error)) from None
+          expected_result = "CAPTURE_ONLY" if ADMISSION_STATE == CAPTURE_STATE else "ADMITTED"
+          if result != expected_result:
+              raise SystemExit("Mobile admission state/result mismatch")
+
+          def reject(label, action):
+              try:
+                  action()
+              except ValueError:
+                  return
+              raise SystemExit(f"Mobile admission negative control accepted: {label}")
+
+          reject("unknown admission state", lambda: admission_gate("UNKNOWN", CAPTURE_COMMITMENT, payload_digest))
+          reject("active admission with neutral commitment", lambda: admission_gate(ACTIVE_STATE, CAPTURE_COMMITMENT, payload_digest))
+          reject("active admission with wrong commitment", lambda: admission_gate(ACTIVE_STATE, bytes([1]) * 32, payload_digest))
+          reject("malformed commitment", lambda: admission_gate(ADMISSION_STATE, bytes(31), payload_digest))
+          reject("missing capture sentinel", lambda: sentinel_contract(workflow.replace(CAPTURE_STATE, "", 1)))
+          reject("duplicate capture sentinel", lambda: sentinel_contract(workflow + CAPTURE_STATE))
+          mutated_digest = canonical_commitment(data.replace(b"manifest_count=16\n", b"manifest_count=15\n", 1), candidate)
+          reject("exact admitted evidence drift", lambda: admission_gate(ACTIVE_STATE, payload_digest, mutated_digest))
+          for name, value in POLICY.items():
+              changed = copy.deepcopy(POLICY)
+              changed[name] = "FAIL" if value != "PROHIBITED" else "ALLOWED"
+              reject(f"policy drift: {name}", lambda changed=changed: validate(envelope, sections, candidate, changed))
+          changed = copy.deepcopy(sections)
+          changed["MOBILE_FOCUSED_PROVIDER_JEST_V1"]["warning_category_count"] = "1"
+          reject("focused Booking warning", lambda: validate(envelope, changed, candidate))
+          changed = copy.deepcopy(sections)
+          changed["MOBILE_DEPENDENCY_AUDIT_V1"]["production_high"] = str(number(changed["MOBILE_DEPENDENCY_AUDIT_V1"]["production_high"]) + 1)
+          reject("dependency evidence drift", lambda: validate(envelope, changed, candidate))
+          changed = copy.deepcopy(sections)
+          changed["MOBILE_SECRET_INVENTORY_V1"]["scanner_version"] = "0.0.0"
+          reject("scanner version drift", lambda: validate(envelope, changed, candidate))
+          reject("missing evidence section", lambda: parse(data.replace(b"MOBILE_LINT_V1\n", b"", 1)))
+          reject("duplicate evidence field", lambda: parse(data.replace(b"mode=mobile-booking-intent-foundation\n", b"mode=mobile-booking-intent-foundation\nmode=mobile-booking-intent-foundation\n", 1)))
+          reject("noncanonical evidence count", lambda: validate(envelope, {**sections, "MOBILE_FOCUSED_NODE_V1": {**sections["MOBILE_FOCUSED_NODE_V1"], "tests": "032"}}, candidate))
+          reject("unsafe CRLF evidence", lambda: parse(data.replace(b"\n", b"\r\n", 1)))
+          print(f"Mobile Booking admission verifier structure: {result}")
           PY
 
       - name: Upload Mobile Booking intent foundation capture evidence
