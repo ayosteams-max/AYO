@@ -4914,28 +4914,61 @@ jobs:
               "{{ steps.trusted_comparison_base.outputs.sha }}"
           )
           resolver_id = "id: trusted_" + "comparison_base"
-          if workflow.count(resolver_id) != 1:
+          step_headers = list(re.finditer(r"(?m)^      - name: (.+)$", workflow))
+          resolver_steps = []
+          for index, match in enumerate(step_headers):
+              end = step_headers[index + 1].start() if index + 1 < len(step_headers) else len(workflow)
+              if resolver_id in workflow[match.start():end]:
+                  resolver_steps.append(match.group(1))
+          if (
+              workflow.count(resolver_id) != 1
+              or tuple(resolver_steps) != ("Resolve trusted comparison base",)
+          ):
               raise SystemExit("trusted comparison base resolver is not unique")
           expected_consumer_steps = (
               "Bind exact Booking replay-equivalence candidate identity",
               "Bind exact Booking consent-policy-authority candidate identity",
               "Bind exact Mobile Booking intent foundation candidate identity",
               "Bind exact consent document architecture candidate identity",
+              "Bind exact Booking consent approval-pack architecture candidate identity",
               "Test all admitted non-PostgreSQL behavior with coverage",
               "Verify exact Batch 2 test and coverage contract",
           )
-          step_headers = list(re.finditer(r"(?m)^      - name: (.+)$", workflow))
+          expected_predecessor_steps = (
+              "Bind tested Courier Pickup tree to trusted authoritative base",
+              "Bind tested Courier Pickup authorization-ordering tree to trusted base",
+          )
           consumer_steps = []
+          predecessor_steps = []
+          approval_pack_consumer_block = ""
           for index, match in enumerate(step_headers):
               end = step_headers[index + 1].start() if index + 1 < len(step_headers) else len(workflow)
-              if authoritative_mapping in workflow[match.start():end]:
+              step_block = workflow[match.start():end]
+              if authoritative_mapping in step_block:
                   consumer_steps.append(match.group(1))
+              if predecessor_mapping in step_block:
+                  predecessor_steps.append(match.group(1))
+              if match.group(1) == "Bind exact Booking consent approval-pack architecture candidate identity":
+                  approval_pack_consumer_block = step_block
           if (
-              workflow.count(authoritative_mapping) != 6
+              workflow.count(authoritative_mapping) != len(expected_consumer_steps)
               or tuple(consumer_steps) != expected_consumer_steps
-              or workflow.count(predecessor_mapping) != 2
+              or workflow.count(predecessor_mapping) != len(expected_predecessor_steps)
+              or tuple(predecessor_steps) != expected_predecessor_steps
           ):
               raise SystemExit("comparison-dependent gates do not share one resolver output")
+          if (
+              consumer_steps.count(
+                  "Bind exact Booking consent approval-pack architecture candidate identity"
+              ) != 1
+              or approval_pack_consumer_block.count(authoritative_mapping) != 1
+              or approval_pack_consumer_block.count("TRUSTED_COMPARISON_BASE_SHA:") != 1
+              or re.findall(
+                  r"steps\.([A-Za-z0-9_-]+)\.outputs\.sha",
+                  approval_pack_consumer_block,
+              ) != ["trusted_comparison_base"]
+          ):
+              raise SystemExit("approval-pack trusted comparison-base consumer drift")
           forbidden = (
               "COVERAGE_" + "COMPARE_SHA",
               "steps.coverage_" + "base.outputs.sha",
