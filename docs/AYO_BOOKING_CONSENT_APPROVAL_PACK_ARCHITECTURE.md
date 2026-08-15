@@ -30,6 +30,8 @@ The provisional basis is the AYO assessment completed on 2026-08-15. Primary sou
 - Apple and Google rules are platform policies, not Ethiopian law, and are time-sensitive.
 - Unofficial translations never override authoritative Ethiopian-language texts.
 
+An authenticated electronic acknowledgment may potentially satisfy applicable requirements, but its sufficiency depends on the governing instrument, attribution, affirmative action, disclosure, record integrity, accessibility, retention and any required signature form. No checkbox, button, tap or similar interaction is automatically legally sufficient. Only the accountable Ethiopian legal or regulatory authority may determine the applicable result; this record makes no validity or compliance claim.
+
 This architecture is not legal advice and makes no compliance claim. A broken, unavailable, ambiguous or superseded source remains unresolved.
 
 Provisional source register, accessed 2026-08-15:
@@ -86,9 +88,13 @@ Each domain has an independent decision record and may not be collapsed into bla
 20. deployment authorization; and
 21. production authorization.
 
-## 7. Evidence types
+## 7. Evidence types, authenticity and custody
 
 Evidence types are source records, written counsel opinions, written regulator answers or licence conditions, legal-instrument classifications, disclosure inventories, privacy/data-flow decisions, native-language rendition reviews, accessibility evaluations, product decisions, technical/security reviews, operational readiness evidence, Founder decisions, deployment authorizations and production authorizations. Meeting notes and verbal guidance may provide context but cannot independently grant approval.
+
+Every evidence object binds a stable evidence ID; digest and algorithm; MIME/type; byte length; creation and receipt timestamps; issuing authority; submission and receipt channel; authenticity-verification method and result; signer or official identity where lawfully retained; signature/certificate verification where applicable; redaction status; confidentiality classification; storage authority; storage-location and jurisdiction classification without exposing secrets; access-control class; legal-hold state; supersession identity; exportability; and independent-audit status.
+
+Git contains only safe governance metadata and cryptographic commitments unless a separate authorization explicitly permits more. Confidential legal opinions, regulator correspondence, personal identity documents, signatures, certificates and sensitive evidence bytes must not be committed. The authoritative evidence store is `UNRESOLVED`; GitHub, email, local disks, vendors, AI systems and mobile clients are not implicitly authoritative evidence stores. A reference, URL or email provenance alone proves neither authenticity nor authority. No storage provider or retention duration is selected here.
 
 ## 8. Decision and status model
 
@@ -110,6 +116,32 @@ Silence, attendance, payment, submission, a successful CI run or implementation 
 
 Every decision binds: stable decision ID; domain; exact question; jurisdiction, market and service scope; accountable authority; named reviewer and role where legally permitted; source/evidence IDs; version; received, effective and re-review dates; exact decision; conditions; reservations; implementation and activation stages unblocked; status; verification actor; and immutable audit timestamp. Credentials, private identity documents and unnecessary personal data are prohibited.
 
+The universal decision identity is exact and includes jurisdiction and sub-jurisdiction; market; service; closed policy scope; instrument type and ID; instrument version; canonical locale; source and target rendition identities and hashes where applicable; format; exact lifecycle stage; evidence-bundle fingerprint; decision version; accountable actor identity; verification identity; condition-satisfaction evidence identity where applicable; and effective and expiry times. A missing or inapplicably defaulted identity fails closed.
+
+Cross-jurisdiction, cross-region, cross-market, cross-service, cross-policy-scope, cross-instrument, cross-language, cross-rendition, cross-version and cross-stage reuse is prohibited. Architecture approval cannot authorize implementation; implementation approval cannot authorize deployment; deployment authorization cannot authorize production. Approval scope cannot be widened retroactively.
+
+### Normative transition contract
+
+Every transition records the stable decision ID and version, attributable actor, accountable transition authority, evidence ID, reason, immutable timestamp, previous state and resulting state. Invalid, unknown, skipped or unauthorized transitions fail closed and append no authoritative state.
+
+| Predecessor | Permitted successor | Accountable authority and minimum evidence |
+|---|---|---|
+| `NOT_STARTED` | `RESEARCHED_UNVERIFIED`, `QUESTION_PREPARED`, `BLOCKED` | Assigned domain owner; scoped research/question/blocker evidence. Direct approval is prohibited. |
+| `RESEARCHED_UNVERIFIED` | `QUESTION_PREPARED`, `BLOCKED`, `SUPERSEDED` | Domain owner or verifier; reviewed research and scope evidence. |
+| `QUESTION_PREPARED` | `SUBMITTED`, `BLOCKED`, `SUPERSEDED` | Authorized submitting owner; exact question, authority and submission evidence. |
+| `SUBMITTED` | `ANSWER_RECEIVED_UNVERIFIED`, `BLOCKED`, `SUPERSEDED` | Custodian; receipt evidence. Silence or attendance cannot advance state. |
+| `ANSWER_RECEIVED_UNVERIFIED` | `VERIFIED`, `REJECTED`, `BLOCKED`, `SUPERSEDED` | Independent verifier and domain authority; authenticity, scope, conflict and interpretation evidence. |
+| `VERIFIED` | `APPROVED`, `REJECTED`, `BLOCKED`, `EXPIRED`, `SUPERSEDED` | Accountable approving authority; exact evidence bundle and prerequisite results. |
+| `APPROVED` | `EXPIRED`, `SUPERSEDED`, `BLOCKED` | Expiry service or accountable authority; trigger, conflict, incident or replacement evidence. Approval cannot be edited in place. |
+| `REJECTED` | `SUPERSEDED` | Accountable authority; a new attributable decision version is required to reopen work. |
+| `EXPIRED` | `SUPERSEDED` | Accountable authority; a new attributable decision version is required after fresh verification. |
+| `BLOCKED` | `RESEARCHED_UNVERIFIED`, `QUESTION_PREPARED`, `ANSWER_RECEIVED_UNVERIFIED`, `VERIFIED`, `REJECTED`, `SUPERSEDED` | Blocker owner plus independent verifier; evidence that the stated blocker was resolved. It cannot transition directly to `APPROVED`. |
+| `SUPERSEDED` | none | Terminal historical state; successor exists under a new immutable version. |
+
+`REJECTED`, `EXPIRED`, `SUPERSEDED`, `BLOCKED` and condition-unsatisfied records never satisfy a gate. Reopening rejected or expired work creates a new attributable version and preserves immutable history. A material scope or evidence change also creates a new decision version.
+
+Conditional approval uses `APPROVED` plus explicit condition records, never a new ambiguous status. Each condition binds condition ID, exact scope, requirement, satisfaction evidence, verifier identity, verification time, expiry, residual restrictions and current result of `SATISFIED`, `UNSATISFIED` or `EXPIRED`. Only current `SATISFIED` conditions may support a gate; any other or unknown result fails closed.
+
 ## 9. Authority and separation of duties
 
 - Legal reviewer: legal interpretation; no technical, product or production authority.
@@ -123,7 +155,17 @@ Every decision binds: stable decision ID; domain; exact question; jurisdiction, 
 - Deployment operator: executes a separately authorized deployment; cannot approve content.
 - Independent auditor: checks evidence and controls independently; does not operate them.
 
-Content approvers cannot bypass technical integrity. Deployment personnel cannot approve content. AI cannot grant approval. Emergency withdrawal cannot activate replacement content.
+No self-approval is permitted where independence is required. The author or preparer is separate from the final approver. Translator, native-language reviewer and legal-equivalence reviewer are distinct roles. Legal cannot grant technical/security approval; Product cannot grant accessibility approval; native-language review alone cannot grant legal equivalence. Content approvers cannot bypass technical integrity. Deployment personnel cannot approve content. Founder approval cannot replace missing prerequisites. AI cannot grant approval. Independent auditors remain organizationally and operationally separate from evidence preparation and approval. Emergency-withdrawal actors cannot approve, schedule, activate, replace or roll back content.
+
+| Negative case | Required result |
+|---|---|
+| Author or preparer acts as required independent final approver | `BLOCKED` |
+| Translator also supplies required native-language or legal-equivalence approval | `BLOCKED` |
+| Legal attempts Security/CTO approval | `BLOCKED` |
+| Product attempts accessibility approval | `BLOCKED` |
+| Founder record exists while a prerequisite is absent | `BLOCKED` |
+| Auditor prepared or approved the governed evidence | `BLOCKED` |
+| Emergency-withdrawal actor attempts activation, replacement or rollback | `BLOCKED` |
 
 ## 10. Source provenance
 
@@ -139,19 +181,23 @@ For each instrument it records legal purpose, lawful basis, required presentatio
 
 ## 12. Counsel and regulator answer governance
 
-The written-answer ledger binds the exact question, authority asked, submission channel and date, response and attachment/reference identity, formal/informal/binding/advisory/conditional character, jurisdiction and scope, conditions, contradictions, follow-up, counsel interpretation, internal verification and stage unblocked. No contact or submission is authorized by this record.
+The written-answer ledger binds the exact question, authority asked, submission channel and date, response and attachment/reference identity, formal/informal/binding/advisory/conditional character, jurisdiction and scope, conditions, contradictions, follow-up, counsel interpretation, internal verification and stage unblocked. Follow-up records bind the original question ID and every prior answer ID. No contact or submission is authorized by this record.
 
 ## 13. Language and rendition approvals
 
 Amharic, Afaan Oromo and English are candidates, not approved launch languages. No runtime machine translation or silent fallback is permitted. Each approved rendition requires independent native-language and legal-equivalence review and binds market, instrument, version and rendition. Language change requires a newly bound exact rendition; a missing required rendition blocks that launch.
 
-Evidence covers reviewer competence, exact source/target rendition, legal equivalence, terminology, glyph/font shaping, line breaking, truncation, text scaling, mixed scripts, applicable bidirectional behavior, representative-device testing, approval date and expiry/re-review. No language is approved here.
+Every language or legal-equivalence decision binds source instrument, version, rendition identity and hash; target instrument, version, rendition identity and hash; canonical locale; format; translator identity; native-language reviewer identity; legal-equivalence reviewer identity; and evidence-bundle identity and version. Evidence also covers competence, terminology, glyph/font shaping, line breaking, truncation, text scaling, mixed scripts, applicable bidirectional behavior, representative-device testing, approval date and expiry/re-review. Every material byte change invalidates affected linguistic and legal-equivalence approvals. No language is approved here.
+
+Source mutation, target mutation, locale substitution or required-role collision produces `BLOCKED` and requires a new rendition/evidence version and independent review.
 
 ## 14. Accessibility approval
 
 The proposed AYO engineering floor is **WCAG 2.2 Level AA**. This is not a claim that Ethiopian law mandates WCAG 2.2. WCAG2Mobile is informative draft guidance, not normative law or a final W3C standard. Legal applicability remains for counsel, and conformance evidence requires native-mobile and representative-user testing.
 
-Evidence must cover accessible name/role/state; screen-reader reading order; resize/reflow; contrast and non-colour cues; target sizes; focus visibility/order; no forced reading timeout; motor accessibility; cognitive/plain-language review; weak-network unavailable states; Amharic and Afaan Oromo rendering; older Android devices; disabled-user testing; and professional accessibility review.
+Every accessibility decision binds exact rendition, document format, UI implementation/build identity, platform and version, supported device population, assistive-technology population, font/rendering configuration, test-evidence version and fingerprint, reviewer identity, approval scope and expiry. Evidence must cover accessible name/role/state; screen-reader reading order; resize/reflow; contrast and non-colour cues; target sizes; focus visibility/order; no forced reading timeout; motor accessibility; cognitive/plain-language review; weak-network unavailable states; Amharic and Afaan Oromo rendering; older Android devices; disabled-user testing; and professional accessibility review.
+
+Architecture or template approval cannot approve a nonexistent future UI. Relevant UI, rendition, font, framework, platform, assistive-technology or supported-device changes require re-review. UI/build substitution, font change and use on an unsupported device population fail closed.
 
 ## 15. Privacy and retention decisions
 
@@ -173,7 +219,7 @@ Product approval binds the exact rider problem, journey, comprehension evidence,
 
 Any future Founder decision is attributable only to **Ibrahim Hambentu Shibiru, Founder & CEO** and binds exact scope, evidence-bundle fingerprint, prerequisite status, timestamp, approval/rejection, conditions and re-review triggers. No Founder approval exists now.
 
-Permanent **RED** boundaries prohibit transferring AYO consent-record ownership or policy IP; unilateral vendor policy control; making a vendor the authoritative registry; surrendering signing keys, rider evidence or audit history; lock-in over required records; blocking complete export/migration or independent audit; unilateral third-party terms changes; bypassing Legal, CTO, independent audit or Founder gates; and weakening production prohibition. No researched requirement authorizes these outcomes.
+Permanent **RED** boundaries prohibit transferring AYO consent-record ownership or policy IP; unilateral vendor policy control; making a vendor the authoritative registry; surrendering signing keys, rider evidence or audit history; lock-in over required records; blocking complete export/migration or independent audit; unilateral third-party terms changes; bypassing Legal, CTO, independent audit or Founder gates; and weakening production prohibition. No researched requirement authorizes these outcomes. A red-line conflict remains `BLOCKED` even if the Founder or another reviewer records approval; no approval can override a permanent red line.
 
 ## 19. Expiry and re-review
 
@@ -195,15 +241,25 @@ User-facing activation requires approved policy prose; approved immutable rendit
 
 ## 23. Audit and privacy
 
-Decision and evidence records are immutable, attributable and independently exportable. Access is least-privilege and purpose-bound. Audit records store commitments and necessary provenance, not secrets, raw legal-content copies, private identity documents or unrelated rider data. Retention and legal-hold rules remain unresolved pending written authority.
+Decision and evidence records are immutable, attributable and independently exportable. Access is least-privilege and purpose-bound. Audit records store commitments and necessary provenance, not secrets, raw legal-content copies, private identity documents or unrelated rider data. Custody, confidentiality, access and legal-hold decisions apply per evidence object. Retention and legal-hold rules remain unresolved pending written authority.
 
 ## 24. Failure model
 
-Missing authority, verbal-only answer, unofficial/unverified translation, conflicting or stale source, expired approval, scope mismatch, missing language/accessibility/privacy decision, incomplete prerequisites, altered evidence bundle, red-line conflict, unknown status or attempted production authorization without all gates fails closed. No failure state may be interpreted as approval.
+Missing authority, verbal-only answer, unofficial/unverified translation, conflicting or stale source, expired approval, scope mismatch, missing language/accessibility/privacy decision, incomplete prerequisites, altered evidence bundle, red-line conflict, unknown status or attempted production authorization without all gates fails closed. Missing digest, changed bytes, unknown MIME/type, unverifiable signer, redaction mismatch, evidence-link rot, unavailable or compromised storage and unauthorized custody also fail closed. No failure state may be interpreted as approval.
 
 ## 25. Threat model
 
-Controls must address forged or AI-invented approval, approval replay, scope substitution, outdated sources, unofficial translations treated as authoritative, reviewer impersonation, evidence tampering, vendor control and lock-in, emergency-withdrawal misuse, bundled consent, dark patterns, inaccessible-presentation approval, retention overreach, unapproved cross-border processing and production-gate bypass. Required controls include attributable written evidence, exact scope/version binding, immutable audit, separation of duties, independent verification, expiry checks and deny-by-default gates.
+Controls must address forged or AI-invented approval, approval replay, scope substitution, outdated sources, unofficial translations treated as authoritative, reviewer impersonation, evidence tampering, evidence-link rot, confidential-document leakage, unavailable or compromised evidence storage, insider collusion, separation-of-duties bypass, vendor control and signing-key/evidence lock-in, emergency-withdrawal misuse, bundled consent, dark patterns, inaccessible-presentation approval, retention overreach, unapproved cross-border processing and production-gate bypass.
+
+| Threat | Stable failure and prohibited authority | Accountable escalation and recovery |
+|---|---|---|
+| Evidence-link rot or unavailable store | `BLOCKED`; no verification, implementation, deployment or production authority | Evidence custodian and independent auditor; recover from an authorized export, re-verify digest and custody, then issue a new evidence version if needed. |
+| Confidential-document leakage | `BLOCKED`; disclosed material cannot authorize a gate | Privacy/Data Steward and Security/CTO; contain, assess breach duties, rotate access and re-establish authorized evidence custody. |
+| Compromised evidence store or changed bytes | `BLOCKED`; all dependent approvals are unusable | Security/CTO, evidence custodian and independent auditor; isolate the store, compare independently held digests/exports and re-verify or supersede affected evidence. |
+| Insider collusion or separation-of-duties bypass | `BLOCKED`; affected approvals and downstream authority are invalid | Security/CTO and independent auditor; preserve immutable audit, investigate, reassign maker/checker roles and repeat independent approval. |
+| Vendor/key/evidence lock-in | `BLOCKED`; no activation, migration acceptance or production authority | Founder/CEO, Legal and Security/CTO; require complete export, AYO-controlled authority and independent audit before re-review. |
+
+Controls include independently verified digests, bounded Git metadata, least-privilege access, immutable audit records, complete export, independent audit, maker-checker separation, conflict escalation and tested recovery from unavailable or compromised storage.
 
 ## 26. Alternatives rejected
 
@@ -224,4 +280,4 @@ Production is inactive and prohibited. This record authorizes no policy content,
 
 ## 29. Open decisions
 
-All approval domains in Section 6 remain unresolved. The governed template defaults them to `NOT_APPROVED`, unresolved answers to `UNRESOLVED`, and production fields to `PROHIBITED` until separately attributable evidence and authorization exist.
+All approval domains in Section 6 remain unresolved. The governed template defaults them to `NOT_APPROVED`, unresolved answers to `UNRESOLVED`, and production fields to `PROHIBITED` until separately attributable evidence and authorization exist. Ethiopia is the only currently scoped jurisdiction profile. The model may later support separately reviewed jurisdiction-specific profiles, but it does not claim worldwide legal coverage or knowledge. Global regulatory intelligence requires its own architecture, authority, provenance, freshness and local human-verification gates.

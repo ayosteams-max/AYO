@@ -16,6 +16,7 @@ Completing this template is not approval. Do not insert policy prose, credential
 |---|---|
 | Pack ID | `UNRESOLVED` |
 | Pack version | `UNRESOLVED` |
+| Current decision/version set | `UNRESOLVED` |
 | Jurisdiction/market/service | `UNRESOLVED` |
 | Candidate evidence bundle fingerprint | `UNRESOLVED` |
 | Overall approval | `NOT_APPROVED` |
@@ -67,9 +68,30 @@ No submission is authorized by this template.
 
 ## 6. Written-answer ledger
 
-| Answer ID | Question ID | Authority/channel/dates | Response reference | Formality and binding character | Scope/conditions | Conflicts/follow-up | Counsel interpretation | Internal verification | Stage unblocked | Status |
-|---|---|---|---|---|---|---|---|---|---|---|
-| `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `NOT_APPROVED` |
+| Answer ID | Original question/prior answer IDs | Authority/channel/dates | Evidence ID/digest/type/length | Authenticity/signature/redaction | Custody/confidentiality/access/legal hold | Formality and binding character | Exact scope/conditions | Conflicts/follow-up | Internal verification | Stage unblocked | Status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `NOT_APPROVED` |
+
+### Decision identity, transition and condition record
+
+| Field | Value |
+|---|---|
+| Decision ID/current version | `UNRESOLVED` |
+| Jurisdiction/sub-jurisdiction/market/service/policy scope | `UNRESOLVED` |
+| Instrument type/ID/version | `UNRESOLVED` |
+| Locale/source and target rendition IDs and hashes/format | `UNRESOLVED` |
+| Lifecycle stage/evidence-bundle fingerprint | `UNRESOLVED` |
+| Accountable actor/verification identities | `UNRESOLVED` |
+| Effective/expiry times | `UNRESOLVED` |
+| Current status | `NOT_APPROVED` |
+
+| Transition ID | Previous/resulting state | Actor/authority | Evidence ID | Reason/timestamp | Validity result |
+|---|---|---|---|---|---|
+| `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `BLOCKED` |
+
+| Condition ID | Exact scope/requirement | Satisfaction evidence ID | Verifier/time | Expiry/residual restrictions | Current result |
+|---|---|---|---|---|---|
+| `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNSATISFIED` |
 
 ## 7. Transport disclosure inventory
 
@@ -114,14 +136,20 @@ No runtime machine translation or silent fallback is permitted.
 
 | Field | Value |
 |---|---|
-| Instrument/market/version/rendition/hash | `UNRESOLVED` |
-| Source and target locale | `UNRESOLVED` |
-| Reviewer competence and attributable review | `UNRESOLVED` |
+| Source instrument/version/rendition/hash | `UNRESOLVED` |
+| Target instrument/version/rendition/hash | `UNRESOLVED` |
+| Canonical locale and format | `UNRESOLVED` |
+| Translator identity | `UNRESOLVED` |
+| Native-language reviewer identity | `UNRESOLVED` |
+| Legal-equivalence reviewer identity | `UNRESOLVED` |
+| Evidence bundle and version | `UNRESOLVED` |
 | Legal equivalence and terminology | `UNRESOLVED` |
 | Glyph/shaping/line-break/truncation/scaling evidence | `UNRESOLVED` |
 | Mixed-script/bidirectional/device evidence | `UNRESOLVED` |
 | Expiry/re-review trigger | `UNRESOLVED` |
 | Approval | `NOT_APPROVED` |
+
+Source mutation, target mutation, locale substitution or required-role collision result: `BLOCKED`.
 
 ## 12. Accessibility acceptance plan
 
@@ -135,6 +163,18 @@ Proposed engineering floor: WCAG 2.2 Level AA. This is not a claim of Ethiopian 
 | Weak-network unavailable state | `UNRESOLVED` | `UNRESOLVED` | `NOT_APPROVED` |
 | Amharic/Afaan Oromo and older Android rendering | `UNRESOLVED` | `UNRESOLVED` | `NOT_APPROVED` |
 | Disabled-user and professional review | `UNRESOLVED` | `UNRESOLVED` | `NOT_APPROVED` |
+
+| Exact binding | Value |
+|---|---|
+| Rendition and document format | `UNRESOLVED` |
+| UI implementation/build identity | `UNRESOLVED` |
+| Platform/version and supported devices | `UNRESOLVED` |
+| Assistive-technology population | `UNRESOLVED` |
+| Font/rendering configuration | `UNRESOLVED` |
+| Test-evidence version/fingerprint | `UNRESOLVED` |
+| Reviewer/scope/expiry | `UNRESOLVED` |
+
+UI/build substitution, rendition or font change, and unsupported-device use result: `BLOCKED`. This template cannot approve a future UI that does not yet exist.
 
 ## 13. Evidence and retention worksheet
 
@@ -219,6 +259,25 @@ All legal, regulator, privacy, language, accessibility, Product, Security/CTO, F
 
 Canonical inventory, hashing algorithm, bundle fingerprint, verification actor and timestamp: `UNRESOLVED`. Bundle approval: `NOT_APPROVED`.
 
+Authoritative evidence store: `UNRESOLVED`. Git stores only safe metadata and cryptographic commitments. Confidential opinions, correspondence, identity documents, signatures, certificates and sensitive evidence bytes are prohibited from Git unless separately authorized. GitHub, email, local disks, vendors, AI systems and mobile clients are not implicitly authoritative stores.
+
+| Evidence-custody field | Value |
+|---|---|
+| Stable evidence ID | `UNRESOLVED` |
+| Digest and algorithm | `UNRESOLVED` |
+| MIME/type and byte length | `UNRESOLVED` |
+| Creation and receipt timestamps | `UNRESOLVED` |
+| Issuing authority | `UNRESOLVED` |
+| Submission and receipt channel | `UNRESOLVED` |
+| Authenticity-verification method/result | `UNRESOLVED` |
+| Lawfully retained signer/official identity | `UNRESOLVED` |
+| Signature/certificate verification where applicable | `UNRESOLVED` |
+| Redaction status/confidentiality classification | `UNRESOLVED` |
+| Storage authority/location/jurisdiction classification | `UNRESOLVED` |
+| Access-control class/legal-hold state | `UNRESOLVED` |
+| Supersession identity | `UNRESOLVED` |
+| Exportability/independent-audit status | `UNRESOLVED` |
+
 ## 24. Re-review/expiry register
 
 | Decision/evidence ID | Expiry or trigger | Required authority | Replacement/supersession | Status |
@@ -226,6 +285,8 @@ Canonical inventory, hashing algorithm, bundle fingerprint, verification actor a
 | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `NOT_STARTED` |
 
 ## 25. Final gate summary
+
+This summary is derived and has no authority when edited independently. A gate passes only when every mandatory decision is exact-scope `APPROVED`, current, unexpired, unsuperseded, non-conflicting, condition-satisfied, bound to the exact evidence-bundle fingerprint and supported by valid separation of duties. Every permanent red line must be `PASS`. Blank, unknown, unchecked, malformed, stale, rejected, expired, superseded, conflicting, out-of-scope or condition-unsatisfied data fails closed. Deployment and production require separate attributable records. Production remains `PROHIBITED` unless a separately authorized production decision exists after every prerequisite.
 
 | Gate | Result |
 |---|---|
@@ -241,3 +302,17 @@ Canonical inventory, hashing algorithm, bundle fingerprint, verification actor a
 | Production | `PROHIBITED` |
 
 Overall result: `BLOCKED`. Completing fields alone cannot change this result; only separately attributable, verified authority can do so.
+
+| Safe hypothetical | Derived result |
+|---|---|
+| All fields blank | `BLOCKED` |
+| One approval present | `BLOCKED` |
+| All except Legal | `BLOCKED` |
+| All except language | `BLOCKED` |
+| All except accessibility | `BLOCKED` |
+| Founder approved with a missing prerequisite | `BLOCKED` |
+| Expired Legal approval | `BLOCKED` |
+| Conflicting regulator answers | `BLOCKED` |
+| Permanent red-line conflict | `BLOCKED` |
+| Implementation approved while production is prohibited | `BLOCKED` for production |
+| Every prerequisite valid but production authorization absent | `BLOCKED` for production |
