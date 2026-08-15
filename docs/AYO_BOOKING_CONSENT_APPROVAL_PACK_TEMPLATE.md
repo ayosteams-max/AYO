@@ -10,6 +10,8 @@ Default production authority: `PROHIBITED`
 
 Completing this template is not approval. Do not insert policy prose, credentials, private identity documents, signatures or unsupported legal conclusions.
 
+Lifecycle state and approval result are distinct. A lifecycle-state field permits only `NOT_STARTED`, `RESEARCHED_UNVERIFIED`, `QUESTION_PREPARED`, `SUBMITTED`, `ANSWER_RECEIVED_UNVERIFIED`, `VERIFIED`, `APPROVED`, `REJECTED`, `EXPIRED`, `SUPERSEDED` or `BLOCKED`; a new decision starts at `NOT_STARTED`, and blank, malformed or unknown lifecycle state is `BLOCKED`. `NOT_APPROVED` is an approval/authorization-result default, never a lifecycle state. In this template, a column labelled `Approval result` contains that outcome; columns explicitly labelled `Lifecycle state` use only the eleven-state lifecycle. No result field performs a lifecycle transition, and `NOT_STARTED` cannot transition directly to `APPROVED`.
+
 ## 1. Pack identity
 
 | Field | Value |
@@ -68,7 +70,7 @@ No submission is authorized by this template.
 
 ## 6. Written-answer ledger
 
-| Answer ID | Original question/prior answer IDs | Authority/channel/dates | Evidence ID/digest/type/length | Authenticity/signature/redaction | Custody/confidentiality/access/legal hold | Formality and binding character | Exact scope/conditions | Conflicts/follow-up | Internal verification | Stage unblocked | Status |
+| Answer ID | Original question/prior answer IDs | Authority/channel/dates | Evidence ID/digest/type/length | Authenticity/signature/redaction | Custody/confidentiality/access/legal hold | Formality and binding character | Exact scope/conditions | Conflicts/follow-up | Internal verification | Stage unblocked | Approval result |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `NOT_APPROVED` |
 
@@ -83,19 +85,29 @@ No submission is authorized by this template.
 | Lifecycle stage/evidence-bundle fingerprint | `UNRESOLVED` |
 | Accountable actor/verification identities | `UNRESOLVED` |
 | Effective/expiry times | `UNRESOLVED` |
-| Current status | `NOT_APPROVED` |
+| Current lifecycle state | `NOT_STARTED` |
+| Approval result | `NOT_APPROVED` |
+| Condition-set ID | `UNRESOLVED` |
+| Canonical condition count | `UNRESOLVED` |
+| Complete ordered condition inventory | `UNRESOLVED` |
+| Condition-set SHA-256 fingerprint | `UNRESOLVED` |
 
 | Transition ID | Previous/resulting state | Actor/authority | Evidence ID | Reason/timestamp | Validity result |
 |---|---|---|---|---|---|
 | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `BLOCKED` |
 
+An unconditional decision must replace the unresolved condition-set fields above with a stable decision-scoped condition-set ID, canonical count `0`, explicitly empty ordered inventory `[]`, and the governed empty-inventory SHA-256 fingerprint `e34d0c7c0c5ec8a6935d13fec9929b0905ee74b76ecbf49451a032ec3edd8a24`. The fingerprint is calculated over UTF-8 without BOM bytes `CONDITION_SET_V1`, LF, `condition_count=0`, LF, and no other bytes. Missing fields are not a zero-condition set. Do not add an artificial condition.
+
+For a canonical count greater than zero, add exactly that many rows in governed order:
+
 | Condition ID | Exact scope/requirement | Satisfaction evidence ID | Verifier/time | Expiry/residual restrictions | Current result |
 |---|---|---|---|---|---|
-| `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNSATISFIED` |
+
+Every row must be current and `SATISFIED`. Missing, duplicate, unknown, extra, expired or unsatisfied rows, a noncanonical count, or a count/inventory mismatch is `BLOCKED`. Any identity, count, order, content or result mutation changes the condition-set fingerprint and invalidates the evidence-bundle fingerprint.
 
 ## 7. Transport disclosure inventory
 
-| Disclosure | Legal/regulatory source | Timing/prominence | Separate action | Language | Version/retention | Regulator filing | Status |
+| Disclosure | Legal/regulatory source | Timing/prominence | Separate action | Language | Version/retention | Regulator filing | Approval result |
 |---|---|---|---|---|---|---|---|
 | Fare/quote | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `NOT_APPROVED` |
 | Driver/vehicle/insurance/safety | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `NOT_APPROVED` |
@@ -104,7 +116,7 @@ No submission is authorized by this template.
 
 ## 8. Consumer-protection decision matrix
 
-| Decision | Evidence | Required authority | Conditions/reservations | Re-review trigger | Status |
+| Decision | Evidence | Required authority | Conditions/reservations | Re-review trigger | Approval result |
 |---|---|---|---|---|---|
 | Clarity, prominence and summary/full-document relation | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `NOT_APPROVED` |
 | Separate assent and no preselection | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `NOT_APPROVED` |
@@ -112,7 +124,7 @@ No submission is authorized by this template.
 
 ## 9. Privacy lawful-basis/data-flow worksheet
 
-| Processing/evidence class | Purpose | Minimum data | Lawful basis | Controller/processor | Location/transfer | Rights | Security/breach | Retention/legal hold | Status |
+| Processing/evidence class | Purpose | Minimum data | Lawful basis | Controller/processor | Location/transfer | Rights | Security/breach | Retention/legal hold | Approval result |
 |---|---|---|---|---|---|---|---|---|---|
 | Publication/approval evidence | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `NOT_APPROVED` |
 | Retrieval/delivery/display | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `NOT_APPROVED` |
@@ -123,7 +135,7 @@ Registration, DPO/contact, DPIA, hosting/support, backup and mobile-cache decisi
 
 ## 10. Language requirement matrix
 
-| Language | Market/instrument/version | Legal requirement | Product requirement | Required rendition | Authority | Status |
+| Language | Market/instrument/version | Legal requirement | Product requirement | Required rendition | Authority | Approval result |
 |---|---|---|---|---|---|---|
 | Amharic | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | Counsel/Product/native reviewer | `NOT_APPROVED` |
 | Afaan Oromo | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | Counsel/Product/native reviewer | `NOT_APPROVED` |
@@ -155,7 +167,7 @@ Source mutation, target mutation, locale substitution or required-role collision
 
 Proposed engineering floor: WCAG 2.2 Level AA. This is not a claim of Ethiopian legal mandate. WCAG2Mobile is informative draft guidance.
 
-| Evidence | Result/reference | Reviewer | Status |
+| Evidence | Result/reference | Reviewer | Approval result |
 |---|---|---|---|
 | Name/role/state, screen-reader order, focus | `UNRESOLVED` | `UNRESOLVED` | `NOT_APPROVED` |
 | Resize/reflow, contrast, non-colour cues, targets | `UNRESOLVED` | `UNRESOLVED` | `NOT_APPROVED` |
@@ -178,7 +190,7 @@ UI/build substitution, rendition or font change, and unsupported-device use resu
 
 ## 13. Evidence and retention worksheet
 
-| Category | Purpose/minimum fields | Rider-linked/sensitivity | Access authority | Retention driver | Deletion/legal-hold tension | What it proves | Status |
+| Category | Purpose/minimum fields | Rider-linked/sensitivity | Access authority | Retention driver | Deletion/legal-hold tension | What it proves | Approval result |
 |---|---|---|---|---|---|---|---|
 | Publication and approval | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | Registry/approval history only | `NOT_APPROVED` |
 | Retrieval/delivery/device receipt/display | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | Does not prove acknowledgment, comprehension, legal consent or confirmation | `NOT_APPROVED` |
@@ -190,7 +202,7 @@ No retention duration is approved.
 
 ## 14. Rotation/withdrawal decision record
 
-| Decision | Answer/evidence | Accountable authority | Affected previews/rides/offline riders | Notice/later access/audit | Status |
+| Decision | Answer/evidence | Accountable authority | Affected previews/rides/offline riders | Notice/later access/audit | Approval result |
 |---|---|---|---|---|---|
 | Scheduled activation/material change/renewed assent | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `NOT_APPROVED` |
 | Immediate and grace/no-grace rotation | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `NOT_APPROVED` |
@@ -286,7 +298,7 @@ Authoritative evidence store: `UNRESOLVED`. Git stores only safe metadata and cr
 
 ## 25. Final gate summary
 
-This summary is derived and has no authority when edited independently. A gate passes only when every mandatory decision is exact-scope `APPROVED`, current, unexpired, unsuperseded, non-conflicting, condition-satisfied, bound to the exact evidence-bundle fingerprint and supported by valid separation of duties. Every permanent red line must be `PASS`. Blank, unknown, unchecked, malformed, stale, rejected, expired, superseded, conflicting, out-of-scope or condition-unsatisfied data fails closed. Deployment and production require separate attributable records. Production remains `PROHIBITED` unless a separately authorized production decision exists after every prerequisite.
+This summary is derived and has no authority when edited independently. A gate passes only when every mandatory decision is exact-scope `APPROVED`, current, unexpired, unsuperseded, non-conflicting, condition-satisfied, bound to the exact evidence-bundle fingerprint and supported by valid separation of duties. `Condition-satisfied` means either a valid explicit zero-condition set for an unconditional decision or a complete nonzero condition set in which every governed condition is current and `SATISFIED`. Blank, missing, unknown or incomplete condition-set identity, count or inventory is `BLOCKED`; an omitted, duplicate, unknown, extra, expired or unsatisfied condition is also `BLOCKED`. Every permanent red line must be `PASS`. Blank, unknown, unchecked, malformed, stale, rejected, expired, superseded, conflicting, out-of-scope or condition-unsatisfied data fails closed. Deployment and production require separate attributable records. Production remains `PROHIBITED` unless a separately authorized production decision exists after every prerequisite.
 
 | Gate | Result |
 |---|---|
