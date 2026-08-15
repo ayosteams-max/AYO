@@ -53,7 +53,7 @@ Technical reuse does not authorize legal bundling.
 
 ## 5. Counsel/regulator question ledger
 
-| Question ID | Domain | Exact written question | Intended authority | Required answer type | Blocks implementation? | Blocks activation? | Status |
+| Question ID | Domain | Exact written question | Intended authority | Required answer type | Blocks implementation? | Blocks activation? | Lifecycle state |
 |---|---|---|---|---|---|---|---|
 | `UNRESOLVED` | Electronic consent | Does an authenticated affirmative tap satisfy the required form for each identified instrument, and what attribution, disclosure, reproducibility, signature and retention conditions apply? | Ethiopian counsel / referred authority | Written legal opinion or written official confirmation | `UNRESOLVED` | `UNRESOLVED` | `NOT_STARTED` |
 | `UNRESOLVED` | Transport | Which operator/platform licence and disclosure obligations apply to AYO in Addis Ababa, including fare, driver, insurance, safety, cancellation, receipt and complaint information; must terms be filed or approved? | Competent federal and Addis transport authority | Written regulator confirmation or licence condition | `UNRESOLVED` | `UNRESOLVED` | `NOT_STARTED` |
@@ -263,7 +263,7 @@ All legal, regulator, privacy, language, accessibility, Product, Security/CTO, F
 
 ## 22. Open blockers
 
-| Blocker ID | Domain/decision | Evidence missing | Owner | Blocks stage | Status |
+| Blocker ID | Domain/decision | Evidence missing | Owner | Blocks stage | Lifecycle state |
 |---|---|---|---|---|---|
 | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `BLOCKED` |
 
@@ -292,7 +292,7 @@ Authoritative evidence store: `UNRESOLVED`. Git stores only safe metadata and cr
 
 ## 24. Re-review/expiry register
 
-| Decision/evidence ID | Expiry or trigger | Required authority | Replacement/supersession | Status |
+| Decision/evidence ID | Expiry or trigger | Required authority | Replacement/supersession | Lifecycle state |
 |---|---|---|---|---|
 | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `NOT_STARTED` |
 
