@@ -3733,21 +3733,90 @@ jobs:
           BOOKING_CONSENT_SECRET_EVIDENCE_PATH: ${{ runner.temp }}/booking-consent-secrets-v1.txt
           MOBILE_SECRET_EVIDENCE_PATH: ${{ runner.temp }}/mobile-booking-evidence-sections/MOBILE_SECRET_INVENTORY_V1.txt
           CONSENT_ARCHITECTURE_SECRET_EVIDENCE_PATH: ${{ runner.temp }}/consent-document-architecture-secret-inventory-v1.txt
+          CONSENT_ARCHITECTURE_SECRET_CLEANUP_PATH: ${{ runner.temp }}/consent-document-architecture-secret-cleanup-v1.txt
         run: |
           set -euo pipefail
+          evidence_mode="${{ steps.evidence_contract.outputs.mode }}"
+          candidate_json=candidate-secrets.json
+          base_json=base-secrets.json
+          baseline_json=reviewed-secrets-baseline.json
+          scan_root=""
+          base_root=""
+          architecture_scan_dir=""
+          architecture_staged_evidence=""
+          if [[ "$evidence_mode" == "booking-consent-document-delivery-architecture" ]]; then
+            [[ -n "$RUNNER_TEMP" && "$RUNNER_TEMP" == /* && -d "$RUNNER_TEMP" && ! -L "$RUNNER_TEMP" ]] || exit 1
+            architecture_scan_dir="$(mktemp -d "$RUNNER_TEMP/consent-architecture-scan.XXXXXX")"
+            [[ "$architecture_scan_dir" == "$RUNNER_TEMP"/consent-architecture-scan.* \
+              && -d "$architecture_scan_dir" && ! -L "$architecture_scan_dir" ]] || exit 1
+            candidate_json="$architecture_scan_dir/candidate.json"
+            base_json="$architecture_scan_dir/base.json"
+            baseline_json="$architecture_scan_dir/baseline.json"
+            architecture_staged_evidence="$architecture_scan_dir/neutral-evidence.txt"
+            rm -f "$CONSENT_ARCHITECTURE_SECRET_EVIDENCE_PATH" "$CONSENT_ARCHITECTURE_SECRET_CLEANUP_PATH"
+            cleanup_exact_scan_paths() {
+              local root="$1" cleanup_failed=0 path
+              shift
+              [[ -n "$root" && "$root" == /* && -d "$root" && ! -L "$root" ]] || return 1
+              for path in "$@"; do
+                [[ -z "$path" ]] && continue
+                if [[ "$path" != "$root"/* || "$path" == "$root" || -L "$path" ]]; then
+                  cleanup_failed=1
+                  continue
+                fi
+                rm -rf -- "$path" || cleanup_failed=1
+                [[ ! -e "$path" && ! -L "$path" ]] || cleanup_failed=1
+              done
+              [[ "$cleanup_failed" -eq 0 ]]
+            }
+            cleanup_consent_architecture_scan() {
+              if cleanup_exact_scan_paths "$RUNNER_TEMP" "$scan_root" "$base_root" "$architecture_scan_dir"; then
+                printf 'raw_scanner_cleanup=PASS\n' > "$CONSENT_ARCHITECTURE_SECRET_CLEANUP_PATH"
+              else
+                rm -f "$CONSENT_ARCHITECTURE_SECRET_CLEANUP_PATH"
+                return 1
+              fi
+            }
+            trap cleanup_consent_architecture_scan EXIT
+            for cleanup_case in scanner-nonzero malformed-json defensive-boundary normalization neutral-write success; do
+              simulation="$(mktemp -d "$RUNNER_TEMP/consent-cleanup-$cleanup_case.XXXXXX")"
+              printf 'synthetic-safe\n' > "$simulation/intermediate"
+              cleanup_exact_scan_paths "$RUNNER_TEMP" "$simulation" || exit 1
+              [[ ! -e "$simulation" ]] || exit 1
+            done
+            if [[ "$(uname -s)" != MINGW* ]]; then
+              simulation="$(mktemp -d "$RUNNER_TEMP/consent-cleanup-special.XXXXXX")"
+              ln -s "nonexistent-target" "$simulation/non-followed-link"
+              cleanup_exact_scan_paths "$RUNNER_TEMP" "$simulation" || exit 1
+              [[ ! -e "$simulation" && ! -L "$simulation" ]] || exit 1
+            fi
+            if cleanup_exact_scan_paths "$RUNNER_TEMP" "$RUNNER_TEMP"; then
+              echo "Consent architecture unsafe cleanup target accepted" >&2
+              exit 1
+            fi
+          fi
           scanner_version="$(uv tool run --from 'detect-secrets==1.5.0' detect-secrets --version)"
-          scan_root="$(mktemp -d)"
+          if [[ "$evidence_mode" == "booking-consent-document-delivery-architecture" ]]; then
+            scan_root="$(mktemp -d "$architecture_scan_dir/candidate-tree.XXXXXX")"
+          else
+            scan_root="$(mktemp -d)"
+          fi
           git archive HEAD | tar -x -C "$scan_root"
           (
             cd "$scan_root"
             uv tool run --from 'detect-secrets==1.5.0' detect-secrets scan \
               --all-files --exclude-files '^\.git/'
-          ) > candidate-secrets.json
+          ) > "$candidate_json"
           rm -rf "$scan_root"
+          scan_root=""
           if [[ "${{ steps.evidence_contract.outputs.mode }}" == "booking-consent-policy-authority" \
             || "${{ steps.evidence_contract.outputs.mode }}" == "mobile-booking-intent-foundation" \
             || "${{ steps.evidence_contract.outputs.mode }}" == "booking-consent-document-delivery-architecture" ]]; then
-            base_root="$(mktemp -d)"
+            if [[ "$evidence_mode" == "booking-consent-document-delivery-architecture" ]]; then
+              base_root="$(mktemp -d "$architecture_scan_dir/base-tree.XXXXXX")"
+            else
+              base_root="$(mktemp -d)"
+            fi
             if [[ "${{ steps.evidence_contract.outputs.mode }}" == "booking-consent-document-delivery-architecture" ]]; then
               secret_base=cadaa30c47ccbb849bf428c14576298b26ee6323
             elif [[ "${{ steps.evidence_contract.outputs.mode }}" == "mobile-booking-intent-foundation" ]]; then
@@ -3756,16 +3825,19 @@ jobs:
               secret_base=6613a936b0fe896308682c8fe038708876a06c02
             fi
             git archive "$secret_base" | tar -x -C "$base_root"
-            (cd "$base_root" && uv tool run --from 'detect-secrets==1.5.0' detect-secrets scan --all-files --exclude-files '^\.git/') > base-secrets.json
+            (cd "$base_root" && uv tool run --from 'detect-secrets==1.5.0' detect-secrets scan --all-files --exclude-files '^\.git/') > "$base_json"
             rm -rf "$base_root"
+            base_root=""
           fi
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            git show "$GITHUB_SHA:.secrets.baseline" > reviewed-secrets-baseline.json
+            git show "$GITHUB_SHA:.secrets.baseline" > "$baseline_json"
           else
-            cp .secrets.baseline reviewed-secrets-baseline.json
+            cp .secrets.baseline "$baseline_json"
           fi
-          test "$(git hash-object reviewed-secrets-baseline.json)" = "71770a9e529e9af0c9ed5c72549b3a2f7ddcfb02"
-          SCANNER_VERSION="$scanner_version" EVIDENCE_MODE="${{ steps.evidence_contract.outputs.mode }}" uv run --locked python - <<'PY'
+          test "$(git hash-object "$baseline_json")" = "71770a9e529e9af0c9ed5c72549b3a2f7ddcfb02"
+          SCANNER_VERSION="$scanner_version" EVIDENCE_MODE="$evidence_mode" \
+            CANDIDATE_JSON="$candidate_json" BASE_JSON="$base_json" BASELINE_JSON="$baseline_json" \
+            CONSENT_ARCHITECTURE_STAGED_EVIDENCE="$architecture_staged_evidence" uv run --locked python - <<'PY'
           from collections import Counter
           import hashlib
           import json
@@ -3892,8 +3964,8 @@ jobs:
                   print("ACTUAL_ONLY|" + render(item))
               raise SystemExit(f"{label} semantic finding inventory drift")
 
-          scan = load("candidate-secrets.json")
-          baseline = load("reviewed-secrets-baseline.json")
+          scan = load(os.environ["CANDIDATE_JSON"])
+          baseline = load(os.environ["BASELINE_JSON"])
           if set(baseline) != BASELINE_KEYS:
               raise SystemExit(f"secret baseline top-level fields drifted: {sorted(baseline)}")
           if os.environ["SCANNER_VERSION"] != VERSION or scan.get("version") != VERSION or baseline["version"] != VERSION:
@@ -3972,7 +4044,7 @@ jobs:
               )
               selected = "exact 42-finding Immediate Standard inventory"
           elif mode == "booking-consent-policy-authority":
-              base = scan_inventory(load("base-secrets.json").get("results"))
+              base = scan_inventory(load(os.environ["BASE_JSON"]).get("results"))
               base_only = sorted(set(base) - set(actual))
               candidate_only = sorted(set(actual) - set(base))
               boundary_matches = [
@@ -3999,7 +4071,7 @@ jobs:
               if open(path, encoding="utf-8", newline="").read() != block: raise SystemExit("inventory evidence retention failed")
               selected = "unadmitted Booking consent base/candidate inventory"
           elif mode == "mobile-booking-intent-foundation":
-              base = scan_inventory(load("base-secrets.json").get("results"))
+              base = scan_inventory(load(os.environ["BASE_JSON"]).get("results"))
               base_only = sorted(set(base) - set(actual))
               candidate_only = sorted(set(actual) - set(base))
               base_workflow_semantics = Counter(
@@ -4040,7 +4112,7 @@ jobs:
                   raise SystemExit("Mobile secret inventory evidence retention failed")
               selected = "unadmitted Mobile complete base/candidate inventory"
           elif mode == "booking-consent-document-delivery-architecture":
-              base = scan_inventory(load("base-secrets.json").get("results"))
+              base = scan_inventory(load(os.environ["BASE_JSON"]).get("results"))
               base_only = sorted(set(base) - set(actual))
               candidate_only = sorted(set(actual) - set(base))
               base_workflow = Counter((p, t, h, v) for p, _, t, h, v in base if p == ".github/workflows/ci.yml")
@@ -4056,7 +4128,7 @@ jobs:
                   "normalized_comparison=COMPLETE_LINE_SENSITIVE_INVENTORY", "END_SECRET_INVENTORY_V1",
               ]
               block = "\n".join(lines) + "\n"
-              path = Path(os.environ["CONSENT_ARCHITECTURE_SECRET_EVIDENCE_PATH"])
+              path = Path(os.environ["CONSENT_ARCHITECTURE_STAGED_EVIDENCE"])
               with path.open("x", encoding="utf-8", newline="\n") as output:
                   output.write(block); output.flush(); os.fsync(output.fileno())
               if path.read_bytes() != block.encode(): raise SystemExit("Consent architecture inventory retention failed")
@@ -4075,7 +4147,12 @@ jobs:
           print("Batch 2 reviewed findings/fingerprint:", len(reviewed), approved)
           print("Exact reviewed secret-finding contract: PASS")
           PY
-          rm -f candidate-secrets.json base-secrets.json reviewed-secrets-baseline.json
+          if [[ "$evidence_mode" == "booking-consent-document-delivery-architecture" ]]; then
+            [[ -f "$architecture_staged_evidence" && ! -L "$architecture_staged_evidence" ]] || exit 1
+            mv -- "$architecture_staged_evidence" "$CONSENT_ARCHITECTURE_SECRET_EVIDENCE_PATH"
+          else
+            rm -f candidate-secrets.json base-secrets.json reviewed-secrets-baseline.json
+          fi
 
       - name: Verify shared certification dependencies survived MyPy
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true'
@@ -5697,6 +5774,7 @@ jobs:
           CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           EVIDENCE_PATH: ${{ runner.temp }}/booking-consent-document-delivery-architecture-evidence-v1.txt
           SECRET_PATH: ${{ runner.temp }}/consent-document-architecture-secret-inventory-v1.txt
+          SECRET_CLEANUP_PATH: ${{ runner.temp }}/consent-document-architecture-secret-cleanup-v1.txt
         run: |
           set -euo pipefail
           uv run --locked python - <<'PY'
@@ -5708,6 +5786,8 @@ jobs:
 
           BASE = "cadaa30c47ccbb849bf428c14576298b26ee6323"
           CANDIDATE = os.environ["CANDIDATE_SHA"]
+          if not re.fullmatch(r"[0-9a-f]{40}", CANDIDATE):
+              raise SystemExit("Consent architecture candidate SHA is malformed")
           EXPECTED_PATHS = [
               ".github/workflows/ci.yml",
               "docs/AYO_BOOKING_CONSENT_DOCUMENT_DELIVERY_CONTRACT_ARCHITECTURE.md",
@@ -5753,19 +5833,43 @@ jobs:
           if actual != EXPECTED:
               raise SystemExit("Consent architecture evidence immutable identity drift")
 
-          architecture_path = Path("docs/AYO_BOOKING_CONSENT_DOCUMENT_DELIVERY_CONTRACT_ARCHITECTURE.md")
-          decision_path = Path("docs/AYO_DECISION_LOG.md")
-          roadmap_path = Path("docs/AYO_ROADMAP.md")
-          documents = [architecture_path, decision_path, roadmap_path]
-          decoded = {}
-          for path in documents:
-              data = path.read_bytes()
-              if b"\r" in data or (path != decision_path and not data.endswith(b"\n")) or (path == decision_path and data.endswith(b"\n")):
-                  raise SystemExit("Consent architecture newline convention drift")
+          architecture_path = "docs/AYO_BOOKING_CONSENT_DOCUMENT_DELIVERY_CONTRACT_ARCHITECTURE.md"
+          decision_path = "docs/AYO_DECISION_LOG.md"
+          roadmap_path = "docs/AYO_ROADMAP.md"
+
+          def committed_blob(commit, path, expected_blob):
+              if not re.fullmatch(r"[0-9a-f]{40}", commit):
+                  raise ValueError("Consent architecture committed candidate identity is malformed")
+              listing = subprocess.run(
+                  ["git", "ls-tree", commit, "--", path], check=True,
+                  capture_output=True, text=True,
+              ).stdout.rstrip("\n")
+              match = re.fullmatch(r"100644 blob ([0-9a-f]{40})\t" + re.escape(path), listing)
+              if not match or match.group(1) != expected_blob:
+                  raise ValueError(f"Consent architecture committed blob identity drift: {path}")
+              result = subprocess.run(
+                  ["git", "cat-file", "blob", f"{commit}:{path}"],
+                  check=True, capture_output=True,
+              )
+              return result.stdout
+
+          def decode_document(path, data):
+              if data.startswith(b"\xef\xbb\xbf") or b"\x00" in data or b"\r" in data:
+                  raise ValueError(f"Consent architecture document byte drift: {path}")
+              terminal = path != decision_path
+              if data.endswith(b"\n") != terminal:
+                  raise ValueError(f"Consent architecture terminal newline drift: {path}")
               try:
-                  decoded[path] = data.decode("utf-8")
+                  return data.decode("utf-8")
               except UnicodeError as error:
-                  raise SystemExit("Consent architecture UTF-8 drift") from error
+                  raise ValueError(f"Consent architecture UTF-8 drift: {path}") from error
+
+          committed = {
+              architecture_path: committed_blob(CANDIDATE, architecture_path, EXPECTED["architecture_blob"]),
+              decision_path: committed_blob(CANDIDATE, decision_path, EXPECTED["decision_log_blob"]),
+              roadmap_path: committed_blob(CANDIDATE, roadmap_path, EXPECTED["roadmap_blob"]),
+          }
+          decoded = {path: decode_document(path, data) for path, data in committed.items()}
           architecture = decoded[architecture_path]
           decision = decoded[decision_path]
           roadmap = decoded[roadmap_path]
@@ -5779,7 +5883,8 @@ jobs:
           )
           if any(architecture.count(item) != 1 for item in headings):
               raise SystemExit("Consent architecture required heading drift")
-          if decision.count("### AP-076 — Proposed server-owned Booking consent document delivery contract") != 1:
+          ap076 = [line for line in decision.splitlines() if line.startswith("### AP-076 ") and "Proposed server-owned Booking consent document delivery contract" in line]
+          if len(ap076) != 1:
               raise SystemExit("AP-076 cardinality drift")
           sequence = [f"({index})" for index in range(1, 9)]
           roadmap_line = next((line for line in roadmap.splitlines() if line.startswith("**Booking consent-document delivery sequence:**")), "")
@@ -5804,10 +5909,64 @@ jobs:
               raise SystemExit("Consent architecture approval attribution drift")
           forbidden_claims = (
               "Status: IMPLEMENTED", "Status: APPROVED", "legal compliance is satisfied",
-              "production activation is authorized", "endpoint is implemented", "registry is active",
+              "\nProduction activation is authorized", "\nEndpoint is implemented", "\nRegistry is active",
           )
           if any(item.casefold() in (architecture + decision + roadmap).casefold() for item in forbidden_claims):
               raise SystemExit("Consent architecture prohibited claim entered documentation")
+
+          def validate_document_contract(architecture, decision, roadmap):
+              if architecture.count("## Problem statement") != 1: raise ValueError("heading")
+              ap076 = [line for line in decision.splitlines() if line.startswith("### AP-076 ") and "Proposed server-owned Booking consent document delivery contract" in line]
+              if len(ap076) != 1: raise ValueError("AP-076")
+              order = next((line for line in roadmap.splitlines() if line.startswith("**Booking consent-document delivery sequence:**")), "")
+              positions = [order.find(f"({index})") for index in range(1, 9)]
+              if any(value < 0 for value in positions) or positions != sorted(positions) or len(set(positions)) != 8: raise ValueError("roadmap")
+              if "consent_contract_version" not in architecture or "immutable closed `policy_scope`" not in architecture: raise ValueError("reviewed control")
+              if "\nProduction activation is authorized" in architecture + decision + roadmap: raise ValueError("production claim")
+
+          validate_document_contract(architecture, decision, roadmap)
+          content_mutations = {
+              "missing-heading": (architecture.replace("## Problem statement", "", 1), decision, roadmap),
+              "duplicate-ap076": (architecture, decision + "\n" + ap076[0], roadmap),
+              "roadmap-order": (architecture, decision, roadmap.replace("(2)", "(1)", 1)),
+              "implementation-claim": (architecture + "\nProduction activation is authorized\n", decision, roadmap),
+              "missing-discriminator": (architecture.replace("consent_contract_version", "contract discriminator"), decision, roadmap),
+              "weakened-scope": (architecture.replace("immutable closed `policy_scope`", "open policy scope"), decision, roadmap),
+          }
+          for label, values in content_mutations.items():
+              try:
+                  validate_document_contract(*values)
+              except ValueError:
+                  continue
+              raise SystemExit(f"Consent architecture real-document mutation accepted: {label}")
+
+          document_mutations = {
+              "bom": b"\xef\xbb\xbf" + committed[architecture_path],
+              "malformed-utf8": b"\xff" + committed[architecture_path],
+              "newline-drift": committed[architecture_path].replace(b"\n", b"\r\n", 1),
+              "terminal-newline-drift": committed[architecture_path].rstrip(b"\n"),
+          }
+          for label, mutated in document_mutations.items():
+              try:
+                  decode_document(architecture_path, mutated)
+              except ValueError:
+                  continue
+              raise SystemExit(f"Consent architecture committed-byte negative accepted: {label}")
+          object_negatives = {
+              "wrong-candidate-sha": ("0" * 40, architecture_path, EXPECTED["architecture_blob"]),
+              "missing-path": (CANDIDATE, "docs/CONSENT_ARCHITECTURE_MISSING.md", EXPECTED["architecture_blob"]),
+              "wrong-blob-id": (CANDIDATE, architecture_path, "0" * 40),
+              "non-blob-object": (CANDIDATE, "docs", "0" * 40),
+          }
+          for label, values in object_negatives.items():
+              try:
+                  committed_blob(*values)
+              except (ValueError, subprocess.CalledProcessError):
+                  continue
+              raise SystemExit(f"Consent architecture object negative accepted: {label}")
+          checkout_bytes = Path(architecture_path).read_bytes()
+          if committed[architecture_path] != checkout_bytes:
+              raise SystemExit("Consent architecture checkout differs from committed candidate bytes")
 
           secret_lines = Path(os.environ["SECRET_PATH"]).read_text(encoding="utf-8").splitlines()
           if secret_lines[0] != "SECRET_INVENTORY_V1" or secret_lines[-1] != "END_SECRET_INVENTORY_V1":
@@ -5815,6 +5974,9 @@ jobs:
           secret = dict(line.split("=", 1) for line in secret_lines[1:-1])
           if len(secret) != len(secret_lines) - 2 or secret.get("scanner_version") != "1.5.0" or secret.get("defensive_boundary_check") != "PASS" or secret.get("normalized_comparison") != "COMPLETE_LINE_SENSITIVE_INVENTORY":
               raise SystemExit("Consent architecture secret evidence drift")
+          cleanup_lines = Path(os.environ["SECRET_CLEANUP_PATH"]).read_text(encoding="utf-8").splitlines()
+          if cleanup_lines != ["raw_scanner_cleanup=PASS"]:
+              raise SystemExit("Consent architecture scanner cleanup evidence drift")
 
           sections = [
               "ARCHITECTURE_IDENTITY_V1\n" + "\n".join(f"{k}={actual[k]}" for k in actual) + "\nEND_ARCHITECTURE_IDENTITY_V1",
@@ -5825,7 +5987,7 @@ jobs:
               "ARCHITECTURE_GOVERNANCE_FAILURE_THREATS_V1\naccountable_transitions=PASS\nemergency_activation_absent=PASS\ngoverned_rollback=PASS\nfailure_matrix=PASS\nthreat_model=PASS\nEND_ARCHITECTURE_GOVERNANCE_FAILURE_THREATS_V1",
               "IMMUTABLE_EXECUTABLE_PROVENANCE_V1\nexecutable_tree_diff=EMPTY\ndependency_blob_diff=EMPTY\nschema_migration_diff=EMPTY\nexecutable_validation_reused=NO\nhistorical_evidence_relabelled=NO\narchitecture_validation=PASS\nEND_IMMUTABLE_EXECUTABLE_PROVENANCE_V1",
               "SECRET_INVENTORY_V1\n" + "\n".join(f"{k}={secret[k]}" for k in ("scanner_version", "base_item_count", "candidate_item_count", "base_inventory_digest", "candidate_inventory_digest", "base_only_item_count", "candidate_only_item_count", "defensive_boundary_check", "normalized_comparison")) + "\nEND_SECRET_INVENTORY_V1",
-              "WORKFLOW_STRUCTURE_AND_CLEANUP_V1\nselector_precedence=PASS\nfixed_base_events=PASS\nmanifest_boundary=PASS\nhistorical_modes_preserved=PASS\nraw_scanner_cleanup=PASS\ncandidate_tree_cleanliness=PASS\nEND_WORKFLOW_STRUCTURE_AND_CLEANUP_V1",
+              "WORKFLOW_STRUCTURE_AND_CLEANUP_V1\nselector_precedence=PASS\nfixed_base_events=PASS\nmanifest_boundary=PASS\nhistorical_modes_preserved=PASS\nraw_scanner_cleanup=" + cleanup_lines[0].split("=", 1)[1] + "\ncandidate_tree_cleanliness=PASS\nEND_WORKFLOW_STRUCTURE_AND_CLEANUP_V1",
           ]
           envelope = [
               "BOOKING_CONSENT_DOCUMENT_ARCHITECTURE_EVIDENCE_V1",
@@ -5847,7 +6009,7 @@ jobs:
           if path.is_symlink() or path.read_bytes() != data:
               raise SystemExit("Consent architecture evidence retention drift")
           PY
-          rm -f "$SECRET_PATH"
+          rm -f "$SECRET_PATH" "$SECRET_CLEANUP_PATH"
 
       - name: Verify consent document architecture capture structure and admission state
         if: success() && steps.evidence_contract.outputs.mode == 'booking-consent-document-delivery-architecture'
@@ -5855,48 +6017,113 @@ jobs:
         env:
           CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           EVIDENCE_PATH: ${{ runner.temp }}/booking-consent-document-delivery-architecture-evidence-v1.txt
+          ARCHITECTURE_CAPTURE_STATE: CONSENT_ARCHITECTURE_CAPTURE_PENDING_CTO_REVIEW
         run: |
           set -euo pipefail
-          uv run --locked python - <<'PY'
+          ADMISSION_STATE="$ARCHITECTURE_CAPTURE_STATE" uv run --locked python - <<'PY'
           import hashlib
           import os
           import re
           from pathlib import Path
 
-          CAPTURE_SENTINEL = "CAPTURE_ONLY_PENDING_CTO_REVIEW"
+          CAPTURE_STATE = os.environ["ARCHITECTURE_CAPTURE_STATE"]
           ACTIVE_STATE = "ADMITTED_PREPRODUCTION_ARCHITECTURE_EVIDENCE"
-          ADMISSION_STATE = CAPTURE_SENTINEL
+          ADMISSION_STATE = os.environ["ADMISSION_STATE"]
           REVIEWED_COMMITMENT = bytes(32)
           path = Path(os.environ["EVIDENCE_PATH"])
           data = path.read_bytes()
-          text = data.decode("utf-8")
           candidate = os.environ["CANDIDATE_SHA"]
-          if b"\r" in data or not data.endswith(b"\n") or not 1 <= len(data) <= 65536:
-              raise SystemExit("Consent architecture evidence envelope drift")
-          lines = text.splitlines()
-          markers = [line for line in lines if re.fullmatch(r"(?:END_)?[A-Z][A-Z0-9_]+_V1", line)]
-          expected_sections = [
-              "ARCHITECTURE_IDENTITY_V1", "ARCHITECTURE_STRUCTURE_V1", "ARCHITECTURE_AUTHORITY_BOUNDARIES_V1",
-              "ARCHITECTURE_V1_V2_AND_BINDING_V1", "ARCHITECTURE_CANONICALIZATION_LOCALE_CACHE_V1",
-              "ARCHITECTURE_GOVERNANCE_FAILURE_THREATS_V1", "IMMUTABLE_EXECUTABLE_PROVENANCE_V1",
-              "SECRET_INVENTORY_V1", "WORKFLOW_STRUCTURE_AND_CLEANUP_V1",
+          HEX40 = re.compile(r"[0-9a-f]{40}")
+          HEX64 = re.compile(r"[0-9a-f]{64}")
+          DECIMAL = re.compile(r"0|[1-9][0-9]*")
+          FIXED = {
+              "event_scope": "push-and-pull-request-comparable",
+              "mode": "booking-consent-document-delivery-architecture",
+              "governed_base": "cadaa30c47ccbb849bf428c14576298b26ee6323",
+              "manifest_count": "4",
+              "manifest_fingerprint": "63d1c323dc5b1a9173e3796f3efa20e286a678c18ef0020c5ae93ddcb39ec1ba",
+              "architecture_blob": "54d69775049d6f0af12fe6ace2bfc5a8cf66ad81",
+              "decision_log_blob": "181226620a4eb7abca4c5eb785ecb965e9a82900",
+              "roadmap_blob": "e459cd12961c5264dd7df8f1cbc5328e854f73a1",
+              "root_tests_tree": "2dbcb487bd27578a95d0db9a31c21ecde7032114",
+              "mobile_tree": "da39714a911ffbf02171d28348c88a39eab2d938",
+              "mobile_tests_tree": "d7143a733cf14e70851406dab8131ce7c69dd364",
+              "backend_tree": "62500035ef60d94ccc6333f25cb3aa79ff5c3f21",
+              "migration_tree": "253ecedebe58c31077a0baa7d2532adc46464f70",
+              "package_blob": "b4c26fea6a74ac9c1d3a442eb855cf63538fb5e2",
+              "lockfile_blob": "ace7192e4a749f61a011f8e4293ccd1e053d648a",
+              "baseline_blob": "71770a9e529e9af0c9ed5c72549b3a2f7ddcfb02",
+          }
+          PASS_FIELDS = {
+              "utf8", "newline_convention", "required_headings", "ap076_unique", "roadmap_eight_stage_order",
+              "proposed_preproduction", "implementation_absent", "policy_prose_absent", "production_prohibited", "approvals_unrecorded",
+              "disjoint_exact_schemas", "discriminator_required", "downgrade_rejected", "closed_scope", "authenticated_ownership_continuity", "complete_future_tuple",
+              "restricted_canonical_bytes", "hash_domain_separation", "compression_prohibited", "locale_fail_closed", "runtime_translation_absent", "memory_only_initial_cache", "evidence_semantics_separated",
+              "accountable_transitions", "emergency_activation_absent", "governed_rollback", "failure_matrix", "threat_model",
+              "architecture_validation", "selector_precedence", "fixed_base_events", "manifest_boundary", "historical_modes_preserved", "raw_scanner_cleanup", "candidate_tree_cleanliness",
+          }
+          SCHEMA = [
+              ("ARCHITECTURE_IDENTITY_V1", list(FIXED)[5:]),
+              ("ARCHITECTURE_STRUCTURE_V1", ["utf8", "newline_convention", "required_headings", "ap076_unique", "roadmap_eight_stage_order"]),
+              ("ARCHITECTURE_AUTHORITY_BOUNDARIES_V1", ["proposed_preproduction", "implementation_absent", "policy_prose_absent", "production_prohibited", "approvals_unrecorded"]),
+              ("ARCHITECTURE_V1_V2_AND_BINDING_V1", ["disjoint_exact_schemas", "discriminator_required", "downgrade_rejected", "closed_scope", "authenticated_ownership_continuity", "complete_future_tuple"]),
+              ("ARCHITECTURE_CANONICALIZATION_LOCALE_CACHE_V1", ["restricted_canonical_bytes", "hash_domain_separation", "compression_prohibited", "locale_fail_closed", "runtime_translation_absent", "memory_only_initial_cache", "evidence_semantics_separated"]),
+              ("ARCHITECTURE_GOVERNANCE_FAILURE_THREATS_V1", ["accountable_transitions", "emergency_activation_absent", "governed_rollback", "failure_matrix", "threat_model"]),
+              ("IMMUTABLE_EXECUTABLE_PROVENANCE_V1", ["executable_tree_diff", "dependency_blob_diff", "schema_migration_diff", "executable_validation_reused", "historical_evidence_relabelled", "architecture_validation"]),
+              ("SECRET_INVENTORY_V1", ["scanner_version", "base_item_count", "candidate_item_count", "base_inventory_digest", "candidate_inventory_digest", "base_only_item_count", "candidate_only_item_count", "defensive_boundary_check", "normalized_comparison"]),
+              ("WORKFLOW_STRUCTURE_AND_CLEANUP_V1", ["selector_precedence", "fixed_base_events", "manifest_boundary", "historical_modes_preserved", "raw_scanner_cleanup", "candidate_tree_cleanliness"]),
           ]
-          if lines[0] != "BOOKING_CONSENT_DOCUMENT_ARCHITECTURE_EVIDENCE_V1" or lines[-1] != "END_BOOKING_CONSENT_DOCUMENT_ARCHITECTURE_EVIDENCE_V1":
-              raise SystemExit("Consent architecture evidence markers drift")
-          positions = [lines.index(marker) for marker in expected_sections]
-          if positions != sorted(positions) or any(lines.count(marker) != 1 or lines.count("END_" + marker) != 1 for marker in expected_sections):
-              raise SystemExit("Consent architecture evidence section drift")
-          fields = [line.split("=", 1)[0] for line in lines if "=" in line]
-          if len(fields) != len(set(fields)):
-              raise SystemExit("Consent architecture duplicate evidence field")
-          if text.count(f"candidate_sha={candidate}\n") != 1:
-              raise SystemExit("Consent architecture candidate field drift")
+
+          def validate_evidence(payload, expected_candidate):
+              if not HEX40.fullmatch(expected_candidate): raise ValueError("candidate format")
+              if not 1 <= len(payload) <= 65536 or payload.count(b"\n") > 256:
+                  raise ValueError("size or line bound")
+              if b"\x00" in payload or b"\r" in payload or not payload.endswith(b"\n"):
+                  raise ValueError("byte contract")
+              try: text = payload.decode("utf-8")
+              except UnicodeError as error: raise ValueError("UTF-8") from error
+              forbidden = ("http://", "https://", "Traceback", "BEGIN PRIVATE KEY", "GITHUB_ENV", "database_url", "policy body", "source excerpt", "line_number=", "detector=")
+              if any(item.casefold() in text.casefold() for item in forbidden): raise ValueError("unsafe content")
+              lines = text.splitlines(); cursor = 0; seen = set(); parsed = {}
+              def exact_line(value):
+                  nonlocal cursor
+                  if cursor >= len(lines) or lines[cursor] != value: raise ValueError(f"expected {value}")
+                  cursor += 1
+              def fields(names):
+                  nonlocal cursor
+                  for name in names:
+                      if cursor >= len(lines) or "=" not in lines[cursor]: raise ValueError(f"missing {name}")
+                      key, value = lines[cursor].split("=", 1)
+                      if key != name or key in seen: raise ValueError(f"field {name}")
+                      seen.add(key); parsed[key] = value; cursor += 1
+              exact_line("BOOKING_CONSENT_DOCUMENT_ARCHITECTURE_EVIDENCE_V1")
+              fields(["event_scope", "mode", "candidate_sha", "governed_base", "manifest_count", "manifest_fingerprint"])
+              for marker, names in SCHEMA:
+                  exact_line(marker); fields(names); exact_line("END_" + marker)
+              exact_line("END_BOOKING_CONSENT_DOCUMENT_ARCHITECTURE_EVIDENCE_V1")
+              if cursor != len(lines): raise ValueError("trailing content")
+              for name in ("event_scope", "mode", "governed_base", "manifest_count", "manifest_fingerprint", *list(FIXED)[5:]):
+                  if parsed[name] != FIXED[name]: raise ValueError(f"fixed identity {name}")
+              if parsed["candidate_sha"] != expected_candidate: raise ValueError("candidate identity")
+              for name in PASS_FIELDS:
+                  if parsed.get(name) != "PASS": raise ValueError(f"PASS field {name}")
+              exact_values = {"executable_tree_diff":"EMPTY", "dependency_blob_diff":"EMPTY", "schema_migration_diff":"EMPTY", "executable_validation_reused":"NO", "historical_evidence_relabelled":"NO", "scanner_version":"1.5.0", "defensive_boundary_check":"PASS", "normalized_comparison":"COMPLETE_LINE_SENSITIVE_INVENTORY"}
+              if any(parsed.get(k) != v for k, v in exact_values.items()): raise ValueError("closed value")
+              counts = ["base_item_count", "candidate_item_count", "base_only_item_count", "candidate_only_item_count"]
+              if any(not DECIMAL.fullmatch(parsed[name]) for name in counts): raise ValueError("decimal")
+              if int(parsed["base_only_item_count"]) > int(parsed["base_item_count"]) or int(parsed["candidate_only_item_count"]) > int(parsed["candidate_item_count"]): raise ValueError("inventory reconciliation")
+              if any(not HEX64.fullmatch(parsed[name]) for name in ("base_inventory_digest", "candidate_inventory_digest")): raise ValueError("digest")
+              return text, parsed
+
+          text, parsed = validate_evidence(data, candidate)
           normalized = text.replace(f"candidate_sha={candidate}\n", "candidate_sha=" + "0" * 40 + "\n", 1).encode()
+          if normalized == data or text.count(f"candidate_sha={candidate}\n") != 1:
+              raise SystemExit("Consent architecture candidate normalization drift")
           digest = hashlib.sha256(normalized).digest()
 
           def gate(state, commitment, actual):
               if len(commitment) != 32: raise ValueError("commitment width")
-              if state == CAPTURE_SENTINEL:
+              if state == CAPTURE_STATE:
                   if commitment != bytes(32): raise ValueError("capture commitment")
                   return "CAPTURE_ONLY"
               if state == ACTIVE_STATE:
@@ -5916,81 +6143,70 @@ jobs:
               except ValueError: continue
               raise SystemExit(f"Consent architecture negative control accepted: {label}")
           workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
-          required_structure = (
-              "booking-consent-document-delivery-architecture", "CAPTURE_ONLY_PENDING_CTO_REVIEW",
-              "booking consent document delivery architecture evidence awaiting CTO admission",
-              "Upload consent document architecture capture evidence",
-          )
-          if any(workflow.count(item) < 1 for item in required_structure):
-              raise SystemExit("Consent architecture workflow structure drift")
+          state_definitions = re.findall(r"(?m)^          ARCHITECTURE_CAPTURE_STATE: \S+$", workflow)
+          state_bindings = re.findall(r'(?m)^          ADMISSION_STATE="\$ARCHITECTURE_CAPTURE_STATE" uv run --locked python', workflow)
+          if workflow.count(CAPTURE_STATE) != 1 or len(state_definitions) != 1 or len(state_bindings) != 1:
+              raise SystemExit("Consent architecture capture state authority drift")
           if not path.is_file() or path.is_symlink() or path.stat().st_nlink != 1:
               raise SystemExit("Consent architecture evidence is not one regular file")
-
-          def selector(*, mobile=True, architecture=True, architecture_ok=True, decision_ok=True, roadmap_ok=True, identity_ok=True):
-              if not mobile or not identity_ok: raise ValueError("identity")
-              if not architecture: return "mobile-booking-intent-foundation"
-              if not (architecture_ok and decision_ok and roadmap_ok): raise ValueError("architecture tuple")
-              return "booking-consent-document-delivery-architecture"
-
-          def manifest(paths):
-              expected = [".github/workflows/ci.yml", "docs/AYO_BOOKING_CONSENT_DOCUMENT_DELIVERY_CONTRACT_ARCHITECTURE.md", "docs/AYO_DECISION_LOG.md", "docs/AYO_ROADMAP.md"]
-              if paths != expected: raise ValueError("manifest")
-
-          def event(kind, *, base=True, predecessor=True, ancestor=True, candidate_head=True, topology=True):
-              if kind == "dispatch" or not all((base, predecessor, ancestor, candidate_head, topology)):
-                  raise ValueError("event")
-
-          def document(*, heading=True, ap076=1, roadmap=True, claims=False, controls=True):
-              if not heading or ap076 != 1 or not roadmap or claims or not controls: raise ValueError("document")
-
-          def boundary(**values):
-              if not all(values.values()): raise ValueError("boundary")
-
-          def evidence(*, sections=True, order=True, unique=True, canonical=True, neutral=True, safe=True):
-              if not all((sections, order, unique, canonical, neutral, safe)): raise ValueError("evidence")
-
-          def artifact(*, regular=True, one=True, bounded=True, upload_before_stop=True, capture=True):
-              if not all((regular, one, bounded, upload_before_stop, capture)): raise ValueError("artifact")
-
-          if selector() != "booking-consent-document-delivery-architecture" or selector(architecture=False) != "mobile-booking-intent-foundation":
-              raise SystemExit("Consent architecture selector positive control drift")
-          negative_actions = {
-              "wrong architecture blob": lambda: selector(architecture_ok=False),
-              "wrong decision blob": lambda: selector(decision_ok=False),
-              "wrong roadmap blob": lambda: selector(roadmap_ok=False),
-              "partial or malformed identity": lambda: selector(identity_ok=False),
-              "missing path": lambda: manifest([".github/workflows/ci.yml"]),
-              "extra path": lambda: manifest([".github/workflows/ci.yml", "extra"]),
-              "reordered or renamed path": lambda: manifest(list(reversed([".github/workflows/ci.yml", "docs/AYO_BOOKING_CONSENT_DOCUMENT_DELIVERY_CONTRACT_ARCHITECTURE.md", "docs/AYO_DECISION_LOG.md", "docs/AYO_ROADMAP.md"]))),
-              "backend migration root-test mobile mobile-test package lock baseline screen navigation configuration or production drift": lambda: boundary(backend=False),
-              "base or origin drift": lambda: event("first", base=False),
-              "predecessor missing or mismatch": lambda: event("later", predecessor=False),
-              "predecessor non-ancestry": lambda: event("later", ancestor=False),
-              "synthetic merge candidate": lambda: event("pr", candidate_head=False),
-              "dispatch": lambda: event("dispatch"),
-              "invalid merge topology": lambda: event("merge", topology=False),
-              "missing heading": lambda: document(heading=False),
-              "duplicate AP-076": lambda: document(ap076=2),
-              "wrong roadmap order": lambda: document(roadmap=False),
-              "implementation approval legal or production claim": lambda: document(claims=True),
-              "missing discriminator scope canonical locale cache withdrawal tuple failure or threat control": lambda: document(controls=False),
-              "missing duplicate or reordered evidence section": lambda: evidence(sections=False),
-              "duplicate field malformed count or hash": lambda: evidence(unique=False),
-              "event-specific or unsafe evidence": lambda: evidence(neutral=False),
-              "raw scanner payload policy prose or recursive metadata": lambda: evidence(safe=False),
-              "symlink traversal extra file or oversize artifact": lambda: artifact(regular=False),
-              "missing upload stop-before-upload or missing capture stop": lambda: artifact(upload_before_stop=False),
-              "active mode upload or stop": lambda: artifact(capture=False),
+          evidence_mutations = {
+              "extra-section": text.replace("END_BOOKING_CONSENT_DOCUMENT_ARCHITECTURE_EVIDENCE_V1", "UNKNOWN_SECTION_V1\nEND_UNKNOWN_SECTION_V1\nEND_BOOKING_CONSENT_DOCUMENT_ARCHITECTURE_EVIDENCE_V1").encode(),
+              "misplaced-end": text.replace("ARCHITECTURE_STRUCTURE_V1", "END_ARCHITECTURE_STRUCTURE_V1", 1).encode(),
+              "missing-field": text.replace("manifest_count=4\n", "", 1).encode(),
+              "duplicate-field": text.replace("manifest_count=4\n", "manifest_count=4\nmanifest_count=4\n", 1).encode(),
+              "malformed-decimal": text.replace("base_item_count=" + parsed["base_item_count"], "base_item_count=01", 1).encode(),
+              "malformed-hash": text.replace("base_inventory_digest=" + parsed["base_inventory_digest"], "base_inventory_digest=" + "A" * 64, 1).encode(),
+              "wrong-identity": text.replace("governed_base=" + FIXED["governed_base"], "governed_base=" + "1" * 40, 1).encode(),
+              "secret-reconciliation": text.replace("base_only_item_count=" + parsed["base_only_item_count"], "base_only_item_count=" + str(int(parsed["base_item_count"]) + 1), 1).encode(),
+              "cleanup-drift": text.replace("raw_scanner_cleanup=PASS", "raw_scanner_cleanup=FAIL", 1).encode(),
+              "unsafe-content": text.replace("architecture_validation=PASS", "architecture_validation=https://invalid.example", 1).encode(),
           }
-          for label, action in negative_actions.items():
-              try: action()
+          for label, mutation in evidence_mutations.items():
+              try: validate_evidence(mutation, candidate)
               except ValueError: continue
-              raise SystemExit(f"Consent architecture structural negative accepted: {label}")
+              raise SystemExit(f"Consent architecture real-schema mutation accepted: {label}")
+
+          def step_block(name):
+              match = re.search(r"(?ms)^      - name: " + re.escape(name) + r"\n(.*?)(?=^      - name: |\Z)", workflow)
+              if not match: raise SystemExit(f"Consent architecture workflow step missing: {name}")
+              return match.group(0)
+          selector_block = step_block("Select exact governed evidence contract")
+          preflight_block = step_block("Preflight consent document architecture authority before tooling")
+          identity_block = step_block("Bind exact consent document architecture candidate identity")
+          upload_block = step_block("Upload consent document architecture capture evidence")
+          stop_block = step_block("Stop consent document architecture pending CTO admission")
+          required_actual = {
+              "selector-exact-tuple": (selector_block, "expected_architecture_tuple="),
+              "selector-partial-rejection": (selector_block, "Partial consent document architecture identity"),
+              "selector-historical-mobile": (selector_block, "mode=mobile-booking-intent-foundation"),
+              "first-publication-base": (preflight_block, "first-publication base drift"),
+              "later-predecessor": (identity_block, "predecessor resolver drift"),
+              "pr-actual-head": (identity_block, "synthetic merge used as candidate"),
+              "dispatch-rejection": (identity_block, "dispatch prohibited"),
+              "post-merge-topology": (identity_block, "merge tree differs from feature tree"),
+          }
+          boundary_tokens = {
+              "backend": "62500035ef60d94ccc6333f25cb3aa79ff5c3f21", "migrations": "253ecedebe58c31077a0baa7d2532adc46464f70",
+              "root-tests": "2dbcb487bd27578a95d0db9a31c21ecde7032114", "mobile": "da39714a911ffbf02171d28348c88a39eab2d938",
+              "mobile-tests": "d7143a733cf14e70851406dab8131ce7c69dd364", "package": "b4c26fea6a74ac9c1d3a442eb855cf63538fb5e2",
+              "lockfile": "ace7192e4a749f61a011f8e4293ccd1e053d648a", "baseline": "71770a9e529e9af0c9ed5c72549b3a2f7ddcfb02",
+              "screens-navigation": "AYO-Mobile", "configuration": "AYO-Mobile", "provider-payment-notification-analytics": "AYO-Mobile",
+              "deployment": ".github/workflows/ci.yml", "production": ".github/workflows/ci.yml",
+          }
+          for label, (block, token) in required_actual.items():
+              if token not in block: raise SystemExit(f"Consent architecture actual predicate drift: {label}")
+          for label, token in boundary_tokens.items():
+              if token not in preflight_block: raise SystemExit(f"Consent architecture boundary predicate drift: {label}")
+          expected_condition = "if: success() && steps.evidence_contract.outputs.mode == 'booking-consent-document-delivery-architecture' && steps.consent_architecture_admission.outputs.state == 'CAPTURE_ONLY'"
+          if expected_condition not in upload_block or expected_condition not in stop_block or workflow.index(upload_block) >= workflow.index(stop_block):
+              raise SystemExit("Consent architecture artifact/stop predicate drift")
           historical_contract = (
               "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
               "actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065",
               "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
               "mobile booking intent foundation evidence awaiting CTO admission",
+              "ADMISSION_STATE = ACTIVE_STATE",
+              "production_release_block=PASS",
           )
           if any(item not in workflow for item in historical_contract):
               raise SystemExit("Historical workflow contract drift")
