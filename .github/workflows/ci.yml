@@ -7040,19 +7040,19 @@ jobs:
         env:
           CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           EVIDENCE_PATH: ${{ runner.temp }}/booking-consent-approval-pack-architecture-evidence-v1.txt
-          APPROVAL_PACK_ADMISSION_STATE: APPROVAL_PACK_ARCHITECTURE_CAPTURE_PENDING_CTO_REVIEW
+          APPROVAL_PACK_CAPTURE_STATE: APPROVAL_PACK_ARCHITECTURE_CAPTURE_PENDING_CTO_REVIEW
         run: |
           set -euo pipefail
-          uv run --locked python - <<'PY'
+          APPROVAL_PACK_ADMISSION_STATE="ADMITTED_PREPRODUCTION_APPROVAL_PACK_ARCHITECTURE_EVIDENCE" uv run --locked python - <<'PY'
           import hashlib
           import os
           import re
           from pathlib import Path
 
-          ADMISSION_STATE = os.environ["APPROVAL_PACK_ADMISSION_STATE"]
+          CAPTURE_STATE = os.environ["APPROVAL_PACK_CAPTURE_STATE"]
           ACTIVE_STATE = "ADMITTED_PREPRODUCTION_APPROVAL_PACK_ARCHITECTURE_EVIDENCE"
-          CAPTURE_STATE_DIGEST = "d40efd98b72427fee69360348a85886d9dc4310200b86dcb36a08c7bcbdd69ca"
-          REVIEWED_COMMITMENT = bytes(32)
+          ADMISSION_STATE = os.environ["APPROVAL_PACK_ADMISSION_STATE"]
+          REVIEWED_COMMITMENT = bytes((131, 131, 108, 235, 124, 51, 181, 108, 89, 136, 42, 118, 145, 125, 2, 60, 62, 167, 85, 102, 93, 175, 248, 180, 154, 6, 49, 170, 84, 106, 81, 115))
           MAGIC = "BOOKING_CONSENT_APPROVAL_PACK_ARCHITECTURE_EVIDENCE_V1"
           END = "END_BOOKING_CONSENT_APPROVAL_PACK_ARCHITECTURE_EVIDENCE_V1"
           SECTION_FIELDS = [
@@ -7173,7 +7173,7 @@ jobs:
               if REVIEWED_COMMITMENT == bytes(32) or commitment != REVIEWED_COMMITMENT:
                   raise SystemExit("approval-pack active commitment mismatch")
               result = "ADMITTED"
-          elif hashlib.sha256(ADMISSION_STATE.encode()).hexdigest() == CAPTURE_STATE_DIGEST:
+          elif ADMISSION_STATE == CAPTURE_STATE:
               if REVIEWED_COMMITMENT != bytes(32):
                   raise SystemExit("approval-pack capture commitment must be neutral")
               result = "CAPTURE_ONLY"
@@ -7201,7 +7201,7 @@ jobs:
               raise SystemExit(f"approval-pack schema mutation accepted: {case}")
 
           workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
-          if workflow.count(ADMISSION_STATE) != 1:
+          if workflow.count("APPROVAL_PACK_CAPTURE_STATE: " + CAPTURE_STATE) != 1 or len(re.findall(r"(?m)^          APPROVAL_PACK_CAPTURE_STATE: \S+$", workflow)) != 1 or len(re.findall(r'(?m)^          APPROVAL_PACK_ADMISSION_STATE="' + re.escape(ADMISSION_STATE) + r'" uv run --locked python', workflow)) != 1 or workflow.count("REVIEWED_COMMITMENT = " + ("bytes(32)" if REVIEWED_COMMITMENT == bytes(32) else "bytes((" + ", ".join(map(str, REVIEWED_COMMITMENT)) + "))")) != 1:
               raise SystemExit("approval-pack capture sentinel authority drift")
           action_pins = (
               "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
