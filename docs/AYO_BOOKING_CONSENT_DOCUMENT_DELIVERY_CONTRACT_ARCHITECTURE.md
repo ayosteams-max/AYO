@@ -273,18 +273,29 @@ No failure can be represented as display, acknowledgment, consent, confirmation 
 A later executable confirmation design must use one immutable durable command bound to:
 
 - authenticated rider continuity;
+- exact `consent_contract_version`;
 - exact preview identity and evidence hash;
 - exact quote and pricing evidence;
-- exact policy family/version;
+- exact closed `policy_scope`;
+- exact policy family;
+- exact policy version;
 - exact document and rendition identifiers;
-- exact content and manifest hashes;
-- exact locale and format;
+- exact canonical locale;
+- exact format;
+- exact document manifest hash;
+- exact rendition content hash;
+- exact effective interval;
+- immutable preview-bound `acknowledgment_required`;
 - explicit acknowledgment evidence;
 - durable client request identity;
 - idempotency key; and
 - authoritative confirmation recovery identity.
 
-The command must be durably stored before dispatch, survive process death, reuse the same identities across retries, distinguish pending/unknown/confirmed outcomes and reconcile through the authenticated server read. None of these capabilities is implemented or authorized here.
+The complete tuple is copied from authoritative preview-bound and server-resolved evidence; mobile cannot reconstruct, select, default or weaken any member. Future acknowledgment, confirmation and recovery reject every missing field and every mismatch across the preview, displayed rendition, acknowledgment evidence, durable command, confirmation request, server registry/current eligibility and recovery result. `consent_contract_version` prevents V1/V2 confusion and downgrade. The closed `policy_scope` prevents jurisdiction, market, service, booking-class, product, tenant or policy-family substitution. The effective interval is governed by authoritative server time and is revalidated rather than trusted from the client. `acknowledgment_required` is immutable preview-bound evidence and mobile cannot weaken or change it.
+
+Absence, mutation, downgrade, stale eligibility or mismatch fails closed before any ride-creating side effect. The command must be durably stored before dispatch, survive process death, reuse the same identities across retries, distinguish pending/unknown/confirmed outcomes and reconcile through the authenticated server read. Recovery returns only the authoritative server outcome; it cannot repair, enrich or legitimize an incomplete original command.
+
+Future negative validation must omit and independently mutate each of `consent_contract_version`, `policy_scope`, effective interval and `acknowledgment_required`, and must prove complete tuple equality across preview, display, acknowledgment, durable command, confirmation and recovery. These vectors supplement the V1/V2, scope, integrity, rotation, withdrawal and stale-evidence controls above. None of these confirmation or recovery capabilities is implemented or authorized here.
 
 ## Security and threat analysis
 
