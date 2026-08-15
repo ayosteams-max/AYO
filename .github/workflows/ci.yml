@@ -305,8 +305,44 @@ jobs:
               mobile_tree="$(git rev-parse "$mobile_candidate:AYO-Mobile")"
               case "$mobile_tests_tree|$mobile_tree" in
                 d7143a733cf14e70851406dab8131ce7c69dd364\|da39714a911ffbf02171d28348c88a39eab2d938)
-                  architecture_path=docs/AYO_BOOKING_CONSENT_DOCUMENT_DELIVERY_CONTRACT_ARCHITECTURE.md
-                  if git cat-file -e "$mobile_candidate:$architecture_path" 2>/dev/null; then
+                  approval_pack_architecture_path=docs/AYO_BOOKING_CONSENT_APPROVAL_PACK_ARCHITECTURE.md
+                  approval_pack_template_path=docs/AYO_BOOKING_CONSENT_APPROVAL_PACK_TEMPLATE.md
+                  approval_pack_architecture_present=false
+                  approval_pack_template_present=false
+                  git cat-file -e "$mobile_candidate:$approval_pack_architecture_path" 2>/dev/null && approval_pack_architecture_present=true
+                  git cat-file -e "$mobile_candidate:$approval_pack_template_path" 2>/dev/null && approval_pack_template_present=true
+                  if [[ "$approval_pack_architecture_present" == true || "$approval_pack_template_present" == true ]]; then
+                    [[ "$approval_pack_architecture_present" == true && "$approval_pack_template_present" == true ]] || {
+                      echo "Partial Booking consent approval-pack architecture identity" >&2; exit 1; }
+                    approval_pack_architecture_blob="$(git rev-parse "$mobile_candidate:$approval_pack_architecture_path")"
+                    approval_pack_template_blob="$(git rev-parse "$mobile_candidate:$approval_pack_template_path")"
+                    decision_blob="$(git rev-parse "$mobile_candidate:docs/AYO_DECISION_LOG.md")"
+                    roadmap_blob="$(git rev-parse "$mobile_candidate:docs/AYO_ROADMAP.md")"
+                    consent_architecture_blob="$(git rev-parse "$mobile_candidate:docs/AYO_BOOKING_CONSENT_DOCUMENT_DELIVERY_CONTRACT_ARCHITECTURE.md")"
+                    baseline_blob="$(git rev-parse "$mobile_candidate:.secrets.baseline")"
+                    backend_tree="$(git rev-parse "$mobile_candidate:BACKEND")"
+                    migration_tree="$(git rev-parse "$mobile_candidate:database/migrations")"
+                    package_blob="$(git rev-parse "$mobile_candidate:AYO-Mobile/package.json")"
+                    lockfile_blob="$(git rev-parse "$mobile_candidate:AYO-Mobile/package-lock.json")"
+                    root_package_blob="$(git rev-parse "$mobile_candidate:pyproject.toml")"
+                    root_lockfile_blob="$(git rev-parse "$mobile_candidate:uv.lock")"
+                    alembic_blob="$(git rev-parse "$mobile_candidate:alembic.ini")"
+                    python_version_blob="$(git rev-parse "$mobile_candidate:.python-version")"
+                    approval_pack_tuple="$approval_pack_architecture_blob|$approval_pack_template_blob|$decision_blob|$roadmap_blob|$consent_architecture_blob|$baseline_blob|$backend_tree|$migration_tree|$package_blob|$lockfile_blob|$root_package_blob|$root_lockfile_blob|$alembic_blob|$python_version_blob"
+                    expected_approval_pack_tuple="a2285429b91f73de067807ababb0780a088d5e7a|5d7218a9bd2ecc5d4561fe6164a6864e50cadb16|e814581988391fff1a4d388f58c80202c182c0bd|d5313d04a9d160c38e129217fb4aceae06afb068|54d69775049d6f0af12fe6ace2bfc5a8cf66ad81|71770a9e529e9af0c9ed5c72549b3a2f7ddcfb02|62500035ef60d94ccc6333f25cb3aa79ff5c3f21|253ecedebe58c31077a0baa7d2532adc46464f70|b4c26fea6a74ac9c1d3a442eb855cf63538fb5e2|ace7192e4a749f61a011f8e4293ccd1e053d648a|6b8425f6ed81258388c4e6bba39c80af0afa7fef|6a08d31b721b486950fd06df0ca3430fcbe8aabf|a2353502812251c10e36f8cd534de71c1dcca58b|ebe773d9eeab42ab1f896401f5b9c581f88d6709"
+                    [[ "$approval_pack_tuple" == "$expected_approval_pack_tuple" ]] || {
+                      echo "Unreviewed Booking consent approval-pack architecture identity" >&2; exit 1; }
+                    mode=booking-consent-approval-pack-architecture
+                  else
+                    candidate_decision_blob="$(git rev-parse "$mobile_candidate:docs/AYO_DECISION_LOG.md")"
+                    candidate_roadmap_blob="$(git rev-parse "$mobile_candidate:docs/AYO_ROADMAP.md")"
+                    if [[ "$candidate_decision_blob" == e814581988391fff1a4d388f58c80202c182c0bd \
+                      || "$candidate_roadmap_blob" == d5313d04a9d160c38e129217fb4aceae06afb068 ]]; then
+                      echo "Missing Booking consent approval-pack architecture identity" >&2
+                      exit 1
+                    fi
+                    architecture_path=docs/AYO_BOOKING_CONSENT_DOCUMENT_DELIVERY_CONTRACT_ARCHITECTURE.md
+                    if git cat-file -e "$mobile_candidate:$architecture_path" 2>/dev/null; then
                     architecture_blob="$(git rev-parse "$mobile_candidate:$architecture_path")"
                     decision_blob="$(git rev-parse "$mobile_candidate:docs/AYO_DECISION_LOG.md")"
                     roadmap_blob="$(git rev-parse "$mobile_candidate:docs/AYO_ROADMAP.md")"
@@ -329,6 +365,7 @@ jobs:
                       exit 1
                     fi
                     mode=mobile-booking-intent-foundation
+                    fi
                   fi
                   ;;
                 53de44782c39f226918e719e2a05212f787fffcc\|6b46cae963c034aa2203e0e97c119fe68eadf908)
@@ -577,16 +614,122 @@ jobs:
             echo "Consent architecture executable boundary drift" >&2; exit 1; }
           echo "Consent document architecture authority before tooling: PASS"
 
+      - name: Preflight Booking consent approval-pack architecture authority before tooling
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'booking-consent-approval-pack-architecture'
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_BEFORE: ${{ github.event.before || '' }}
+          EVENT_HEAD_SHA: ${{ github.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || '' }}
+        run: |
+          set -euo pipefail
+          zero=0000000000000000000000000000000000000000
+          fixed=6aa98a78953531b637413e54b3afa93c721ae863
+          reviewed_head=ebf829abac6a3fa7128f55aa17186902bf06e7d8
+          case "$EVENT_NAME" in
+            pull_request)
+              [[ "$PR_BASE_SHA" == "$fixed" && "$PR_HEAD_SHA" =~ ^[0-9a-f]{40}$ \
+                && "$PR_HEAD_SHA" != "$zero" ]] || {
+                echo "Approval-pack PR identity drift" >&2; exit 1; }
+              candidate="$PR_HEAD_SHA"
+              [[ "$candidate" != "$(git rev-parse HEAD)" ]] || {
+                echo "Approval-pack synthetic merge used as candidate" >&2; exit 1; }
+              git cat-file -e "$candidate^{commit}" 2>/dev/null || {
+                echo "Approval-pack PR candidate unavailable" >&2; exit 1; }
+              git merge-base --is-ancestor "$fixed" "$candidate"
+              git merge-base --is-ancestor "$fixed" HEAD
+              git merge-base --is-ancestor "$candidate" HEAD
+              ;;
+            push)
+              candidate="$EVENT_HEAD_SHA"
+              [[ "$candidate" =~ ^[0-9a-f]{40}$ && "$candidate" != "$zero" \
+                && "$candidate" == "$(git rev-parse HEAD)" ]] || {
+                echo "Approval-pack push candidate drift" >&2; exit 1; }
+              if [[ -z "$EVENT_BEFORE" || "$EVENT_BEFORE" == "$zero" ]]; then
+                git fetch --no-tags origin refs/heads/main:refs/remotes/origin/approval-pack-main
+                remote_main="$(git rev-parse refs/remotes/origin/approval-pack-main)"
+                [[ "$remote_main" == "$fixed" && "$(git merge-base "$candidate" "$remote_main")" == "$fixed" ]] || {
+                  echo "Approval-pack first-publication base drift" >&2; exit 1; }
+                mapfile -t parents < <(git show -s --format='%P' "$candidate" | tr ' ' '\n')
+                [[ "${#parents[@]}" -eq 1 && "${parents[0]}" == "$reviewed_head" ]] || {
+                  echo "Approval-pack first-publication capture parent drift" >&2; exit 1; }
+                expected_history=(
+                  ebf829abac6a3fa7128f55aa17186902bf06e7d8
+                  b2693311833adf44a9d04c7cdef5dad64dce77b9
+                  e36ed151e98a3864ea7deeae8c7faf0ef69f833e
+                  f728c993ffa8deef50ec044b8668284913b315fc
+                  6aa98a78953531b637413e54b3afa93c721ae863
+                )
+                history_cursor="$reviewed_head"
+                for expected in "${expected_history[@]}"; do
+                  [[ "$history_cursor" == "$expected" ]] || {
+                    echo "Approval-pack reviewed history drift" >&2; exit 1; }
+                  [[ "$expected" == "$fixed" ]] && break
+                  mapfile -t history_parents < <(git show -s --format='%P' "$history_cursor" | tr ' ' '\n')
+                  [[ "${#history_parents[@]}" -eq 1 ]] || {
+                    echo "Approval-pack reviewed history is nonlinear" >&2; exit 1; }
+                  history_cursor="${history_parents[0]}"
+                done
+              else
+                [[ "$EVENT_BEFORE" =~ ^[0-9a-f]{40}$ && "$EVENT_BEFORE" != "$zero" ]] || {
+                  echo "Approval-pack published predecessor malformed" >&2; exit 1; }
+                git cat-file -e "$EVENT_BEFORE^{commit}" 2>/dev/null || {
+                  echo "Approval-pack published predecessor unavailable" >&2; exit 1; }
+                git merge-base --is-ancestor "$EVENT_BEFORE" "$candidate"
+              fi
+              ;;
+            workflow_dispatch)
+              echo "Booking consent approval-pack architecture rejects workflow_dispatch" >&2
+              exit 1
+              ;;
+            *) echo "Unsupported approval-pack architecture event" >&2; exit 1 ;;
+          esac
+          git cat-file -e "$fixed^{commit}"
+          git cat-file -e "$candidate^{commit}"
+          git merge-base --is-ancestor "$fixed" "$candidate"
+          mapfile -t changed < <(git diff --name-only "$fixed" "$candidate")
+          expected=(
+            .github/workflows/ci.yml
+            docs/AYO_BOOKING_CONSENT_APPROVAL_PACK_ARCHITECTURE.md
+            docs/AYO_BOOKING_CONSENT_APPROVAL_PACK_TEMPLATE.md
+            docs/AYO_DECISION_LOG.md
+            docs/AYO_ROADMAP.md
+          )
+          [[ "${#changed[@]}" -eq 5 && "${changed[*]}" == "${expected[*]}" ]] || {
+            echo "Approval-pack exact five-path manifest drift" >&2; exit 1; }
+          manifest_text="$(printf '%s\n' "${changed[@]}")"
+          fingerprint="$(printf '%s' "$manifest_text" | sha256sum | awk '{print $1}')"
+          [[ "$fingerprint" == 42cc93cdb937c642f67f50356f1081abb4d5576d1515d6f3d0d8593add3cd610 ]] || {
+            echo "Approval-pack manifest fingerprint drift" >&2; exit 1; }
+          [[ "$(git rev-parse "$candidate:tests")" == 2dbcb487bd27578a95d0db9a31c21ecde7032114 \
+            && "$(git rev-parse "$candidate:AYO-Mobile")" == da39714a911ffbf02171d28348c88a39eab2d938 \
+            && "$(git rev-parse "$candidate:AYO-Mobile/tests")" == d7143a733cf14e70851406dab8131ce7c69dd364 \
+            && "$(git rev-parse "$candidate:BACKEND")" == 62500035ef60d94ccc6333f25cb3aa79ff5c3f21 \
+            && "$(git rev-parse "$candidate:database/migrations")" == 253ecedebe58c31077a0baa7d2532adc46464f70 \
+            && "$(git rev-parse "$candidate:AYO-Mobile/package.json")" == b4c26fea6a74ac9c1d3a442eb855cf63538fb5e2 \
+            && "$(git rev-parse "$candidate:AYO-Mobile/package-lock.json")" == ace7192e4a749f61a011f8e4293ccd1e053d648a \
+            && "$(git rev-parse "$candidate:pyproject.toml")" == 6b8425f6ed81258388c4e6bba39c80af0afa7fef \
+            && "$(git rev-parse "$candidate:uv.lock")" == 6a08d31b721b486950fd06df0ca3430fcbe8aabf \
+            && "$(git rev-parse "$candidate:.secrets.baseline")" == 71770a9e529e9af0c9ed5c72549b3a2f7ddcfb02 \
+            && "$(git rev-parse "$candidate:alembic.ini")" == a2353502812251c10e36f8cd534de71c1dcca58b \
+            && "$(git rev-parse "$candidate:.python-version")" == ebe773d9eeab42ab1f896401f5b9c581f88d6709 ]] || {
+            echo "Approval-pack immutable identity drift" >&2; exit 1; }
+          git diff --quiet "$fixed" "$candidate" -- BACKEND tests database AYO-Mobile \
+            pyproject.toml uv.lock alembic.ini .python-version .secrets.baseline || {
+            echo "Approval-pack executable dependency configuration boundary drift" >&2; exit 1; }
+          echo "Booking consent approval-pack architecture authority before tooling: PASS"
+
       - name: Verify lock file is current
-        if: (success() || failure()) && steps.postgis.outputs.ready == 'true'
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
         run: uv lock --check
 
       - name: Check formatting
-        if: (success() || failure()) && steps.postgis.outputs.ready == 'true'
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
         run: uv run --locked ruff format --check .
 
       - name: Lint
-        if: (success() || failure()) && steps.postgis.outputs.ready == 'true'
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
         run: uv run --locked ruff check .
 
       - name: Preflight Mobile Booking candidate authority before tooling
@@ -1134,8 +1277,13 @@ jobs:
                 mode=verified-push-before
               elif [[ "$EVIDENCE_MODE" == "booking-consent-policy-authority" \
                 || "$EVIDENCE_MODE" == "mobile-booking-intent-foundation" \
-                || "$EVIDENCE_MODE" == "booking-consent-document-delivery-architecture" ]]; then
-                if [[ "$EVIDENCE_MODE" == "booking-consent-document-delivery-architecture" ]]; then
+                || "$EVIDENCE_MODE" == "booking-consent-document-delivery-architecture" \
+                || "$EVIDENCE_MODE" == "booking-consent-approval-pack-architecture" ]]; then
+                if [[ "$EVIDENCE_MODE" == "booking-consent-approval-pack-architecture" ]]; then
+                  expected_base=6aa98a78953531b637413e54b3afa93c721ae863
+                  label="Booking consent approval-pack architecture"
+                  first_push_mode=verified-booking-consent-approval-pack-first-push-base
+                elif [[ "$EVIDENCE_MODE" == "booking-consent-document-delivery-architecture" ]]; then
                   expected_base=cadaa30c47ccbb849bf428c14576298b26ee6323
                   label="Booking consent document delivery architecture"
                   first_push_mode=verified-consent-document-architecture-first-push-base
@@ -1590,6 +1738,80 @@ jobs:
             && "$(git rev-parse "$candidate:docs/AYO_ROADMAP.md")" == e459cd12961c5264dd7df8f1cbc5328e854f73a1 ]] || {
             echo "Consent architecture documentation identity drift" >&2; exit 1; }
           echo "Consent document architecture exact candidate identity: PASS"
+
+      - name: Bind exact Booking consent approval-pack architecture candidate identity
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'booking-consent-approval-pack-architecture'
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_BEFORE: ${{ github.event.before || '' }}
+          EVENT_HEAD_SHA: ${{ github.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || '' }}
+          TRUSTED_COMPARISON_BASE_SHA: ${{ steps.trusted_comparison_base.outputs.sha }}
+        run: |
+          set -euo pipefail
+          zero=0000000000000000000000000000000000000000
+          fixed=6aa98a78953531b637413e54b3afa93c721ae863
+          case "$EVENT_NAME" in
+            pull_request)
+              candidate="$PR_HEAD_SHA"
+              [[ "$PR_BASE_SHA" == "$fixed" && "$TRUSTED_COMPARISON_BASE_SHA" == "$fixed" ]] || {
+                echo "Approval-pack PR trusted-base drift" >&2; exit 1; }
+              [[ "$candidate" =~ ^[0-9a-f]{40}$ && "$candidate" != "$zero" \
+                && "$candidate" != "$(git rev-parse HEAD)" ]] || {
+                echo "Approval-pack PR actual-head identity drift" >&2; exit 1; }
+              git merge-base --is-ancestor "$fixed" "$candidate"
+              git merge-base --is-ancestor "$fixed" HEAD
+              git merge-base --is-ancestor "$candidate" HEAD
+              ;;
+            push)
+              candidate="$EVENT_HEAD_SHA"
+              [[ "$candidate" =~ ^[0-9a-f]{40}$ && "$candidate" != "$zero" \
+                && "$candidate" == "$(git rev-parse HEAD)" ]] || {
+                echo "Approval-pack push checkout drift" >&2; exit 1; }
+              mapfile -t parents < <(git show -s --format='%P' "$candidate" | tr ' ' '\n')
+              if [[ -z "$EVENT_BEFORE" || "$EVENT_BEFORE" == "$zero" ]]; then
+                [[ "$TRUSTED_COMPARISON_BASE_SHA" == "$fixed" \
+                  && "${#parents[@]}" -eq 1 \
+                  && "${parents[0]}" == ebf829abac6a3fa7128f55aa17186902bf06e7d8 ]] || {
+                  echo "Approval-pack first-publication resolver or parent drift" >&2; exit 1; }
+              else
+                [[ "$TRUSTED_COMPARISON_BASE_SHA" == "$EVENT_BEFORE" ]] || {
+                  echo "Approval-pack predecessor resolver drift" >&2; exit 1; }
+                git cat-file -e "$EVENT_BEFORE^{commit}" 2>/dev/null || {
+                  echo "Approval-pack predecessor unavailable" >&2; exit 1; }
+                git merge-base --is-ancestor "$EVENT_BEFORE" "$candidate"
+                if [[ "${#parents[@]}" -eq 1 ]]; then
+                  [[ "${parents[0]}" == "$EVENT_BEFORE" ]] || {
+                    echo "Approval-pack later push is not a direct fast-forward commit" >&2; exit 1; }
+                elif [[ "${#parents[@]}" -eq 2 ]]; then
+                  [[ "${parents[0]}" == "$fixed" && "$EVENT_BEFORE" == "$fixed" ]] || {
+                    echo "Approval-pack merge first-parent drift" >&2; exit 1; }
+                  feature_head="${parents[1]}"
+                  git merge-base --is-ancestor "$fixed" "$feature_head"
+                  [[ "$(git rev-parse "$candidate^{tree}")" == "$(git rev-parse "$feature_head^{tree}")" ]] || {
+                    echo "Approval-pack merge tree differs from authorized feature tree" >&2; exit 1; }
+                else
+                  echo "Approval-pack unexpected push topology" >&2; exit 1
+                fi
+              fi
+              ;;
+            workflow_dispatch)
+              echo "Booking consent approval-pack architecture dispatch prohibited" >&2
+              exit 1
+              ;;
+            *) echo "Unsupported approval-pack candidate event" >&2; exit 1 ;;
+          esac
+          git cat-file -e "$fixed^{commit}"
+          git cat-file -e "$candidate^{commit}"
+          git merge-base --is-ancestor "$fixed" "$candidate"
+          [[ "$(git rev-parse "$candidate:docs/AYO_BOOKING_CONSENT_APPROVAL_PACK_ARCHITECTURE.md")" == a2285429b91f73de067807ababb0780a088d5e7a \
+            && "$(git rev-parse "$candidate:docs/AYO_BOOKING_CONSENT_APPROVAL_PACK_TEMPLATE.md")" == 5d7218a9bd2ecc5d4561fe6164a6864e50cadb16 \
+            && "$(git rev-parse "$candidate:docs/AYO_DECISION_LOG.md")" == e814581988391fff1a4d388f58c80202c182c0bd \
+            && "$(git rev-parse "$candidate:docs/AYO_ROADMAP.md")" == d5313d04a9d160c38e129217fb4aceae06afb068 \
+            && "$(git rev-parse "$candidate:docs/AYO_BOOKING_CONSENT_DOCUMENT_DELIVERY_CONTRACT_ARCHITECTURE.md")" == 54d69775049d6f0af12fe6ace2bfc5a8cf66ad81 ]] || {
+            echo "Approval-pack documentation identity drift" >&2; exit 1; }
+          echo "Booking consent approval-pack architecture exact candidate identity: PASS"
 
       - name: Bind tested Courier Pickup tree to trusted authoritative base
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'courier-pickup-idempotency-v1'
@@ -2789,7 +3011,7 @@ jobs:
           PY
 
       - name: Verify PostgreSQL 17/PostGIS integration tests without skips
-        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-policy-authority' && steps.evidence_contract.outputs.mode != 'mobile-booking-intent-foundation'
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-policy-authority' && steps.evidence_contract.outputs.mode != 'mobile-booking-intent-foundation' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
         run: uv run --locked pytest -m "integration and not migration" --no-cov -q
 
       - name: Capture Booking consent authority PostgreSQL evidence
@@ -2953,7 +3175,7 @@ jobs:
           PY
 
       - name: Install and verify PostgreSQL 17 client
-        if: (success() || failure()) && steps.postgis.outputs.ready == 'true'
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
         id: pg_client
         run: |
           sudo install -d /usr/share/postgresql-common/pgdg
@@ -2970,7 +3192,7 @@ jobs:
           echo "ready=true" >> "$GITHUB_OUTPUT"
 
       - name: Initialize and verify canonical migration head
-        if: (success() || failure()) && steps.pg_client.outputs.ready == 'true'
+        if: (success() || failure()) && steps.pg_client.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
         id: canonical_schema
         env:
           AYO_DATABASE_URL: postgresql+psycopg://ayo_test:ayo_test_password@127.0.0.1:5432/ayo_certification
@@ -3011,13 +3233,13 @@ jobs:
           echo "ready=true" >> "$GITHUB_OUTPUT"
 
       - name: Certify PostgreSQL backup and restore
-        if: (success() || failure()) && steps.canonical_schema.outputs.ready == 'true'
+        if: (success() || failure()) && steps.canonical_schema.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
         env:
           AYO_TEST_DATABASE_URL: postgresql+psycopg://ayo_test:ayo_test_password@127.0.0.1:5432/ayo_certification
         run: uv run --locked python database/certify_restore.py
 
       - name: Certify Migration 0055 and 0056 round trip
-        if: (success() || failure()) && steps.canonical_schema.outputs.ready == 'true'
+        if: (success() || failure()) && steps.canonical_schema.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
         env:
           AYO_DATABASE_URL: postgresql+psycopg://ayo_test:ayo_test_password@127.0.0.1:5432/ayo_roundtrip
           AYO_DATABASE_SSL_MODE: disable
@@ -3223,7 +3445,7 @@ jobs:
           PY
 
       - name: Remove certification databases before downstream suites
-        if: (success() || failure()) && steps.pg_client.outputs.ready == 'true'
+        if: (success() || failure()) && steps.pg_client.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
         run: |
           uv run --locked python - <<'PY'
           import psycopg
@@ -3295,7 +3517,7 @@ jobs:
           PY
 
       - name: Verify Batch 1 typing evidence equivalence
-        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-document-delivery-architecture'
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-document-delivery-architecture' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
         env:
           EVIDENCE_MODE: ${{ steps.evidence_contract.outputs.mode }}
           BOOKING_CONSENT_MYPY_EVIDENCE_PATH: ${{ runner.temp }}/booking-consent-mypy-v1.txt
@@ -3728,7 +3950,7 @@ jobs:
             source-configured.txt candidate-configured.txt
 
       - name: Scan exact candidate for secrets
-        if: (success() || failure()) && steps.postgis.outputs.ready == 'true'
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
         env:
           BOOKING_CONSENT_SECRET_EVIDENCE_PATH: ${{ runner.temp }}/booking-consent-secrets-v1.txt
           MOBILE_SECRET_EVIDENCE_PATH: ${{ runner.temp }}/mobile-booking-evidence-sections/MOBILE_SECRET_INVENTORY_V1.txt
@@ -4154,6 +4376,186 @@ jobs:
             rm -f candidate-secrets.json base-secrets.json reviewed-secrets-baseline.json
           fi
 
+      - name: Capture Booking consent approval-pack neutral secret inventory
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'booking-consent-approval-pack-architecture'
+        env:
+          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          APPROVAL_PACK_SECRET_EVIDENCE_PATH: ${{ runner.temp }}/booking-consent-approval-pack-secret-inventory-v1.txt
+          APPROVAL_PACK_SECRET_CLEANUP_PATH: ${{ runner.temp }}/booking-consent-approval-pack-secret-cleanup-v1.txt
+        run: |
+          set -euo pipefail
+          zero=0000000000000000000000000000000000000000
+          fixed=6aa98a78953531b637413e54b3afa93c721ae863
+          [[ "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ && "$CANDIDATE_SHA" != "$zero" ]] || {
+            echo "Approval-pack secret candidate malformed" >&2; exit 1; }
+          git cat-file -e "$CANDIDATE_SHA^{commit}" 2>/dev/null || {
+            echo "Approval-pack secret candidate unavailable" >&2; exit 1; }
+          git cat-file -e "$fixed^{commit}" 2>/dev/null || {
+            echo "Approval-pack secret base unavailable" >&2; exit 1; }
+          [[ -n "$RUNNER_TEMP" && "$RUNNER_TEMP" == /* && -d "$RUNNER_TEMP" && ! -L "$RUNNER_TEMP" ]] || {
+            echo "Approval-pack scanner temporary root unsafe" >&2; exit 1; }
+          scan_dir="$(mktemp -d "$RUNNER_TEMP/approval-pack-scan.XXXXXX")"
+          [[ "$scan_dir" == "$RUNNER_TEMP"/approval-pack-scan.* \
+            && -d "$scan_dir" && ! -L "$scan_dir" ]] || {
+            echo "Approval-pack scanner directory unsafe" >&2; exit 1; }
+          candidate_root="$scan_dir/candidate-tree"
+          base_root="$scan_dir/base-tree"
+          candidate_json="$scan_dir/candidate.json"
+          base_json="$scan_dir/base.json"
+          baseline_json="$scan_dir/baseline.json"
+          staged_evidence="$scan_dir/neutral-evidence.txt"
+          mkdir -- "$candidate_root" "$base_root"
+          rm -f -- "$APPROVAL_PACK_SECRET_EVIDENCE_PATH" "$APPROVAL_PACK_SECRET_CLEANUP_PATH"
+
+          cleanup_approval_pack_scan() {
+            local rc=$? cleanup_failed=0
+            trap - EXIT
+            if [[ -z "$scan_dir" || "$scan_dir" != "$RUNNER_TEMP"/approval-pack-scan.* \
+              || "$scan_dir" == "$RUNNER_TEMP" || ! -d "$RUNNER_TEMP" || -L "$RUNNER_TEMP" ]]; then
+              cleanup_failed=1
+            else
+              rm -rf -- "$scan_dir" || cleanup_failed=1
+              [[ ! -e "$scan_dir" && ! -L "$scan_dir" ]] || cleanup_failed=1
+            fi
+            for raw in "$candidate_root" "$base_root" "$candidate_json" "$base_json" \
+              "$baseline_json" "$staged_evidence"; do
+              [[ ! -e "$raw" && ! -L "$raw" ]] || cleanup_failed=1
+            done
+            if [[ "$cleanup_failed" -eq 0 && "$rc" -eq 0 ]]; then
+              printf 'raw_scanner_cleanup=PASS\n' > "$APPROVAL_PACK_SECRET_CLEANUP_PATH"
+            else
+              rm -f -- "$APPROVAL_PACK_SECRET_CLEANUP_PATH" "$APPROVAL_PACK_SECRET_EVIDENCE_PATH"
+              [[ "$cleanup_failed" -eq 0 ]] || rc=1
+            fi
+            exit "$rc"
+          }
+          trap cleanup_approval_pack_scan EXIT
+
+          git archive "$CANDIDATE_SHA" | tar -x -C "$candidate_root"
+          git archive "$fixed" | tar -x -C "$base_root"
+          git show "$CANDIDATE_SHA:.secrets.baseline" > "$baseline_json"
+          [[ "$(git hash-object "$baseline_json")" == 71770a9e529e9af0c9ed5c72549b3a2f7ddcfb02 ]] || {
+            echo "Approval-pack secret baseline drift" >&2; exit 1; }
+          scanner_version="$(uv tool run --from 'detect-secrets==1.5.0' detect-secrets --version)"
+          (
+            cd "$candidate_root"
+            uv tool run --from 'detect-secrets==1.5.0' detect-secrets scan \
+              --all-files --exclude-files '^\.git/'
+          ) > "$candidate_json"
+          (
+            cd "$base_root"
+            uv tool run --from 'detect-secrets==1.5.0' detect-secrets scan \
+              --all-files --exclude-files '^\.git/'
+          ) > "$base_json"
+
+          SCANNER_VERSION="$scanner_version" CANDIDATE_JSON="$candidate_json" \
+            BASE_JSON="$base_json" BASELINE_JSON="$baseline_json" \
+            STAGED_EVIDENCE="$staged_evidence" uv run --locked python - <<'PY'
+          from collections import Counter
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          VERSION = "1.5.0"
+
+          def load(name):
+              try:
+                  value = json.loads(Path(os.environ[name]).read_text(encoding="utf-8"))
+              except (OSError, UnicodeError, json.JSONDecodeError) as error:
+                  raise SystemExit(f"Approval-pack scanner {name} parse failure") from error
+              if not isinstance(value, dict):
+                  raise SystemExit(f"Approval-pack scanner {name} root malformed")
+              return value
+
+          def canonical(value):
+              return json.dumps(value, sort_keys=True, separators=(",", ":"))
+
+          def inventory(scan):
+              results = scan.get("results")
+              if not isinstance(results, dict):
+                  raise SystemExit("Approval-pack scanner results malformed")
+              items = []
+              for raw_path, records in results.items():
+                  if not isinstance(raw_path, str) or not isinstance(records, list):
+                      raise SystemExit("Approval-pack scanner inventory shape malformed")
+                  path = raw_path.replace("\\", "/")
+                  for record in records:
+                      if not isinstance(record, dict):
+                          raise SystemExit("Approval-pack scanner record malformed")
+                      try:
+                          item = (
+                              path, int(record["line_number"]), str(record["type"]),
+                              str(record["hashed_secret"]), bool(record["is_verified"]),
+                          )
+                      except (KeyError, TypeError, ValueError) as error:
+                          raise SystemExit("Approval-pack scanner record fields malformed") from error
+                      items.append(item)
+              if len(items) != len(set(items)):
+                  raise SystemExit("Approval-pack scanner inventory duplicates")
+              return sorted(items)
+
+          def digest(items):
+              data = "\n".join(
+                  f"{path}|{line}|{detector}|{fingerprint}|{str(verified).lower()}"
+                  for path, line, detector, fingerprint, verified in items
+              )
+              return hashlib.sha256(data.encode()).hexdigest()
+
+          candidate_scan = load("CANDIDATE_JSON")
+          base_scan = load("BASE_JSON")
+          baseline = load("BASELINE_JSON")
+          if os.environ["SCANNER_VERSION"] != VERSION:
+              raise SystemExit("Approval-pack scanner executable version drift")
+          for label, scan in (("candidate", candidate_scan), ("base", base_scan)):
+              if scan.get("version") != VERSION:
+                  raise SystemExit(f"Approval-pack {label} scanner version drift")
+              if canonical(scan.get("plugins_used")) != canonical(baseline.get("plugins_used")):
+                  raise SystemExit(f"Approval-pack {label} plugin inventory drift")
+              if canonical(scan.get("filters_used")) != canonical(baseline.get("filters_used")):
+                  raise SystemExit(f"Approval-pack {label} filter inventory drift")
+
+          base = inventory(base_scan)
+          candidate = inventory(candidate_scan)
+          base_only = sorted(set(base) - set(candidate))
+          candidate_only = sorted(set(candidate) - set(base))
+          base_workflow = Counter(
+              (path, detector, fingerprint, verified)
+              for path, _, detector, fingerprint, verified in base
+              if path == ".github/workflows/ci.yml"
+          )
+          candidate_workflow = Counter(
+              (path, detector, fingerprint, verified)
+              for path, _, detector, fingerprint, verified in candidate
+              if path == ".github/workflows/ci.yml"
+          )
+          boundary = "PASS" if base_workflow and not (base_workflow - candidate_workflow) else "FAIL"
+          if boundary != "PASS":
+              raise SystemExit("Approval-pack defensive scanner boundary drift")
+          lines = [
+              "SECRET_INVENTORY_V1",
+              f"scanner_version={VERSION}",
+              f"base_item_count={len(base)}",
+              f"candidate_item_count={len(candidate)}",
+              f"base_inventory_digest={digest(base)}",
+              f"candidate_inventory_digest={digest(candidate)}",
+              f"base_only_item_count={len(base_only)}",
+              f"candidate_only_item_count={len(candidate_only)}",
+              f"defensive_boundary_check={boundary}",
+              "normalized_comparison=COMPLETE_LINE_SENSITIVE_INVENTORY",
+              "END_SECRET_INVENTORY_V1",
+          ]
+          block = "\n".join(lines) + "\n"
+          path = Path(os.environ["STAGED_EVIDENCE"])
+          with path.open("xb") as output:
+              output.write(block.encode()); output.flush(); os.fsync(output.fileno())
+          if path.is_symlink() or path.stat().st_nlink != 1 or path.read_bytes() != block.encode():
+              raise SystemExit("Approval-pack neutral scanner evidence retention drift")
+          PY
+          [[ -f "$staged_evidence" && ! -L "$staged_evidence" ]] || {
+            echo "Approval-pack neutral scanner evidence missing" >&2; exit 1; }
+          mv -- "$staged_evidence" "$APPROVAL_PACK_SECRET_EVIDENCE_PATH"
+
       - name: Verify shared certification dependencies survived MyPy
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true'
         run: |
@@ -4183,23 +4585,23 @@ jobs:
           PY
 
       - name: Verify audit suite against PostgreSQL 17/PostGIS without skips
-        if: (success() || failure()) && steps.postgis.outputs.ready == 'true'
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
         run: uv run --locked pytest -m audit --no-cov -q
 
       - name: Verify session persistence suite without skips
-        if: (success() || failure()) && steps.postgis.outputs.ready == 'true'
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
         run: uv run --locked pytest -m session_persistence --no-cov -q
 
       - name: Verify authentication foundation without skips
-        if: (success() || failure()) && steps.postgis.outputs.ready == 'true'
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
         run: uv run --locked pytest -m authentication --no-cov -q
 
       - name: Verify authorization foundation without skips
-        if: (success() || failure()) && steps.postgis.outputs.ready == 'true'
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
         run: uv run --locked pytest -m authorization --no-cov -q
 
       - name: Verify support foundation without skips
-        if: (success() || failure()) && steps.postgis.outputs.ready == 'true'
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
         run: uv run --locked pytest -m support --no-cov -q
 
       - name: Verify exact historical migration-suite debt
@@ -5116,13 +5518,13 @@ jobs:
           PY
 
       - name: Scan Python source
-        if: (success() || failure()) && steps.postgis.outputs.ready == 'true'
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
         run: >-
           uv run --locked bandit -c pyproject.toml -r
           BACKEND ayo.py database/certify_restore.py
 
       - name: Audit installed dependencies
-        if: (success() || failure()) && steps.postgis.outputs.ready == 'true'
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
         run: uv run --locked pip-audit
 
       - name: Final PostgreSQL lifecycle cleanup
@@ -5190,7 +5592,8 @@ jobs:
             echo "Certified candidate tracked tree is not clean" >&2
             exit 1
           fi
-          if [[ "${{ steps.evidence_contract.outputs.mode }}" == "mobile-booking-intent-foundation" \
+          if [[ ("${{ steps.evidence_contract.outputs.mode }}" == "mobile-booking-intent-foundation" \
+            || "${{ steps.evidence_contract.outputs.mode }}" == "booking-consent-approval-pack-architecture") \
             && -n "$(git status --porcelain --untracked-files=all)" ]]; then
             git status --short --untracked-files=all
             echo "Mobile Booking candidate generated Git-visible artifacts" >&2
@@ -6229,6 +6632,602 @@ jobs:
         if: success() && steps.evidence_contract.outputs.mode == 'booking-consent-document-delivery-architecture' && steps.consent_architecture_admission.outputs.state == 'CAPTURE_ONLY'
         run: |
           echo "booking consent document delivery architecture evidence awaiting CTO admission" >&2
+          exit 1
+
+      - name: Assemble Booking consent approval-pack architecture evidence
+        if: success() && steps.evidence_contract.outputs.mode == 'booking-consent-approval-pack-architecture'
+        env:
+          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          EVIDENCE_PATH: ${{ runner.temp }}/booking-consent-approval-pack-architecture-evidence-v1.txt
+          SECRET_PATH: ${{ runner.temp }}/booking-consent-approval-pack-secret-inventory-v1.txt
+          SECRET_CLEANUP_PATH: ${{ runner.temp }}/booking-consent-approval-pack-secret-cleanup-v1.txt
+        run: |
+          set -euo pipefail
+          uv run --locked python - <<'PY'
+          import hashlib
+          import os
+          import re
+          import subprocess
+          from pathlib import Path
+
+          FIXED = "6aa98a78953531b637413e54b3afa93c721ae863"
+          MANIFEST = [
+              ".github/workflows/ci.yml",
+              "docs/AYO_BOOKING_CONSENT_APPROVAL_PACK_ARCHITECTURE.md",
+              "docs/AYO_BOOKING_CONSENT_APPROVAL_PACK_TEMPLATE.md",
+              "docs/AYO_DECISION_LOG.md",
+              "docs/AYO_ROADMAP.md",
+          ]
+          MANIFEST_FINGERPRINT = "42cc93cdb937c642f67f50356f1081abb4d5576d1515d6f3d0d8593add3cd610"
+          DOCS = {
+              MANIFEST[1]: ("a2285429b91f73de067807ababb0780a088d5e7a", True),
+              MANIFEST[2]: ("5d7218a9bd2ecc5d4561fe6164a6864e50cadb16", True),
+              MANIFEST[3]: ("e814581988391fff1a4d388f58c80202c182c0bd", False),
+              MANIFEST[4]: ("d5313d04a9d160c38e129217fb4aceae06afb068", True),
+          }
+          LIFECYCLE = (
+              "NOT_STARTED", "RESEARCHED_UNVERIFIED", "QUESTION_PREPARED", "SUBMITTED",
+              "ANSWER_RECEIVED_UNVERIFIED", "VERIFIED", "APPROVED", "REJECTED",
+              "EXPIRED", "SUPERSEDED", "BLOCKED",
+          )
+          EMPTY_CONDITION = b"CONDITION_SET_V1\ncondition_count=0\n"
+          EMPTY_CONDITION_SHA = "e34d0c7c0c5ec8a6935d13fec9929b0905ee74b76ecbf49451a032ec3edd8a24"
+          sha = os.environ["CANDIDATE_SHA"]
+          if not re.fullmatch(r"[0-9a-f]{40}", sha) or sha == "0" * 40:
+              raise SystemExit("approval-pack document candidate malformed")
+          commit = subprocess.run(["git", "cat-file", "-e", f"{sha}^{{commit}}"], capture_output=True)
+          if commit.returncode:
+              raise SystemExit("approval-pack document candidate missing")
+
+          def object_bytes(path, expected, terminal_lf):
+              tree = subprocess.run(
+                  ["git", "ls-tree", sha, "--", path], capture_output=True, text=True,
+                  encoding="utf-8", errors="strict",
+              )
+              if tree.returncode:
+                  raise SystemExit(f"approval-pack object command failure: {path}")
+              line = tree.stdout.rstrip("\n")
+              match = re.fullmatch(r"100644 blob ([0-9a-f]{40})\t(.+)", line)
+              if not match or match.group(2) != path:
+                  raise SystemExit(f"approval-pack object missing or non-regular: {path}")
+              if match.group(1) != expected:
+                  raise SystemExit(f"approval-pack object blob drift: {path}")
+              result = subprocess.run(["git", "cat-file", "blob", match.group(1)], capture_output=True)
+              if result.returncode:
+                  raise SystemExit(f"approval-pack blob read failure: {path}")
+              raw = result.stdout
+              if raw.startswith(b"\xef\xbb\xbf") or b"\r" in raw or b"\x00" in raw:
+                  raise SystemExit(f"approval-pack object byte convention drift: {path}")
+              try:
+                  text = raw.decode("utf-8")
+              except UnicodeDecodeError as error:
+                  raise SystemExit(f"approval-pack object encoding drift: {path}") from error
+              if raw.endswith(b"\n") != terminal_lf:
+                  raise SystemExit(f"approval-pack object terminal newline drift: {path}")
+              return text
+
+          texts = {path: object_bytes(path, *contract) for path, contract in DOCS.items()}
+          architecture, template, decision, roadmap = (texts[path] for path in MANIFEST[1:])
+
+          def require(text, tokens, label):
+              missing = [token for token in tokens if token not in text]
+              if missing:
+                  raise ValueError(f"{label} missing governed structure: {missing[0]}")
+
+          def validate_documents(documents):
+              arch, form, log, road = documents
+              headings = [
+                  "## 1. Purpose", "## 2. Existing architecture truth", "## 3. Research basis and limitations",
+                  "## 4. Goals", "## 5. Non-goals", "## 6. Approval domains", "## 7. Evidence types",
+                  "## 8. Decision and status model", "## 9. Authority and separation of duties",
+                  "## 10. Source provenance", "## 11. Legal-instrument classification",
+                  "## 12. Counsel and regulator answer governance", "## 13. Language and rendition approvals",
+                  "## 14. Accessibility approval", "## 15. Privacy and retention decisions",
+                  "## 16. Rotation and withdrawal decisions", "## 17. Product and security approvals",
+                  "## 18. Founder approval and red lines", "## 19. Expiry and re-review",
+                  "## 20. Conflict and uncertainty handling", "## 21. Implementation gates",
+                  "## 22. Activation gates", "## 23. Audit and privacy", "## 24. Failure model",
+                  "## 25. Threat model", "## 26. Alternatives rejected", "## 27. CI consequences",
+                  "## 28. Production prohibition", "## 29. Open decisions",
+              ]
+              positions = [arch.find(item) for item in headings]
+              if any(pos < 0 for pos in positions) or positions != sorted(positions):
+                  raise ValueError("architecture heading inventory/order drift")
+              require(arch, [
+                  "PROPOSED / PRE-PRODUCTION", "21. production authorization.", "NOT_STARTED",
+                  "ANSWER_RECEIVED_UNVERIFIED", "SUPERSEDED", "NOT_APPROVED",
+                  "No checkbox, button, tap", "condition-set ID", "condition-set fingerprint",
+                  EMPTY_CONDITION_SHA, "authoritative evidence store is `UNRESOLVED`",
+                  "Ibrahim Hambentu Shibiru, Founder & CEO", "Ethiopia",
+                  "WCAG 2.2 Level AA", "WCAG2Mobile", "Production is inactive and prohibited",
+              ], "architecture")
+              if tuple(re.findall(r"`(NOT_STARTED|RESEARCHED_UNVERIFIED|QUESTION_PREPARED|SUBMITTED|ANSWER_RECEIVED_UNVERIFIED|VERIFIED|APPROVED|REJECTED|EXPIRED|SUPERSEDED|BLOCKED)`", arch)[:11]) != LIFECYCLE:
+                  raise ValueError("lifecycle enumeration drift")
+              if "`NOT_APPROVED` is only the safe default for an approval or authorization result and is never a lifecycle state" not in arch:
+                  raise ValueError("approval-result separation drift")
+              require(arch, [
+                  "Direct approval is prohibited", "new attributable decision version",
+                  "widened retroactively", "Cross-jurisdiction", "cross-rendition",
+                  "Git contains only safe governance metadata", "must not be committed",
+                  "No self-approval", "maker-checker", "permanent red line",
+                  "material byte change", "nonexistent future UI",
+                  "canonical nonnegative decimal condition count", "complete ordered condition inventory",
+                  "Every applicable condition must be current and `SATISFIED`",
+                  "invalidates the evidence-bundle fingerprint",
+                  "Translator, native-language reviewer and legal-equivalence reviewer are distinct roles",
+                  "Every accessibility decision binds exact rendition",
+                  "evidence-link rot", "insider collusion", "separation-of-duties bypass",
+              ], "architecture controls")
+              template_headings = [f"## {number}." for number in range(1, 26)]
+              if any(form.count(marker) != 1 for marker in template_headings):
+                  raise ValueError("template component inventory drift")
+              require(form, [
+                  "TEMPLATE / NOT APPROVED / PRE-PRODUCTION", "Current lifecycle state | `NOT_STARTED`",
+                  "Approval result | `NOT_APPROVED`", "Complete ordered condition inventory",
+                  EMPTY_CONDITION_SHA, "explicitly empty ordered inventory `[]`",
+                  "Overall result: `BLOCKED`", "Production | `PROHIBITED`",
+                  "Authoritative evidence store: `UNRESOLVED`",
+              ], "template")
+              if re.search(r"\|\s*Status\s*\|", form):
+                  raise ValueError("generic Status table header remains")
+              if "NOT_APPROVED` is an approval/authorization-result default, never a lifecycle state" not in form:
+                  raise ValueError("template lifecycle/result separation drift")
+              unsafe_scenarios = (
+                  "All fields blank", "One approval present", "All except Legal", "All except language",
+                  "All except accessibility", "Founder approved with a missing prerequisite",
+                  "Expired Legal approval", "Conflicting regulator answers", "Permanent red-line conflict",
+                  "Implementation approved while production is prohibited",
+                  "Every prerequisite valid but production authorization absent",
+              )
+              for scenario in unsafe_scenarios:
+                  if not re.search(rf"\|\s*{re.escape(scenario)}\s*\|\s*`BLOCKED", form):
+                      raise ValueError(f"derived gate scenario drift: {scenario}")
+              if log.count("### AP-076 ") != 1 or log.count("### AP-077 ") != 1:
+                  raise ValueError("AP-076/AP-077 uniqueness drift")
+              require(log, ["Lifecycle state is a closed eleven-state", "fingerprinted complete condition set"], "AP-077")
+              stages = [
+                  "governed consent approval-pack architecture", "attributable written external decisions and approvals",
+                  "passive authenticated consent-document delivery implementation", "mobile consent-presentation foundation",
+                  "dependency reachability review", "durable encrypted confirmation-intent and authoritative recovery architecture",
+                  "executable confirmation/recovery", "UI/navigation integration",
+                  "separately authorized deployment", "separate production authorization",
+              ]
+              locations = [road.lower().find(stage.lower()) for stage in stages]
+              if any(pos < 0 for pos in locations) or locations != sorted(locations):
+                  raise ValueError("ten-stage roadmap ordering drift")
+              combined = "\n".join(documents).lower()
+              forbidden = (
+                  "status: approved", "production is authorized", "worldwide compliance is established",
+                  "legal compliance is confirmed", "all languages are approved",
+              )
+              if any(item in combined for item in forbidden):
+                  raise ValueError("prohibited approval or authority claim")
+              return True
+
+          try:
+              validate_documents((architecture, template, decision, roadmap))
+          except ValueError as error:
+              raise SystemExit(f"approval-pack governance validation failed: {error}") from error
+          mutations = {
+              "domain_count": architecture.replace("21. production authorization.", "20. production authorization.", 1),
+              "lifecycle_result": architecture.replace("and is never a lifecycle state", "and is a lifecycle state", 1),
+              "direct_approval": architecture.replace("Direct approval is prohibited", "Direct approval is permitted", 1),
+              "condition_fingerprint": architecture.replace(EMPTY_CONDITION_SHA, "0" * 64, 1),
+              "custody": architecture.replace("authoritative evidence store is `UNRESOLVED`", "authoritative evidence store is selected", 1),
+              "same_actor": architecture.replace("No self-approval", "Self-approval", 1),
+              "red_line": architecture.replace("permanent red line", "optional red line", 1),
+              "jurisdiction": architecture.replace("Cross-jurisdiction", "Cross-border", 1),
+              "rendition": architecture.replace("material byte change", "editorial byte change", 1),
+              "ui_binding": architecture.replace("nonexistent future UI", "future UI", 1),
+              "threat": architecture.replace("insider collusion", "internal issue", 1),
+              "condition_count": architecture.replace("canonical nonnegative decimal condition count", "condition count", 1),
+              "condition_inventory": architecture.replace("complete ordered condition inventory", "condition inventory", 1),
+              "condition_satisfaction": architecture.replace("Every applicable condition must be current and `SATISFIED`", "Some conditions may be pending", 1),
+              "bundle_binding": architecture.replace("invalidates the evidence-bundle fingerprint", "does not affect the evidence bundle", 1),
+              "role_collision": architecture.replace("Translator, native-language reviewer and legal-equivalence reviewer are distinct roles", "One reviewer may perform every language role", 1),
+              "accessibility_scope": architecture.replace("Every accessibility decision binds exact rendition", "Accessibility decisions are generic", 1),
+          }
+          for case, altered in mutations.items():
+              try:
+                  validate_documents((altered, template, decision, roadmap))
+              except ValueError:
+                  continue
+              raise SystemExit(f"approval-pack connected negative unexpectedly passed: {case}")
+          template_mutations = {
+              "generic_status": template.replace("| Lifecycle state |", "| Status |", 1),
+              "initial_state": template.replace("Current lifecycle state | `NOT_STARTED`", "Current lifecycle state | `APPROVED`", 1),
+              "approval_default": template.replace("Approval result | `NOT_APPROVED`", "Approval result | `APPROVED`", 1),
+              "zero_inventory": template.replace("explicitly empty ordered inventory `[]`", "omitted inventory", 1),
+              "blank_gate": template.replace("| All fields blank | `BLOCKED` |", "| All fields blank | `APPROVED` |", 1),
+              "founder_bypass": template.replace("| Founder approved with a missing prerequisite | `BLOCKED` |", "| Founder approved with a missing prerequisite | `APPROVED` |", 1),
+              "production_bypass": template.replace("| Every prerequisite valid but production authorization absent | `BLOCKED` for production |", "| Every prerequisite valid but production authorization absent | `APPROVED` |", 1),
+          }
+          for case, altered in template_mutations.items():
+              try:
+                  validate_documents((architecture, altered, decision, roadmap))
+              except ValueError:
+                  continue
+              raise SystemExit(f"approval-pack template negative unexpectedly passed: {case}")
+          if hashlib.sha256(EMPTY_CONDITION).hexdigest() != EMPTY_CONDITION_SHA:
+              raise SystemExit("governed empty condition fingerprint drift")
+
+          manifest = subprocess.check_output(
+              ["git", "diff", "--name-only", "-z", FIXED, sha]
+          ).split(b"\0")[:-1]
+          decoded_manifest = [item.decode("utf-8") for item in manifest]
+          if decoded_manifest != MANIFEST:
+              raise SystemExit("approval-pack evidence manifest drift")
+          if hashlib.sha256("\n".join(decoded_manifest).encode()).hexdigest() != MANIFEST_FINGERPRINT:
+              raise SystemExit("approval-pack evidence manifest fingerprint drift")
+
+          def read_kv_block(path, start, end):
+              raw = Path(path).read_bytes()
+              if raw.startswith(b"\xef\xbb\xbf") or b"\r" in raw or not raw.endswith(b"\n"):
+                  raise SystemExit(f"approval-pack intermediate byte drift: {start}")
+              lines = raw.decode("utf-8").splitlines()
+              if lines[0] != start or lines[-1] != end:
+                  raise SystemExit(f"approval-pack intermediate envelope drift: {start}")
+              fields = []
+              for line in lines[1:-1]:
+                  if line.count("=") != 1:
+                      raise SystemExit(f"approval-pack intermediate field drift: {start}")
+                  fields.append(line)
+              return fields
+
+          secret_fields = read_kv_block(os.environ["SECRET_PATH"], "SECRET_INVENTORY_V1", "END_SECRET_INVENTORY_V1")
+          cleanup_fields = Path(os.environ["SECRET_CLEANUP_PATH"]).read_text(encoding="utf-8").splitlines()
+          if cleanup_fields != ["raw_scanner_cleanup=PASS"]:
+              raise SystemExit("approval-pack scanner cleanup evidence drift")
+          event_fields = [
+              "event_authority=PASS", "ancestry_topology=PASS", "fixed_base_authority=PASS",
+              "manifest_validation=PASS",
+          ]
+          sections = [
+              ("APPROVAL_PACK_IDENTITY_V1", [
+                  "approval_pack_architecture_blob=a2285429b91f73de067807ababb0780a088d5e7a",
+                  "approval_pack_template_blob=5d7218a9bd2ecc5d4561fe6164a6864e50cadb16",
+                  "decision_log_blob=e814581988391fff1a4d388f58c80202c182c0bd",
+                  "roadmap_blob=d5313d04a9d160c38e129217fb4aceae06afb068",
+                  "consent_document_architecture_blob=54d69775049d6f0af12fe6ace2bfc5a8cf66ad81",
+              ]),
+              ("EVENT_ANCESTRY_AND_MANIFEST_V1", event_fields),
+              ("DOCUMENT_OBJECT_INTEGRITY_V1", [
+                  "committed_object_validation=PASS", "utf8_without_bom=PASS",
+                  "newline_contract=PASS", "cross_document_consistency=PASS",
+              ]),
+              ("LIFECYCLE_AND_TRANSITION_GOVERNANCE_V1", [
+                  "approval_domain_count=21", "lifecycle_state_count=11",
+                  "lifecycle_result_separation=PASS", "transition_governance=PASS",
+                  "direct_approval_rejection=PASS", "decision_versioning=PASS",
+              ]),
+              ("CONDITION_SET_AND_FINAL_GATE_V1", [
+                  f"empty_condition_set_digest={EMPTY_CONDITION_SHA}",
+                  "condition_inventory_reconciliation=PASS", "evidence_bundle_binding=PASS",
+                  "derived_final_gate_scenarios=PASS",
+              ]),
+              ("CUSTODY_SEPARATION_AND_RED_LINES_V1", [
+                  "evidence_authenticity_custody=PASS", "authoritative_evidence_store=UNRESOLVED",
+                  "confidential_evidence_git_exclusion=PASS", "separation_of_duties=PASS",
+                  "founder_red_lines=PASS",
+              ]),
+              ("JURISDICTION_RENDITION_ACCESSIBILITY_V1", [
+                  "ethiopia_profile_only=PASS", "future_jurisdiction_separation=PASS",
+                  "rendition_binding=PASS", "accessibility_binding=PASS",
+              ]),
+              ("IMMUTABLE_EXECUTABLE_PROVENANCE_V1", [
+                  "root_tests_tree=2dbcb487bd27578a95d0db9a31c21ecde7032114",
+                  "mobile_tree=da39714a911ffbf02171d28348c88a39eab2d938",
+                  "mobile_tests_tree=d7143a733cf14e70851406dab8131ce7c69dd364",
+                  "backend_tree=62500035ef60d94ccc6333f25cb3aa79ff5c3f21",
+                  "migration_tree=253ecedebe58c31077a0baa7d2532adc46464f70",
+                  "mobile_package_blob=b4c26fea6a74ac9c1d3a442eb855cf63538fb5e2",
+                  "mobile_lockfile_blob=ace7192e4a749f61a011f8e4293ccd1e053d648a",
+                  "root_package_blob=6b8425f6ed81258388c4e6bba39c80af0afa7fef",
+                  "root_lockfile_blob=6a08d31b721b486950fd06df0ca3430fcbe8aabf",
+                  "secret_baseline_blob=71770a9e529e9af0c9ed5c72549b3a2f7ddcfb02",
+                  "alembic_config_blob=a2353502812251c10e36f8cd534de71c1dcca58b",
+                  "python_version_blob=ebe773d9eeab42ab1f896401f5b9c581f88d6709",
+                  "executable_tree_diff=EMPTY", "dependency_blob_diff=EMPTY",
+                  "schema_migration_diff=EMPTY", "executable_validation_reused=NO",
+                  "historical_evidence_relabelled=NO", "architecture_validation=PASS",
+              ]),
+              ("SECRET_INVENTORY_V1", secret_fields),
+              ("WORKFLOW_STRUCTURE_CLEANUP_AND_CLEANLINESS_V1", [
+                  *cleanup_fields, "workflow_structure_validation=PASS",
+                  "candidate_tree_cleanliness=PASS", "production_prohibition=PASS",
+              ]),
+          ]
+          lines = [
+              "BOOKING_CONSENT_APPROVAL_PACK_ARCHITECTURE_EVIDENCE_V1",
+              "event_scope=push-and-pull-request-comparable",
+              "mode=booking-consent-approval-pack-architecture", f"candidate_sha={sha}",
+              f"governed_base={FIXED}", "manifest_count=5",
+              f"manifest_fingerprint={MANIFEST_FINGERPRINT}",
+          ]
+          for marker, fields in sections:
+              lines.extend([marker, *fields, f"END_{marker}"])
+          lines.append("END_BOOKING_CONSENT_APPROVAL_PACK_ARCHITECTURE_EVIDENCE_V1")
+          block = "\n".join(lines) + "\n"
+          encoded = block.encode("utf-8")
+          if len(encoded) > 16384 or len(lines) > 160:
+              raise SystemExit("approval-pack evidence bound exceeded")
+          unsafe = re.compile(r"https?://|traceback|environment dump|raw scanner|source excerpt|legal correspondence|credential", re.I)
+          if unsafe.search(block):
+              raise SystemExit("unsafe content entered approval-pack evidence")
+          path = Path(os.environ["EVIDENCE_PATH"])
+          if path.exists() or path.is_symlink():
+              raise SystemExit("approval-pack evidence path already exists")
+          with path.open("xb") as output:
+              output.write(encoded); output.flush(); os.fsync(output.fileno())
+          if path.is_symlink() or path.stat().st_nlink != 1 or path.read_bytes() != encoded:
+              raise SystemExit("approval-pack evidence retention drift")
+          print("Booking consent approval-pack committed governance validation: PASS")
+          PY
+
+      - name: Verify Booking consent approval-pack architecture capture state
+        id: approval_pack_admission
+        if: success() && steps.evidence_contract.outputs.mode == 'booking-consent-approval-pack-architecture'
+        env:
+          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          EVIDENCE_PATH: ${{ runner.temp }}/booking-consent-approval-pack-architecture-evidence-v1.txt
+          APPROVAL_PACK_ADMISSION_STATE: APPROVAL_PACK_ARCHITECTURE_CAPTURE_PENDING_CTO_REVIEW
+        run: |
+          set -euo pipefail
+          uv run --locked python - <<'PY'
+          import hashlib
+          import os
+          import re
+          from pathlib import Path
+
+          ADMISSION_STATE = os.environ["APPROVAL_PACK_ADMISSION_STATE"]
+          ACTIVE_STATE = "ADMITTED_PREPRODUCTION_APPROVAL_PACK_ARCHITECTURE_EVIDENCE"
+          CAPTURE_STATE_DIGEST = "d40efd98b72427fee69360348a85886d9dc4310200b86dcb36a08c7bcbdd69ca"
+          REVIEWED_COMMITMENT = bytes(32)
+          MAGIC = "BOOKING_CONSENT_APPROVAL_PACK_ARCHITECTURE_EVIDENCE_V1"
+          END = "END_BOOKING_CONSENT_APPROVAL_PACK_ARCHITECTURE_EVIDENCE_V1"
+          SECTION_FIELDS = [
+              ("APPROVAL_PACK_IDENTITY_V1", ["approval_pack_architecture_blob", "approval_pack_template_blob", "decision_log_blob", "roadmap_blob", "consent_document_architecture_blob"]),
+              ("EVENT_ANCESTRY_AND_MANIFEST_V1", ["event_authority", "ancestry_topology", "fixed_base_authority", "manifest_validation"]),
+              ("DOCUMENT_OBJECT_INTEGRITY_V1", ["committed_object_validation", "utf8_without_bom", "newline_contract", "cross_document_consistency"]),
+              ("LIFECYCLE_AND_TRANSITION_GOVERNANCE_V1", ["approval_domain_count", "lifecycle_state_count", "lifecycle_result_separation", "transition_governance", "direct_approval_rejection", "decision_versioning"]),
+              ("CONDITION_SET_AND_FINAL_GATE_V1", ["empty_condition_set_digest", "condition_inventory_reconciliation", "evidence_bundle_binding", "derived_final_gate_scenarios"]),
+              ("CUSTODY_SEPARATION_AND_RED_LINES_V1", ["evidence_authenticity_custody", "authoritative_evidence_store", "confidential_evidence_git_exclusion", "separation_of_duties", "founder_red_lines"]),
+              ("JURISDICTION_RENDITION_ACCESSIBILITY_V1", ["ethiopia_profile_only", "future_jurisdiction_separation", "rendition_binding", "accessibility_binding"]),
+              ("IMMUTABLE_EXECUTABLE_PROVENANCE_V1", ["root_tests_tree", "mobile_tree", "mobile_tests_tree", "backend_tree", "migration_tree", "mobile_package_blob", "mobile_lockfile_blob", "root_package_blob", "root_lockfile_blob", "secret_baseline_blob", "alembic_config_blob", "python_version_blob", "executable_tree_diff", "dependency_blob_diff", "schema_migration_diff", "executable_validation_reused", "historical_evidence_relabelled", "architecture_validation"]),
+              ("SECRET_INVENTORY_V1", ["scanner_version", "base_item_count", "candidate_item_count", "base_inventory_digest", "candidate_inventory_digest", "base_only_item_count", "candidate_only_item_count", "defensive_boundary_check", "normalized_comparison"]),
+              ("WORKFLOW_STRUCTURE_CLEANUP_AND_CLEANLINESS_V1", ["raw_scanner_cleanup", "workflow_structure_validation", "candidate_tree_cleanliness", "production_prohibition"]),
+          ]
+          ENVELOPE = ["event_scope", "mode", "candidate_sha", "governed_base", "manifest_count", "manifest_fingerprint"]
+          FIXED_VALUES = {
+              "event_scope": "push-and-pull-request-comparable", "mode": "booking-consent-approval-pack-architecture",
+              "governed_base": "6aa98a78953531b637413e54b3afa93c721ae863", "manifest_count": "5",
+              "manifest_fingerprint": "42cc93cdb937c642f67f50356f1081abb4d5576d1515d6f3d0d8593add3cd610",
+              "approval_pack_architecture_blob": "a2285429b91f73de067807ababb0780a088d5e7a",
+              "approval_pack_template_blob": "5d7218a9bd2ecc5d4561fe6164a6864e50cadb16",
+              "decision_log_blob": "e814581988391fff1a4d388f58c80202c182c0bd",
+              "roadmap_blob": "d5313d04a9d160c38e129217fb4aceae06afb068",
+              "consent_document_architecture_blob": "54d69775049d6f0af12fe6ace2bfc5a8cf66ad81",
+              "root_tests_tree": "2dbcb487bd27578a95d0db9a31c21ecde7032114",
+              "mobile_tree": "da39714a911ffbf02171d28348c88a39eab2d938",
+              "mobile_tests_tree": "d7143a733cf14e70851406dab8131ce7c69dd364",
+              "backend_tree": "62500035ef60d94ccc6333f25cb3aa79ff5c3f21",
+              "migration_tree": "253ecedebe58c31077a0baa7d2532adc46464f70",
+              "mobile_package_blob": "b4c26fea6a74ac9c1d3a442eb855cf63538fb5e2",
+              "mobile_lockfile_blob": "ace7192e4a749f61a011f8e4293ccd1e053d648a",
+              "root_package_blob": "6b8425f6ed81258388c4e6bba39c80af0afa7fef",
+              "root_lockfile_blob": "6a08d31b721b486950fd06df0ca3430fcbe8aabf",
+              "secret_baseline_blob": "71770a9e529e9af0c9ed5c72549b3a2f7ddcfb02",
+              "alembic_config_blob": "a2353502812251c10e36f8cd534de71c1dcca58b",
+              "python_version_blob": "ebe773d9eeab42ab1f896401f5b9c581f88d6709",
+              "approval_domain_count": "21", "lifecycle_state_count": "11",
+              "empty_condition_set_digest": "e34d0c7c0c5ec8a6935d13fec9929b0905ee74b76ecbf49451a032ec3edd8a24",
+              "authoritative_evidence_store": "UNRESOLVED", "scanner_version": "1.5.0",
+              "normalized_comparison": "COMPLETE_LINE_SENSITIVE_INVENTORY",
+              "executable_tree_diff": "EMPTY", "dependency_blob_diff": "EMPTY",
+              "schema_migration_diff": "EMPTY", "executable_validation_reused": "NO",
+              "historical_evidence_relabelled": "NO", "architecture_validation": "PASS",
+          }
+          PASS_FIELDS = {
+              "event_authority", "ancestry_topology", "fixed_base_authority", "manifest_validation",
+              "committed_object_validation", "utf8_without_bom", "newline_contract", "cross_document_consistency",
+              "lifecycle_result_separation", "transition_governance", "direct_approval_rejection", "decision_versioning",
+              "condition_inventory_reconciliation", "evidence_bundle_binding", "derived_final_gate_scenarios",
+              "evidence_authenticity_custody", "confidential_evidence_git_exclusion", "separation_of_duties",
+              "founder_red_lines", "ethiopia_profile_only", "future_jurisdiction_separation", "rendition_binding",
+              "accessibility_binding", "defensive_boundary_check", "raw_scanner_cleanup",
+              "workflow_structure_validation", "candidate_tree_cleanliness", "production_prohibition",
+          }
+          HEX40_FIELDS = {name for _, names in SECTION_FIELDS for name in names if name.endswith(("_blob", "_tree"))}
+          DECIMAL_FIELDS = {"manifest_count", "approval_domain_count", "lifecycle_state_count", "base_item_count", "candidate_item_count", "base_only_item_count", "candidate_only_item_count"}
+          HEX64_FIELDS = {"manifest_fingerprint", "empty_condition_set_digest", "base_inventory_digest", "candidate_inventory_digest"}
+
+          def verify(raw):
+              if len(raw) not in range(1, 16385) or raw.startswith(b"\xef\xbb\xbf") or b"\r" in raw or b"\x00" in raw or not raw.endswith(b"\n"):
+                  raise ValueError("evidence byte contract")
+              text = raw.decode("utf-8")
+              if re.search(r"https?://|traceback|environment dump|raw scanner|source excerpt|legal correspondence|credential", text, re.I):
+                  raise ValueError("unsafe evidence content")
+              lines = text.splitlines()
+              if len(lines) > 160 or lines[0] != MAGIC or lines[-1] != END:
+                  raise ValueError("evidence envelope")
+              cursor = 1; values = {}; order = []
+              def field(line, expected):
+                  if line.count("=") != 1:
+                      raise ValueError("malformed field")
+                  key, value = line.split("=", 1)
+                  if key != expected or key in values:
+                      raise ValueError("field inventory/order")
+                  values[key] = value; order.append(key)
+              for name in ENVELOPE:
+                  field(lines[cursor], name); cursor += 1
+              for marker, names in SECTION_FIELDS:
+                  if lines[cursor] != marker:
+                      raise ValueError("section start/order")
+                  cursor += 1
+                  for name in names:
+                      field(lines[cursor], name); cursor += 1
+                  if lines[cursor] != f"END_{marker}":
+                      raise ValueError("section end/pairing")
+                  cursor += 1
+              if cursor != len(lines) - 1:
+                  raise ValueError("unknown trailing content")
+              if values["candidate_sha"] != os.environ["CANDIDATE_SHA"] or not re.fullmatch(r"[0-9a-f]{40}", values["candidate_sha"]):
+                  raise ValueError("runtime candidate identity")
+              for key, expected in FIXED_VALUES.items():
+                  if values.get(key) != expected:
+                      raise ValueError(f"fixed value: {key}")
+              for key in PASS_FIELDS:
+                  if values.get(key) != "PASS": raise ValueError(f"PASS field: {key}")
+              for key in DECIMAL_FIELDS:
+                  if not re.fullmatch(r"0|[1-9][0-9]*", values.get(key, "")): raise ValueError(f"decimal: {key}")
+              for key in HEX40_FIELDS:
+                  if not re.fullmatch(r"[0-9a-f]{40}", values.get(key, "")): raise ValueError(f"hex40: {key}")
+              for key in HEX64_FIELDS:
+                  if not re.fullmatch(r"[0-9a-f]{64}", values.get(key, "")): raise ValueError(f"hex64: {key}")
+              if (
+                  int(values["base_only_item_count"]) > int(values["base_item_count"])
+                  or int(values["candidate_only_item_count"]) > int(values["candidate_item_count"])
+              ):
+                  raise ValueError("secret inventory arithmetic")
+              normalized = re.sub(rb"(?m)^candidate_sha=[0-9a-f]{40}$", b"candidate_sha=" + b"0" * 40, raw)
+              if normalized == raw or len(re.findall(rb"(?m)^candidate_sha=[0-9a-f]{40}$", raw)) != 1:
+                  raise ValueError("candidate normalization")
+              return hashlib.sha256(normalized).digest()
+
+          path = Path(os.environ["EVIDENCE_PATH"]); raw = path.read_bytes()
+          if path.is_symlink() or not path.is_file() or path.stat().st_nlink != 1 or path.stat().st_size != len(raw):
+              raise SystemExit("approval-pack evidence file is unsafe")
+          try: commitment = verify(raw)
+          except (UnicodeError, ValueError) as error: raise SystemExit(f"approval-pack evidence verification failed: {error}") from error
+          if ADMISSION_STATE == ACTIVE_STATE:
+              if REVIEWED_COMMITMENT == bytes(32) or commitment != REVIEWED_COMMITMENT:
+                  raise SystemExit("approval-pack active commitment mismatch")
+              result = "ADMITTED"
+          elif hashlib.sha256(ADMISSION_STATE.encode()).hexdigest() == CAPTURE_STATE_DIGEST:
+              if REVIEWED_COMMITMENT != bytes(32):
+                  raise SystemExit("approval-pack capture commitment must be neutral")
+              result = "CAPTURE_ONLY"
+          else:
+              raise SystemExit("approval-pack admission state unknown")
+
+          mutation_lines = raw.decode().splitlines()
+          governed_indices = [1, 2, 4, 6]
+          for marker, _ in SECTION_FIELDS:
+              governed_indices.append(mutation_lines.index(marker) + 1)
+          for index in governed_indices:
+              altered = mutation_lines.copy(); altered[index] += "x"
+              try: verify(("\n".join(altered) + "\n").encode())
+              except ValueError: continue
+              raise SystemExit(f"approval-pack evidence mutation accepted at line {index}")
+          structural_mutations = {
+              "extra_section": mutation_lines[:-1] + ["UNKNOWN_V1", "END_UNKNOWN_V1", mutation_lines[-1]],
+              "missing_section": [line for line in mutation_lines if line not in ("CONDITION_SET_AND_FINAL_GATE_V1", "END_CONDITION_SET_AND_FINAL_GATE_V1")],
+              "duplicate_field": mutation_lines[:3] + [mutation_lines[2]] + mutation_lines[3:],
+              "reordered_section": mutation_lines[:mutation_lines.index("DOCUMENT_OBJECT_INTEGRITY_V1")] + mutation_lines[mutation_lines.index("LIFECYCLE_AND_TRANSITION_GOVERNANCE_V1"):mutation_lines.index("END_LIFECYCLE_AND_TRANSITION_GOVERNANCE_V1")+1] + mutation_lines[mutation_lines.index("DOCUMENT_OBJECT_INTEGRITY_V1"):mutation_lines.index("LIFECYCLE_AND_TRANSITION_GOVERNANCE_V1")] + mutation_lines[mutation_lines.index("END_LIFECYCLE_AND_TRANSITION_GOVERNANCE_V1")+1:],
+          }
+          for case, altered in structural_mutations.items():
+              try: verify(("\n".join(altered) + "\n").encode())
+              except (ValueError, UnicodeError): continue
+              raise SystemExit(f"approval-pack schema mutation accepted: {case}")
+
+          workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
+          if workflow.count(ADMISSION_STATE) != 1:
+              raise SystemExit("approval-pack capture sentinel authority drift")
+          action_pins = (
+              "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
+              "actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065",
+              "actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020",
+              "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+          )
+          if any(workflow.count(pin) < 1 for pin in action_pins): raise SystemExit("action pin drift")
+          upload_name = "Upload Booking consent approval-pack architecture capture evidence"
+          stop_name = "Stop Booking consent approval-pack architecture pending CTO admission"
+          upload_match = re.search(rf"(?m)^      - name: {re.escape(upload_name)}$", workflow)
+          stop_match = re.search(rf"(?m)^      - name: {re.escape(stop_name)}$", workflow)
+          if not upload_match or not stop_match or upload_match.start() >= stop_match.start():
+              raise SystemExit("approval-pack artifact ordering drift")
+          condition = "steps.approval_pack_admission.outputs.state == 'CAPTURE_ONLY'"
+          upload = workflow[upload_match.start():stop_match.start()]
+          stop = workflow[stop_match.start():]
+          if condition not in upload or condition not in stop:
+              raise SystemExit("approval-pack capture predicate drift")
+          def step_block(name):
+              match = re.search(rf"(?m)^      - name: {re.escape(name)}$", workflow)
+              if not match:
+                  raise SystemExit(f"approval-pack required step missing: {name}")
+              following = re.search(r"(?m)^      - name: ", workflow[match.end():])
+              end = match.end() + following.start() if following else len(workflow)
+              return workflow[match.start():end]
+          selector = step_block("Select exact governed evidence contract")
+          preflight = step_block("Preflight Booking consent approval-pack architecture authority before tooling")
+          identity = step_block("Bind exact Booking consent approval-pack architecture candidate identity")
+          scanner = step_block("Capture Booking consent approval-pack neutral secret inventory")
+          selector_tokens = (
+              "mode=booking-consent-approval-pack-architecture",
+              "a2285429b91f73de067807ababb0780a088d5e7a",
+              "5d7218a9bd2ecc5d4561fe6164a6864e50cadb16",
+              "e814581988391fff1a4d388f58c80202c182c0bd",
+              "d5313d04a9d160c38e129217fb4aceae06afb068",
+              "Missing Booking consent approval-pack architecture identity",
+              "Unreviewed Booking consent approval-pack architecture identity",
+          )
+          if any(token not in selector for token in selector_tokens):
+              raise SystemExit("approval-pack selector predicate drift")
+          authority_tokens = (
+              "6aa98a78953531b637413e54b3afa93c721ae863",
+              "42cc93cdb937c642f67f50356f1081abb4d5576d1515d6f3d0d8593add3cd610",
+              "workflow_dispatch", "pull_request", "EVENT_BEFORE", "merge-base --is-ancestor",
+              ".github/workflows/ci.yml", "docs/AYO_BOOKING_CONSENT_APPROVAL_PACK_ARCHITECTURE.md",
+              "docs/AYO_BOOKING_CONSENT_APPROVAL_PACK_TEMPLATE.md",
+          )
+          if any(token not in preflight or token not in identity for token in authority_tokens[:1]):
+              raise SystemExit("approval-pack fixed-base predicate drift")
+          if any(token not in preflight for token in authority_tokens[1:]):
+              raise SystemExit("approval-pack event or manifest predicate drift")
+          identity_tokens = (
+              "TRUSTED_COMPARISON_BASE_SHA", "PR_HEAD_SHA", "PR_BASE_SHA",
+              "${#parents[@]}", "${parents[0]}", "feature_head", "candidate^{tree}",
+              "dispatch prohibited",
+          )
+          if any(token not in identity for token in identity_tokens):
+              raise SystemExit("approval-pack topology predicate drift")
+          if scanner.index("trap cleanup_approval_pack_scan EXIT") >= scanner.index("git archive"):
+              raise SystemExit("approval-pack scanner trap ordering drift")
+          scanner_tokens = (
+              "detect-secrets==1.5.0", "COMPLETE_LINE_SENSITIVE_INVENTORY",
+              "raw_scanner_cleanup=PASS", "candidate.json", "base.json", "baseline.json",
+              "rm -rf -- \"$scan_dir\"", "defensive scanner boundary drift",
+          )
+          if any(token not in scanner for token in scanner_tokens):
+              raise SystemExit("approval-pack scanner cleanup or inventory drift")
+          historical = (
+              "booking-consent-document-delivery-architecture", "mobile-booking-intent-foundation",
+              "booking consent document delivery architecture evidence awaiting CTO admission",
+              "mobile booking intent foundation evidence awaiting CTO admission",
+              "booking-consent-policy-authority", "courier-pickup-idempotency-v1",
+              "uv run --locked pytest -m audit --no-cov -q",
+              "ADMISSION_STATE = ACTIVE_STATE", "production_release_block=PASS",
+          )
+          if any(token not in workflow for token in historical): raise SystemExit("historical route drift")
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8", newline="\n") as output:
+              output.write(f"state={result}\n")
+          print("Booking consent approval-pack architecture verifier:", result)
+          PY
+
+      - name: Upload Booking consent approval-pack architecture capture evidence
+        if: success() && steps.evidence_contract.outputs.mode == 'booking-consent-approval-pack-architecture' && steps.approval_pack_admission.outputs.state == 'CAPTURE_ONLY'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: booking-consent-approval-pack-architecture-evidence-${{ github.event_name }}-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ${{ runner.temp }}/booking-consent-approval-pack-architecture-evidence-v1.txt
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+      - name: Stop Booking consent approval-pack architecture pending CTO admission
+        if: success() && steps.evidence_contract.outputs.mode == 'booking-consent-approval-pack-architecture' && steps.approval_pack_admission.outputs.state == 'CAPTURE_ONLY'
+        run: |
+          echo "booking consent approval pack architecture evidence awaiting CTO admission" >&2
           exit 1
 
       - name: Assemble Booking consent authority evidence
