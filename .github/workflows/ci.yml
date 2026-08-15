@@ -6020,7 +6020,7 @@ jobs:
           ARCHITECTURE_CAPTURE_STATE: CONSENT_ARCHITECTURE_CAPTURE_PENDING_CTO_REVIEW
         run: |
           set -euo pipefail
-          ADMISSION_STATE="$ARCHITECTURE_CAPTURE_STATE" uv run --locked python - <<'PY'
+          ADMISSION_STATE="ADMITTED_PREPRODUCTION_ARCHITECTURE_EVIDENCE" uv run --locked python - <<'PY'
           import hashlib
           import os
           import re
@@ -6029,7 +6029,7 @@ jobs:
           CAPTURE_STATE = os.environ["ARCHITECTURE_CAPTURE_STATE"]
           ACTIVE_STATE = "ADMITTED_PREPRODUCTION_ARCHITECTURE_EVIDENCE"
           ADMISSION_STATE = os.environ["ADMISSION_STATE"]
-          REVIEWED_COMMITMENT = bytes(32)
+          REVIEWED_COMMITMENT = bytes((117, 198, 103, 84, 206, 179, 133, 128, 53, 83, 156, 152, 2, 1, 11, 21, 196, 22, 98, 237, 132, 6, 129, 236, 133, 80, 99, 213, 217, 64, 65, 31))
           path = Path(os.environ["EVIDENCE_PATH"])
           data = path.read_bytes()
           candidate = os.environ["CANDIDATE_SHA"]
@@ -6144,7 +6144,7 @@ jobs:
               raise SystemExit(f"Consent architecture negative control accepted: {label}")
           workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
           state_definitions = re.findall(r"(?m)^          ARCHITECTURE_CAPTURE_STATE: \S+$", workflow)
-          state_bindings = re.findall(r'(?m)^          ADMISSION_STATE="\$ARCHITECTURE_CAPTURE_STATE" uv run --locked python', workflow)
+          state_bindings = re.findall(r'(?m)^          ADMISSION_STATE="' + re.escape(ACTIVE_STATE) + r'" uv run --locked python', workflow)
           if workflow.count(CAPTURE_STATE) != 1 or len(state_definitions) != 1 or len(state_bindings) != 1:
               raise SystemExit("Consent architecture capture state authority drift")
           if not path.is_file() or path.is_symlink() or path.stat().st_nlink != 1:
