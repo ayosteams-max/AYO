@@ -800,8 +800,9 @@ jobs:
           set -euo pipefail
           zero=0000000000000000000000000000000000000000
           fixed=a62c3394111c14d93f787b7b319faa0a9b13293d
-          reviewed_parent=aa123b9fc34a53a21dc80518bc777787f9aff313
+          reviewed_parent=8a1a64111c8feac8deb4d9bbde0e3485356884f4
           reviewed_history=(
+            8a1a64111c8feac8deb4d9bbde0e3485356884f4
             aa123b9fc34a53a21dc80518bc777787f9aff313
             2761439c34caebc7598948d6aeb70ed8eb431932
             cc61b625f6a46b3db9214c1fd1d30e16a9ac647a
@@ -810,6 +811,17 @@ jobs:
           )
           feature_ref=refs/heads/agent/booking-consent-ethiopia-written-decision-pack
           main_ref=refs/heads/main
+          refresh_authorized_feature() {
+            local destination=refs/remotes/origin/ethiopia-written-cycle-feature
+            git update-ref -d "$destination"
+            git fetch --no-tags origin \
+              "+refs/heads/agent/booking-consent-ethiopia-written-decision-pack:$destination"
+            authorized_feature="$(git rev-parse "$destination")"
+            [[ "$authorized_feature" =~ ^[0-9a-f]{40}$ && "$authorized_feature" != "$zero" ]] || {
+              echo "Ethiopia written-cycle fetched feature identity malformed" >&2; exit 1; }
+            git cat-file -e "$authorized_feature^{commit}" 2>/dev/null || {
+              echo "Ethiopia written-cycle fetched feature commit unavailable" >&2; exit 1; }
+          }
           case "$EVENT_NAME" in
             pull_request)
               [[ "$PR_BASE_REF" == main && "$PR_BASE_SHA" == "$fixed" \
@@ -856,9 +868,8 @@ jobs:
                   echo "Ethiopia written-cycle predecessor unavailable" >&2; exit 1; }
                 git merge-base --is-ancestor "$EVENT_BEFORE" "$candidate"
                 if [[ "$EVENT_REF" == "$feature_ref" ]]; then
-                  git fetch --no-tags origin \
-                    refs/heads/agent/booking-consent-ethiopia-written-decision-pack:refs/remotes/origin/ethiopia-written-cycle-feature
-                  published_feature="$(git rev-parse refs/remotes/origin/ethiopia-written-cycle-feature)"
+                  refresh_authorized_feature
+                  published_feature="$authorized_feature"
                   [[ "$published_feature" == "$EVENT_BEFORE" ]] || {
                     echo "Ethiopia written-cycle published predecessor drift" >&2; exit 1; }
                   [[ "${#parents[@]}" -eq 1 && "${parents[0]}" == "$EVENT_BEFORE" ]] || {
@@ -867,9 +878,7 @@ jobs:
                   [[ "$EVENT_BEFORE" == "$fixed" && "${#parents[@]}" -eq 2 \
                     && "${parents[0]}" == "$fixed" ]] || {
                     echo "Ethiopia written-cycle regular merge topology drift" >&2; exit 1; }
-                  git fetch --no-tags origin \
-                    refs/heads/agent/booking-consent-ethiopia-written-decision-pack:refs/remotes/origin/ethiopia-written-cycle-feature
-                  authorized_feature="$(git rev-parse refs/remotes/origin/ethiopia-written-cycle-feature)"
+                  refresh_authorized_feature
                   [[ "${parents[1]}" == "$authorized_feature" ]] || {
                     echo "Ethiopia written-cycle merge second parent drift" >&2; exit 1; }
                   git merge-base --is-ancestor "$fixed" "$authorized_feature"
@@ -2044,8 +2053,9 @@ jobs:
           set -euo pipefail
           zero=0000000000000000000000000000000000000000
           fixed=a62c3394111c14d93f787b7b319faa0a9b13293d
-          reviewed_parent=aa123b9fc34a53a21dc80518bc777787f9aff313
+          reviewed_parent=8a1a64111c8feac8deb4d9bbde0e3485356884f4
           reviewed_history=(
+            8a1a64111c8feac8deb4d9bbde0e3485356884f4
             aa123b9fc34a53a21dc80518bc777787f9aff313
             2761439c34caebc7598948d6aeb70ed8eb431932
             cc61b625f6a46b3db9214c1fd1d30e16a9ac647a
@@ -2054,6 +2064,17 @@ jobs:
           )
           feature_ref=refs/heads/agent/booking-consent-ethiopia-written-decision-pack
           main_ref=refs/heads/main
+          refresh_authorized_feature() {
+            local destination=refs/remotes/origin/ethiopia-written-cycle-feature
+            git update-ref -d "$destination"
+            git fetch --no-tags origin \
+              "+refs/heads/agent/booking-consent-ethiopia-written-decision-pack:$destination"
+            authorized_feature="$(git rev-parse "$destination")"
+            [[ "$authorized_feature" =~ ^[0-9a-f]{40}$ && "$authorized_feature" != "$zero" ]] || {
+              echo "Ethiopia written-cycle fetched feature identity malformed" >&2; exit 1; }
+            git cat-file -e "$authorized_feature^{commit}" 2>/dev/null || {
+              echo "Ethiopia written-cycle fetched feature commit unavailable" >&2; exit 1; }
+          }
           case "$EVENT_NAME" in
             pull_request)
               candidate="$PR_HEAD_SHA"
@@ -2083,13 +2104,12 @@ jobs:
               elif [[ "$EVENT_REF" == "$feature_ref" ]]; then
                 [[ "$TRUSTED_COMPARISON_BASE_SHA" == "$EVENT_BEFORE" && "${#parents[@]}" -eq 1 && "${parents[0]}" == "$EVENT_BEFORE" ]]
                 git merge-base --is-ancestor "$EVENT_BEFORE" "$candidate"
-                git fetch --no-tags origin \
-                  refs/heads/agent/booking-consent-ethiopia-written-decision-pack:refs/remotes/origin/ethiopia-written-cycle-feature
-                published_feature="$(git rev-parse refs/remotes/origin/ethiopia-written-cycle-feature)"
+                refresh_authorized_feature
+                published_feature="$authorized_feature"
                 [[ "$published_feature" == "$EVENT_BEFORE" ]]
               elif [[ "$EVENT_REF" == "$main_ref" ]]; then
                 [[ "$TRUSTED_COMPARISON_BASE_SHA" == "$EVENT_BEFORE" && "${#parents[@]}" -eq 2 && "${parents[0]}" == "$fixed" && "$EVENT_BEFORE" == "$fixed" ]]
-                authorized_feature="$(git rev-parse refs/remotes/origin/ethiopia-written-cycle-feature)"
+                refresh_authorized_feature
                 [[ "${parents[1]}" == "$authorized_feature" ]]
                 git merge-base --is-ancestor "$fixed" "$authorized_feature"
                 [[ "$(git rev-parse "$candidate^{tree}")" == "$(git rev-parse "$authorized_feature^{tree}")" ]]
@@ -8632,6 +8652,7 @@ jobs:
           identity = step_block("Bind exact Ethiopia written decision cycle architecture candidate identity")
           scanner = step_block("Capture Ethiopia written decision cycle neutral secret inventory")
           reviewed_chain = (
+              "8a1a64111c8feac8deb4d9bbde0e3485356884f4",
               "aa123b9fc34a53a21dc80518bc777787f9aff313",
               "2761439c34caebc7598948d6aeb70ed8eb431932",
               "cc61b625f6a46b3db9214c1fd1d30e16a9ac647a",
@@ -8662,8 +8683,8 @@ jobs:
           if preflight_chain != identity_chain:
               raise SystemExit("Ethiopia written-cycle production gates disagree on reviewed chain")
           chain_mutations = {
-              "old-parent-authority": preflight.replace(reviewed_chain[0], reviewed_chain[2], 1),
-              "old-capture-parent-authority": preflight.replace(reviewed_chain[0], reviewed_chain[1], 1),
+              "old-parent-authority": preflight.replace(reviewed_chain[0], reviewed_chain[1], 1),
+              "old-capture-parent-authority": preflight.replace(reviewed_chain[0], reviewed_chain[2], 1),
               "missing-reviewed-commit": preflight.replace("            " + reviewed_chain[1] + "\n", "", 1),
               "reordered-reviewed-commits": preflight.replace(
                   "            " + reviewed_chain[1] + "\n            " + reviewed_chain[2],
@@ -8699,6 +8720,74 @@ jobs:
               divergent_chain = None
           if divergent_chain is not None and divergent_chain == preflight_chain:
               raise SystemExit("Ethiopia written-cycle divergent production chains accepted")
+          refresh_fetch = (
+              "            git fetch --no-tags origin \\\n"
+              "              \"+refs/heads/agent/booking-consent-ethiopia-written-decision-pack:$destination\""
+          )
+          refresh_resolution = '            authorized_feature="$(git rev-parse "$destination")"'
+          refresh_invalidation = '            git update-ref -d "$destination"'
+          second_parent_check = '[[ "${parents[1]}" == "$authorized_feature" ]]'
+          def validate_feature_refresh(block):
+              required = (
+                  "          refresh_authorized_feature() {",
+                  "            local destination=refs/remotes/origin/ethiopia-written-cycle-feature",
+                  refresh_invalidation,
+                  refresh_fetch,
+                  refresh_resolution,
+                  '[[ "$authorized_feature" =~ ^[0-9a-f]{40}$ && "$authorized_feature" != "$zero" ]]',
+                  'git cat-file -e "$authorized_feature^{commit}"',
+                  second_parent_check,
+              )
+              if any(block.count(item) != 1 for item in required):
+                  raise ValueError("Ethiopia written-cycle fresh feature authority inventory drift")
+              if len(re.findall(r"(?m)^                (?:  )?refresh_authorized_feature$", block)) != 2:
+                  raise ValueError("Ethiopia written-cycle fresh feature authority consumer drift")
+              invalidation_at = block.index(refresh_invalidation)
+              fetch_at = block.index(refresh_fetch)
+              resolution_at = block.index(refresh_resolution)
+              if not invalidation_at < fetch_at < resolution_at:
+                  raise ValueError("Ethiopia written-cycle feature authority ordering drift")
+              if "|| true" in block or "git fetch --tags" in block or "refs/heads/*" in block:
+                  raise ValueError("Ethiopia written-cycle feature fetch failure bypass")
+              if re.search(r'git rev-parse refs/remotes/origin/ethiopia-written-cycle-feature', block):
+                  raise ValueError("Ethiopia written-cycle cached feature authority")
+              return True
+          for owner, owner_block in (("preflight", preflight), ("identity", identity)):
+              try: validate_feature_refresh(owner_block)
+              except ValueError as error: raise SystemExit(f"{owner}: {error}") from error
+          fetch_mutations = {
+              "fetch-removed": identity.replace(refresh_fetch + "\n", "", 1),
+              "fetch-after-resolution": identity.replace(refresh_fetch + "\n", "", 1).replace(
+                  refresh_resolution, refresh_resolution + "\n" + refresh_fetch, 1),
+              "invalidation-removed": identity.replace(refresh_invalidation + "\n", "", 1),
+              "wrong-source": identity.replace(
+                  "refs/heads/agent/booking-consent-ethiopia-written-decision-pack:$destination",
+                  "refs/heads/agent/wrong-branch:$destination", 1),
+              "wrong-destination": identity.replace(
+                  "local destination=refs/remotes/origin/ethiopia-written-cycle-feature",
+                  "local destination=refs/remotes/origin/unreviewed-feature", 1),
+              "non-forced-fetch": identity.replace('"+refs/heads/', '"refs/heads/', 1),
+              "ignored-fetch-failure": identity.replace(refresh_fetch, refresh_fetch + " || true", 1),
+              "wildcard-refspec": identity.replace(
+                  "+refs/heads/agent/booking-consent-ethiopia-written-decision-pack:$destination",
+                  "+refs/heads/*:refs/remotes/origin/*", 1),
+              "tag-enabled-fetch": identity.replace("git fetch --no-tags origin", "git fetch --tags origin", 1),
+              "cached-ref-resolution": identity.replace(
+                  'git rev-parse "$destination"',
+                  "git rev-parse refs/remotes/origin/ethiopia-written-cycle-feature", 1),
+              "alternate-remote": identity.replace("git fetch --no-tags origin", "git fetch --no-tags upstream", 1),
+              "stale-second-parent": identity.replace(
+                  second_parent_check, '[[ "${parents[1]}" == "$reviewed_parent" ]]', 1),
+              "duplicate-feature-authority": identity.replace(refresh_fetch, refresh_fetch + "\n" + refresh_fetch, 1),
+              "authority-outside-owner": identity.replace(
+                  "          refresh_authorized_feature() {", "          moved_refresh_authority() {", 1),
+          }
+          for case, altered_block in fetch_mutations.items():
+              if altered_block == identity:
+                  raise SystemExit(f"Ethiopia written-cycle feature-authority mutation was a no-op: {case}")
+              try: validate_feature_refresh(altered_block)
+              except ValueError: continue
+              raise SystemExit(f"Ethiopia written-cycle feature-authority mutation accepted: {case}")
           selector_tokens = (
               "mode=booking-consent-ethiopia-written-decision-cycle-architecture",
               "cce6d8e81285cdd8fd1d52ea0537a2f7f66faba3",
