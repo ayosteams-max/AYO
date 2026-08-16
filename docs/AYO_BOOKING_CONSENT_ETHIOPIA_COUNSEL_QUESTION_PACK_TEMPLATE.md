@@ -136,6 +136,65 @@ Each question row below incorporates this record:
 | ETH-CNS-H04 | What export and chain-of-custody requirements apply? | Evidence-store gate |
 | ETH-CNS-H05 | Which court, regulator, tribunal or appeal body may inspect the evidence? | Complaint/dispute gate |
 
+### Atomic child record and inventories
+
+The 40 parent IDs above remain the canonical meeting and legal-issue groupings. A parent listed below is compound and binds the exact ordered child inventory and canonical count shown here. Every child incorporates this exact record:
+
+| Child field | Safe default |
+|---|---|
+| Stable parent-derived child ID | Exact ID in the ordered inventory below |
+| Exact atomic issue | Exact issue below |
+| Applicability | `MANDATORY` unless an authorized reviewer records `CONDITIONAL` and later decides `NOT_APPLICABLE_WITH_REASON` with attributable authority and reason |
+| Expected answer type | Written, attributable, source-cited, atomic conclusion |
+| Result lifecycle state | `NOT_STARTED` |
+| Approval result | `NOT_APPROVED` |
+| Evidence ID | `UNRESOLVED` |
+| Authority/reviewer | `UNRESOLVED` |
+| Conditions | `UNRESOLVED` |
+| Expiry/re-review | `UNRESOLVED` |
+| Downstream gate effect | `BLOCKED` |
+
+| Parent ID | Canonical child count | Complete ordered child inventory |
+|---|---:|---|
+| ETH-CNS-A01 | 9 | `ETH-CNS-A01.1` transport terms; `ETH-CNS-A01.2` fare/quote acceptance; `ETH-CNS-A01.3` cancellation/refund; `ETH-CNS-A01.4` safety disclosure; `ETH-CNS-A01.5` privacy notice; `ETH-CNS-A01.6` privacy consent where relied upon; `ETH-CNS-A01.7` marketing consent; `ETH-CNS-A01.8` payment terms; `ETH-CNS-A01.9` insurance/operator disclosure |
+| ETH-CNS-A02 | 5 | `ETH-CNS-A02.1` affirmative action; `ETH-CNS-A02.2` attribution; `ETH-CNS-A02.3` authentication; `ETH-CNS-A02.4` disclosure; `ETH-CNS-A02.5` integrity |
+| ETH-CNS-A05 | 5 | `ETH-CNS-A05.1` rider receipt; `ETH-CNS-A05.2` download; `ETH-CNS-A05.3` retention; `ETH-CNS-A05.4` reproduction; `ETH-CNS-A05.5` later access |
+| ETH-CNS-A06 | 5 | `ETH-CNS-A06.1` timestamps; `ETH-CNS-A06.2` original bytes; `ETH-CNS-A06.3` hashes; `ETH-CNS-A06.4` authentication events; `ETH-CNS-A06.5` other required evidentiary records |
+| ETH-CNS-B01 | 4 | `ETH-CNS-B01.1` transport terms; `ETH-CNS-B01.2` fare/quote acceptance; `ETH-CNS-B01.3` cancellation/refund; `ETH-CNS-B01.4` safety disclosure |
+| ETH-CNS-B02 | 5 | `ETH-CNS-B02.1` privacy notice; `ETH-CNS-B02.2` privacy consent; `ETH-CNS-B02.3` marketing consent; `ETH-CNS-B02.4` payment terms; `ETH-CNS-B02.5` insurance/operator disclosures |
+| ETH-CNS-B03 | 4 | `ETH-CNS-B03.1` lawfulness; `ETH-CNS-B03.2` misleading effect; `ETH-CNS-B03.3` voluntariness; `ETH-CNS-B03.4` other bundling safety |
+| ETH-CNS-C01 | 9 | `ETH-CNS-C01.1` transport terms; `ETH-CNS-C01.2` fare/quote acceptance; `ETH-CNS-C01.3` cancellation/refund; `ETH-CNS-C01.4` safety disclosure; `ETH-CNS-C01.5` privacy notice; `ETH-CNS-C01.6` privacy consent where relied upon; `ETH-CNS-C01.7` marketing consent; `ETH-CNS-C01.8` payment terms; `ETH-CNS-C01.9` insurance/operator disclosure |
+| ETH-CNS-C02 | 3 | `ETH-CNS-C02.1` Amharic; `ETH-CNS-C02.2` Afaan Oromo; `ETH-CNS-C02.3` English |
+| ETH-CNS-C03 | 2 | `ETH-CNS-C03.1` explicit language selection; `ETH-CNS-C03.2` approved rendition unavailable behavior |
+| ETH-CNS-C04 | 2 | `ETH-CNS-C04.1` authoritative-language reviewer authority; `ETH-CNS-C04.2` legal-equivalence reviewer authority |
+| ETH-CNS-D04 | 2 | `ETH-CNS-D04.1` WCAG 2.2 AA voluntary engineering floor; `ETH-CNS-D04.2` WCAG2Mobile informative-guidance treatment |
+| ETH-CNS-D05 | 3 | `ETH-CNS-D05.1` professional review; `ETH-CNS-D05.2` assistive-technology evidence; `ETH-CNS-D05.3` representative disabled-user evidence |
+| ETH-CNS-E01 | 5 | `ETH-CNS-E01.1` retrieval; `ETH-CNS-E01.2` acknowledgment; `ETH-CNS-E01.3` confirmation; `ETH-CNS-E01.4` telemetry; `ETH-CNS-E01.5` evidence custody |
+| ETH-CNS-E02 | 2 | `ETH-CNS-E02.1` lawful basis per purpose/evidence category; `ETH-CNS-E02.2` suitability of consent where considered |
+| ETH-CNS-E03 | 4 | `ETH-CNS-E03.1` registration; `ETH-CNS-E03.2` notification; `ETH-CNS-E03.3` DPO; `ETH-CNS-E03.4` DPIA |
+| ETH-CNS-E04 | 4 | `ETH-CNS-E04.1` rider rights; `ETH-CNS-E04.2` minimization; `ETH-CNS-E04.3` breach duties; `ETH-CNS-E04.4` audit duties |
+| ETH-CNS-E05 | 2 | `ETH-CNS-E05.1` retention rule per evidence class; `ETH-CNS-E05.2` legal hold rule per evidence class |
+| ETH-CNS-E06 | 4 | `ETH-CNS-E06.1` cross-border access; `ETH-CNS-E06.2` cross-border transfer; `ETH-CNS-E06.3` localization; `ETH-CNS-E06.4` Australian staff/system access |
+| ETH-CNS-E07 | 2 | `ETH-CNS-E07.1` evidence eligible for storage outside Ethiopia; `ETH-CNS-E07.2` required safeguards |
+| ETH-CNS-F01 | 2 | `ETH-CNS-F01.1` changes requiring rotation; `ETH-CNS-F01.2` changes requiring renewed acknowledgment |
+| ETH-CNS-F02 | 2 | `ETH-CNS-F02.1` grace/no-grace rule; `ETH-CNS-F02.2` notice rule |
+| ETH-CNS-F03 | 2 | `ETH-CNS-F03.1` offline riders; `ETH-CNS-F03.2` outstanding previews |
+| ETH-CNS-F04 | 2 | `ETH-CNS-F04.1` emergency-withdrawal authority; `ETH-CNS-F04.2` authority limitations |
+| ETH-CNS-F05 | 2 | `ETH-CNS-F05.1` earlier-rendition reactivation; `ETH-CNS-F05.2` new rollback decision required |
+| ETH-CNS-G01 | 5 | `ETH-CNS-G01.1` operator identity; `ETH-CNS-G01.2` licence; `ETH-CNS-G01.3` fare/quote; `ETH-CNS-G01.4` route; `ETH-CNS-G01.5` cancellation disclosures |
+| ETH-CNS-G02 | 4 | `ETH-CNS-G02.1` complaint/redress; `ETH-CNS-G02.2` insurance; `ETH-CNS-G02.3` safety; `ETH-CNS-G02.4` contact disclosures |
+| ETH-CNS-G03 | 4 | `ETH-CNS-G03.1` presentation stage; `ETH-CNS-G03.2` format; `ETH-CNS-G03.3` language; `ETH-CNS-G03.4` legally sourced retention rule |
+| ETH-CNS-G04 | 5 | `ETH-CNS-G04.1` approving authority; `ETH-CNS-G04.2` filing authority; `ETH-CNS-G04.3` audit authority; `ETH-CNS-G04.4` enforcement authority; `ETH-CNS-G04.5` digital-record sufficiency |
+| ETH-CNS-H01 | 2 | `ETH-CNS-H01.1` attribution; `ETH-CNS-H01.2` admissibility |
+| ETH-CNS-H02 | 5 | `ETH-CNS-H02.1` timestamp properties; `ETH-CNS-H02.2` hash properties; `ETH-CNS-H02.3` signature properties; `ETH-CNS-H02.4` certificate properties; `ETH-CNS-H02.5` audit-log properties |
+| ETH-CNS-H03 | 2 | `ETH-CNS-H03.1` original-byte retention/production; `ETH-CNS-H03.2` official-language retention/production |
+| ETH-CNS-H04 | 2 | `ETH-CNS-H04.1` export; `ETH-CNS-H04.2` chain of custody |
+| ETH-CNS-H05 | 4 | `ETH-CNS-H05.1` court; `ETH-CNS-H05.2` regulator; `ETH-CNS-H05.3` tribunal; `ETH-CNS-H05.4` administrative appeal body |
+
+All parent results are derived and non-authoritative when edited independently. A parent remains `BLOCKED` unless its recorded canonical child count equals the complete ordered inventory and every mandatory applicable child is explicitly answered, attributable, current, `VERIFIED`, non-conflicting and condition-satisfied. One broad answer cannot silently satisfy multiple children. Parent narrative cannot override a child record.
+
+For every compound parent, each of these mutations resolves to `BLOCKED`: omit a child; duplicate a child; add an unknown child; reorder children; answer only part of the inventory; expire one child; conflict one child; mark a required child not applicable without authorized reason; mutate the child count; or manually mark the parent complete.
+
 ## 12. Regulator-question ledger
 
 Every row is unsubmitted and `BLOCKED`. Counsel must verify mandate, recipient and wording first.

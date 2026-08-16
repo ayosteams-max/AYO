@@ -20,33 +20,239 @@ AP-076 proposes server-owned consent-document delivery, and AP-077 proposes the 
 
 The research basis is the read-only Ethiopia authority mission dated 16 August 2026. Absence of repeal evidence is not proof that an instrument remains current. Each source must be checked for amendments, repeal, supersession, authoritative language and applicability before it can support a decision.
 
-Every governed source record binds:
+Every populated source record below has the same exact field inventory. `UNRESOLVED` is an explicit value, never an omitted field. Availability and authority-classification descriptors describe research only; they never replace lifecycle status or authorize a gate.
 
-- stable source ID;
-- title, issuing authority and instrument type;
-- instrument number or version;
-- verified publication and effective dates, or `UNRESOLVED`;
-- authoritative language, or `UNRESOLVED`;
-- official URL reference and access date;
-- digest algorithm and digest commitment for a later verified source copy, initially `UNRESOLVED`;
-- amendment, repeal and supersession status, initially `UNRESOLVED` unless verified;
-- exact proposition supported and applicability limitation;
-- lifecycle state and separate research descriptors.
+### ETH-SRC-CONST-001
 
-| Source ID | Instrument | Authority/type | Verified date | Language/official reference | Proposition and limitation | Gate state |
-|---|---|---|---|---|---|---|
-| ETH-SRC-CONST-001 | FDRE Constitution, Proclamation No. 1/1995 | Federal constitutional instrument | Publication/effect: `UNRESOLVED` in this pack | Authoritative language: `UNRESOLVED`; official copy/digest: `UNRESOLVED` | Federal language framework; private-app language consequence unresolved | `RESEARCHED_UNVERIFIED` |
-| ETH-SRC-ETX-001 | Electronic Transaction Proclamation No. 1205/2020 | Federal proclamation | Published 30 June 2020; effect: `UNRESOLVED` | Authoritative language: `UNRESOLVED`; https://laws.moj.gov.et/registries/view/1414/am; digest `UNRESOLVED` | Electronic-transaction framework; does not make a tap sufficient by itself | `RESEARCHED_UNVERIFIED` |
-| ETH-SRC-ESIG-001 | Electronic Signature Proclamation No. 1072/2018 | Federal proclamation | Published 16 February 2018; effect: `UNRESOLVED` | Authoritative language: `UNRESOLVED`; https://laws.moj.gov.et/registries/view/1273/am; digest `UNRESOLVED` | Signature/certification framework; applicability per instrument unresolved | `RESEARCHED_UNVERIFIED` |
-| ETH-SRC-CCP-001 | Trade Competition and Consumer Protection Proclamation No. 813/2013 | Federal proclamation | Publication/effect: `UNRESOLVED` | Official consolidated text, authoritative language and digest: `UNRESOLVED` | Consumer duties and current institutional allocation unresolved | `RESEARCHED_UNVERIFIED` |
-| ETH-SRC-PDP-001 | Personal Data Protection Proclamation No. 1321/2024 | Federal proclamation | Published 24 July 2024; effect: `UNRESOLVED` | Authoritative language: `UNRESOLVED`; https://pdp.eca.et/pdp-proclamation; digest `UNRESOLVED` | Personal-data framework and ECA role; AYO duties require written analysis | `RESEARCHED_UNVERIFIED` |
-| ETH-SRC-ROAD-001 | Road Transport Proclamation No. 1274/2022 | Federal proclamation | Published 15 July 2022; effect: `UNRESOLVED` | Authoritative language: `UNRESOLVED`; https://laws.moj.gov.et/registries/view/1479/am; digest `UNRESOLVED` | Road-transport framework; Addis platform rules unresolved | `RESEARCHED_UNVERIFIED` |
-| ETH-SRC-CRPD-001 | Convention on the Rights of Persons with Disabilities status | UN treaty record | Ethiopia ratified 7 July 2010; effect recorded 6 August 2010 | UN authentic texts; https://treaties.un.org/Pages/showDetails.aspx?clang=_en&objid=080000028017bf87; digest `UNRESOLVED` | Treaty status only; private-app implementing effect unresolved | `RESEARCHED_UNVERIFIED` |
-| ETH-SRC-WCAG-001 | WCAG 2.2 | W3C Recommendation | 12 December 2024 Recommendation | English normative text; https://www.w3.org/TR/WCAG22/; digest `UNRESOLVED` | Proposed AYO engineering floor, not Ethiopian law | `RESEARCHED_UNVERIFIED` |
-| ETH-SRC-MOBILE-001 | WCAG2Mobile | W3C Group Draft Note | 6 May 2025 draft note | English; https://www.w3.org/TR/wcag2mobile-22/; digest `UNRESOLVED` | Informative draft guidance; not a standard or Ethiopian law | `RESEARCHED_UNVERIFIED` |
-| ETH-SRC-ADDIS-001 | Applicable Addis transport/taxi/platform directives | Authority/instrument unresolved | `UNRESOLVED` | Official text, language, URL and digest `UNRESOLVED` | Exact ride-hailing licence and disclosures unresolved | `BLOCKED` |
+- Source ID: `ETH-SRC-CONST-001`
+- Title: Constitution of the Federal Democratic Republic of Ethiopia
+- Issuing authority: Federal Democratic Republic of Ethiopia
+- Instrument/source type: Constitution / proclamation
+- Proclamation/instrument/version identifier: Proclamation No. 1/1995
+- Publication date: `UNRESOLVED`
+- Effective date: `UNRESOLVED`
+- Authoritative language: `UNRESOLVED`
+- Official source URL/reference: `UNRESOLVED`
+- Source-copy digest/commitment: `UNRESOLVED`
+- Access date: 16 August 2026
+- Availability descriptor: `OFFICIAL_SOURCE_UNAVAILABLE`
+- Authority classification: `BINDING_LEGISLATION`
+- Governing lifecycle status: `RESEARCHED_UNVERIFIED`
+- Amendment status: `UNRESOLVED`
+- Repeal status: `UNRESOLVED`
+- Supersession status: `UNRESOLVED`
+- Proposition supported: Federal constitutional and language framework exists.
+- Limitations: No private-app language requirement or current legal effect is inferred.
+- Applicability status: `UNRESOLVED`
 
-Descriptors such as `PRIMARY_SOURCE_AVAILABLE`, `OFFICIAL_SOURCE_UNAVAILABLE`, `BINDING_INSTRUMENT`, `ADVISORY_GUIDANCE` and `INFORMATIVE_STANDARD` describe research only. They never authorize a gate.
+### ETH-SRC-ETX-001
+
+- Source ID: `ETH-SRC-ETX-001`
+- Title: Electronic Transaction Proclamation
+- Issuing authority: Federal Democratic Republic of Ethiopia
+- Instrument/source type: Federal proclamation
+- Proclamation/instrument/version identifier: Proclamation No. 1205/2020
+- Publication date: 30 June 2020
+- Effective date: `UNRESOLVED`
+- Authoritative language: `UNRESOLVED`
+- Official source URL/reference: https://laws.moj.gov.et/registries/view/1414/am
+- Source-copy digest/commitment: `UNRESOLVED`
+- Access date: 16 August 2026
+- Availability descriptor: `INDEX_ONLY`
+- Authority classification: `BINDING_LEGISLATION`
+- Governing lifecycle status: `RESEARCHED_UNVERIFIED`
+- Amendment status: `UNRESOLVED`
+- Repeal status: `UNRESOLVED`
+- Supersession status: `UNRESOLVED`
+- Proposition supported: An Ethiopian electronic-transaction framework is recorded.
+- Limitations: Index availability does not establish current applicability or make a checkbox, button or tap sufficient.
+- Applicability status: `UNRESOLVED`
+
+### ETH-SRC-ESIG-001
+
+- Source ID: `ETH-SRC-ESIG-001`
+- Title: Electronic Signature Proclamation
+- Issuing authority: Federal Democratic Republic of Ethiopia
+- Instrument/source type: Federal proclamation
+- Proclamation/instrument/version identifier: Proclamation No. 1072/2018
+- Publication date: 16 February 2018
+- Effective date: `UNRESOLVED`
+- Authoritative language: `UNRESOLVED`
+- Official source URL/reference: https://laws.moj.gov.et/registries/view/1273/am
+- Source-copy digest/commitment: `UNRESOLVED`
+- Access date: 16 August 2026
+- Availability descriptor: `PRIMARY_SOURCE_AVAILABLE`
+- Authority classification: `BINDING_LEGISLATION`
+- Governing lifecycle status: `RESEARCHED_UNVERIFIED`
+- Amendment status: `UNRESOLVED`
+- Repeal status: `UNRESOLVED`
+- Supersession status: `UNRESOLVED`
+- Proposition supported: An Ethiopian electronic-signature and certification framework is recorded.
+- Limitations: Applicability and required signature form must be resolved per rider instrument.
+- Applicability status: `UNRESOLVED`
+
+### ETH-SRC-CCP-001
+
+- Source ID: `ETH-SRC-CCP-001`
+- Title: Trade Competition and Consumer Protection Proclamation
+- Issuing authority: Federal Democratic Republic of Ethiopia
+- Instrument/source type: Federal proclamation
+- Proclamation/instrument/version identifier: Proclamation No. 813/2013
+- Publication date: `UNRESOLVED`
+- Effective date: `UNRESOLVED`
+- Authoritative language: `UNRESOLVED`
+- Official source URL/reference: `UNRESOLVED`
+- Source-copy digest/commitment: `UNRESOLVED`
+- Access date: 16 August 2026
+- Availability descriptor: `OFFICIAL_SOURCE_UNAVAILABLE`
+- Authority classification: `BINDING_LEGISLATION`
+- Governing lifecycle status: `RESEARCHED_UNVERIFIED`
+- Amendment status: `UNRESOLVED`
+- Repeal status: `UNRESOLVED`
+- Supersession status: `UNRESOLVED`
+- Proposition supported: A consumer-protection instrument is identified for counsel verification.
+- Limitations: Current duties, institutional allocation and applicability are not verified.
+- Applicability status: `UNRESOLVED`
+
+### ETH-SRC-PDP-001
+
+- Source ID: `ETH-SRC-PDP-001`
+- Title: Personal Data Protection Proclamation
+- Issuing authority: Federal Democratic Republic of Ethiopia; official publication provided by Ethiopian Communications Authority
+- Instrument/source type: Federal proclamation
+- Proclamation/instrument/version identifier: Proclamation No. 1321/2024
+- Publication date: 24 July 2024
+- Effective date: `UNRESOLVED`
+- Authoritative language: `UNRESOLVED`
+- Official source URL/reference: https://pdp.eca.et/pdp-proclamation
+- Source-copy digest/commitment: `UNRESOLVED`
+- Access date: 16 August 2026
+- Availability descriptor: `PRIMARY_SOURCE_AVAILABLE`
+- Authority classification: `BINDING_LEGISLATION`
+- Governing lifecycle status: `RESEARCHED_UNVERIFIED`
+- Amendment status: `UNRESOLVED`
+- Repeal status: `UNRESOLVED`
+- Supersession status: `UNRESOLVED`
+- Proposition supported: An Ethiopian personal-data framework and published ECA role are recorded.
+- Limitations: AYO roles, lawful bases, custody, transfer and other duties require written analysis.
+- Applicability status: `UNRESOLVED`
+
+### ETH-SRC-ROAD-001
+
+- Source ID: `ETH-SRC-ROAD-001`
+- Title: Road Transport Proclamation
+- Issuing authority: Federal Democratic Republic of Ethiopia
+- Instrument/source type: Federal proclamation
+- Proclamation/instrument/version identifier: Proclamation No. 1274/2022
+- Publication date: 15 July 2022
+- Effective date: `UNRESOLVED`
+- Authoritative language: `UNRESOLVED`
+- Official source URL/reference: https://laws.moj.gov.et/registries/view/1479/am
+- Source-copy digest/commitment: `UNRESOLVED`
+- Access date: 16 August 2026
+- Availability descriptor: `PRIMARY_SOURCE_AVAILABLE`
+- Authority classification: `BINDING_LEGISLATION`
+- Governing lifecycle status: `RESEARCHED_UNVERIFIED`
+- Amendment status: `UNRESOLVED`
+- Repeal status: `UNRESOLVED`
+- Supersession status: `UNRESOLVED`
+- Proposition supported: A federal road-transport framework is recorded.
+- Limitations: Addis platform, licensing and disclosure rules remain unresolved.
+- Applicability status: `UNRESOLVED`
+
+### ETH-SRC-CRPD-001
+
+- Source ID: `ETH-SRC-CRPD-001`
+- Title: Convention on the Rights of Persons with Disabilities treaty status
+- Issuing authority: United Nations Treaty Collection
+- Instrument/source type: Authoritative treaty-status record
+- Proclamation/instrument/version identifier: CRPD; Ethiopia ratification record
+- Publication date: `UNRESOLVED`
+- Effective date: 6 August 2010 for Ethiopia treaty status
+- Authoritative language: `UNRESOLVED`
+- Official source URL/reference: https://treaties.un.org/Pages/showDetails.aspx?clang=_en&objid=080000028017bf87
+- Source-copy digest/commitment: `UNRESOLVED`
+- Access date: 16 August 2026
+- Availability descriptor: `PRIMARY_SOURCE_AVAILABLE`
+- Authority classification: `TREATY_STATUS`
+- Governing lifecycle status: `RESEARCHED_UNVERIFIED`
+- Amendment status: `UNRESOLVED`
+- Repeal status: `UNRESOLVED`
+- Supersession status: `UNRESOLVED`
+- Proposition supported: Ethiopia ratified the CRPD on 7 July 2010, with treaty effect recorded for 6 August 2010.
+- Limitations: Treaty status alone does not establish every private-app obligation or domestic implementation rule.
+- Applicability status: `UNRESOLVED`
+
+### ETH-SRC-WCAG-001
+
+- Source ID: `ETH-SRC-WCAG-001`
+- Title: Web Content Accessibility Guidelines (WCAG) 2.2
+- Issuing authority: World Wide Web Consortium
+- Instrument/source type: W3C Recommendation
+- Proclamation/instrument/version identifier: WCAG 2.2 Recommendation
+- Publication date: 12 December 2024
+- Effective date: `UNRESOLVED`
+- Authoritative language: English normative text
+- Official source URL/reference: https://www.w3.org/TR/WCAG22/
+- Source-copy digest/commitment: `UNRESOLVED`
+- Access date: 16 August 2026
+- Availability descriptor: `PRIMARY_SOURCE_AVAILABLE`
+- Authority classification: `NORMATIVE_TECHNICAL_STANDARD`
+- Governing lifecycle status: `RESEARCHED_UNVERIFIED`
+- Amendment status: `UNRESOLVED`
+- Repeal status: `UNRESOLVED`
+- Supersession status: `UNRESOLVED`
+- Proposition supported: WCAG 2.2 AA is a proposed AYO engineering floor.
+- Limitations: WCAG 2.2 is not asserted to be Ethiopian law or sufficient native-mobile evidence by itself.
+- Applicability status: `UNRESOLVED`
+
+### ETH-SRC-MOBILE-001
+
+- Source ID: `ETH-SRC-MOBILE-001`
+- Title: Guidance on Applying WCAG 2.2 to Mobile Applications (WCAG2Mobile)
+- Issuing authority: World Wide Web Consortium Accessibility Guidelines Working Group
+- Instrument/source type: W3C Group Draft Note
+- Proclamation/instrument/version identifier: WCAG2Mobile draft dated 6 May 2025
+- Publication date: 6 May 2025
+- Effective date: `UNRESOLVED`
+- Authoritative language: English
+- Official source URL/reference: https://www.w3.org/TR/wcag2mobile-22/
+- Source-copy digest/commitment: `UNRESOLVED`
+- Access date: 16 August 2026
+- Availability descriptor: `PRIMARY_SOURCE_AVAILABLE`
+- Authority classification: `INFORMATIVE_GUIDANCE`
+- Governing lifecycle status: `RESEARCHED_UNVERIFIED`
+- Amendment status: `UNRESOLVED`
+- Repeal status: `UNRESOLVED`
+- Supersession status: `UNRESOLVED`
+- Proposition supported: Informative work-in-progress guidance may inform later native-mobile review.
+- Limitations: It is not normative, not a standard and not Ethiopian law.
+- Applicability status: `UNRESOLVED`
+
+### ETH-SRC-ADDIS-001
+
+- Source ID: `ETH-SRC-ADDIS-001`
+- Title: Applicable Addis Ababa transport, taxi and digital-platform directives
+- Issuing authority: `UNRESOLVED`
+- Instrument/source type: `UNRESOLVED`
+- Proclamation/instrument/version identifier: `UNRESOLVED`
+- Publication date: `UNRESOLVED`
+- Effective date: `UNRESOLVED`
+- Authoritative language: `UNRESOLVED`
+- Official source URL/reference: `UNRESOLVED`
+- Source-copy digest/commitment: `UNRESOLVED`
+- Access date: 16 August 2026
+- Availability descriptor: `OFFICIAL_SOURCE_UNAVAILABLE`
+- Authority classification: `RESEARCH_LEAD`
+- Governing lifecycle status: `BLOCKED`
+- Amendment status: `UNRESOLVED`
+- Repeal status: `UNRESOLVED`
+- Supersession status: `UNRESOLVED`
+- Proposition supported: Exact Addis ride-platform licensing and disclosure instruments must be identified.
+- Limitations: No directive, authority, requirement or current applicability is established.
+- Applicability status: `UNRESOLVED`
+
+Each source-copy commitment remains `UNRESOLVED` until authorized custody exists and must later bind its digest algorithm as part of verification. Validation rejects a missing access date, availability descriptor or authority classification; any blank or omitted amendment, repeal, supersession, authoritative-language or applicability field; any descriptor used as lifecycle status; and any attempt to substitute the document-level research date for a missing record value.
 
 ## 4. Closed lifecycle and approval result
 
@@ -69,6 +275,8 @@ Before reliance, an engagement record must bind professional identity and licens
 ## 6. Question and answer identity
 
 Every counsel question binds question ID; Ethiopia jurisdiction and sub-jurisdiction; Addis market; Immediate Standard Booking service; exact policy/instrument/domain scope; blocking reason; suspected authority; required answer type; acceptable written evidence; accountable reviewer; downstream gate; lifecycle state; approval result; condition-set ID and fingerprint; expiry/re-review trigger; and safe result `BLOCKED`.
+
+A parent question is a meeting and legal-issue grouping, not independent authority. Where a parent combines independently answerable issues, it binds a canonical ordered child inventory and canonical child count. Every child uses a globally unique parent-derived ID and binds its atomic issue; mandatory or conditional applicability; expected answer type; lifecycle state; approval result; evidence ID; authority/reviewer; conditions; expiry/re-review; and downstream effect. The parent result is derived and cannot be edited independently. It remains `BLOCKED` unless every mandatory applicable child is explicitly answered, attributable, current, `VERIFIED`, non-conflicting and condition-satisfied. A conditional child may be excluded only through an attributable `NOT_APPLICABLE_WITH_REASON` decision from its authorized reviewer. Blank, missing, duplicated, extra, reordered, unknown, stale, expired, conflicting or unverified children, child-count mismatch, a broad answer reused across children, or a manually completed parent all remain `BLOCKED`.
 
 Every written answer binds answer ID; original question ID; prior-answer and follow-up IDs; exact-byte digest and algorithm; issuing person/institution; verified professional or official authority; receipt channel/time; signature or certificate verification where applicable; confidentiality and redaction state; authorized storage record; exact scope; cited sources; conclusion; conditions; limitations; effective and expiry times; verifier; conflicts; and downstream effect.
 
@@ -156,20 +364,28 @@ The meeting brief binds purpose; attendee/authority verification; scope; unresol
 
 If any RED remains unresolved, AYO does not proceed. A meeting cannot itself authorize implementation, deployment or production.
 
-## 15. Australia and global boundary
+## 15. Future phone-first Founder handoff boundary
+
+The future Founder workflow must be fully operable from a phone; laptop use is optional and must not be required. A separately governed **Founder Evidence Intake and Intelligence Board Architecture** may later propose phone camera and file intake, multi-page capture, and one-action meeting preparation. AYO Intelligence may later classify and extract material, translate only for comprehension, identify jurisdiction and suspected authority, detect missing pages or fields, evaluate risk and permanent RED conditions, prepare questions, and produce accessible meeting guidance and voice summaries.
+
+Original bytes remain the authoritative evidence input. OCR, translation and normalized metadata are separate derived aids; OCR uncertainty must be explicit, and translation cannot replace authoritative-language or legal-equivalence verification. Future design must address Amharic, Afaan Oromo and English; weak-network pause/resume; encryption before transmission where technically supportable; account isolation; phishing-resistant authentication where supported; lost-phone and session revocation; temporary-file minimization; exact file-type and size limits; malware and archive defenses; duplicate and missing-page detection; preservation of original bytes; evidence-store custody; human verification and sign-off; `GREEN`, `AMBER`, `RED` and `HUMAN/EXTERNAL SIGN-OFF REQUIRED` outputs; accessible presentation; complete audit; and all permanent Founder red lines.
+
+Ordinary AI chat is not evidence authority. Git is not confidential evidence storage. Mobile-device local copies are not authoritative storage. OCR or translation cannot grant legal authority, and no automated result can approve a gate. This document implements or authorizes no upload, camera, OCR, translation, storage, approval or Intelligence Board capability. Implementation is prohibited before separate evidence-store, Privacy, Security/CTO, accessibility and jurisdiction decisions, and it cannot activate production.
+
+## 16. Australia and global boundary
 
 This cycle is Ethiopia-only. Australia requires separate Commonwealth, state/territory, local and sector profiles. Australian citizenship, development activity or an Australian entity does not authorize Ethiopian operation; Ethiopian approval does not authorize Australia. Cross-border IP, employment, tax, privacy and data access remain separate. Future global intelligence must preserve jurisdiction-specific sources, freshness, applicability and accountable local human verification. This increment creates no global law corpus.
 
-## 16. Implementation and production gates
+## 17. Implementation and production gates
 
 Passive consent-document delivery remains blocked until exact written decisions resolve assent form, instrument separation, transport classification and disclosures, privacy/data flow/custody, required languages, accessibility criteria, and rotation/withdrawal. Later activation additionally requires approved prose and immutable renditions, every human/external approval, operational readiness, deployment authorization and separate production authorization.
 
 Production is inactive and **PROHIBITED**. This architecture cannot authorize product implementation, deployment, release or production.
 
-## 17. Failure and threat model
+## 18. Failure and threat model
 
 Missing authority, forged or impersonated answers, replay across scope, unofficial translations, stale sources, altered bytes, custody compromise, confidential leakage, role collision, collusion, link rot, unavailable storage, vendor control, condition omission, scope widening and production-gate bypass all produce `BLOCKED`. Recovery requires a new attributable version, verified evidence, restored authorized custody, independent review and preserved immutable history.
 
-## 18. Open decisions
+## 19. Open decisions
 
 Counsel selection, engagement channel, evidence-store authority, regulator recipients, authoritative-language sources, every substantive legal answer, privacy decisions, required languages, accessibility law, policy prose, implementation, deployment and production remain unresolved and require separate authorization.
