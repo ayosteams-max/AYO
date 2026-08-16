@@ -800,7 +800,14 @@ jobs:
           set -euo pipefail
           zero=0000000000000000000000000000000000000000
           fixed=a62c3394111c14d93f787b7b319faa0a9b13293d
-          reviewed_head=cc61b625f6a46b3db9214c1fd1d30e16a9ac647a
+          reviewed_parent=aa123b9fc34a53a21dc80518bc777787f9aff313
+          reviewed_history=(
+            aa123b9fc34a53a21dc80518bc777787f9aff313
+            2761439c34caebc7598948d6aeb70ed8eb431932
+            cc61b625f6a46b3db9214c1fd1d30e16a9ac647a
+            fbdf876638f9d8666e2144d0b9431fd36c734575
+            a62c3394111c14d93f787b7b319faa0a9b13293d
+          )
           feature_ref=refs/heads/agent/booking-consent-ethiopia-written-decision-pack
           main_ref=refs/heads/main
           case "$EVENT_NAME" in
@@ -830,15 +837,10 @@ jobs:
                 remote_main="$(git rev-parse refs/remotes/origin/ethiopia-written-cycle-main)"
                 [[ "$remote_main" == "$fixed" && "$(git merge-base "$candidate" "$remote_main")" == "$fixed" ]] || {
                   echo "Ethiopia written-cycle first-publication base drift" >&2; exit 1; }
-                [[ "${#parents[@]}" -eq 1 && "${parents[0]}" == "$reviewed_head" ]] || {
+                [[ "${#parents[@]}" -eq 1 && "${parents[0]}" == "$reviewed_parent" ]] || {
                   echo "Ethiopia written-cycle first-publication capture parent drift" >&2; exit 1; }
-                expected_history=(
-                  cc61b625f6a46b3db9214c1fd1d30e16a9ac647a
-                  fbdf876638f9d8666e2144d0b9431fd36c734575
-                  a62c3394111c14d93f787b7b319faa0a9b13293d
-                )
-                history_cursor="$reviewed_head"
-                for expected in "${expected_history[@]}"; do
+                history_cursor="$reviewed_parent"
+                for expected in "${reviewed_history[@]}"; do
                   [[ "$history_cursor" == "$expected" ]] || {
                     echo "Ethiopia written-cycle reviewed history drift" >&2; exit 1; }
                   [[ "$expected" == "$fixed" ]] && break
@@ -854,6 +856,11 @@ jobs:
                   echo "Ethiopia written-cycle predecessor unavailable" >&2; exit 1; }
                 git merge-base --is-ancestor "$EVENT_BEFORE" "$candidate"
                 if [[ "$EVENT_REF" == "$feature_ref" ]]; then
+                  git fetch --no-tags origin \
+                    refs/heads/agent/booking-consent-ethiopia-written-decision-pack:refs/remotes/origin/ethiopia-written-cycle-feature
+                  published_feature="$(git rev-parse refs/remotes/origin/ethiopia-written-cycle-feature)"
+                  [[ "$published_feature" == "$EVENT_BEFORE" ]] || {
+                    echo "Ethiopia written-cycle published predecessor drift" >&2; exit 1; }
                   [[ "${#parents[@]}" -eq 1 && "${parents[0]}" == "$EVENT_BEFORE" ]] || {
                     echo "Ethiopia written-cycle later feature push topology drift" >&2; exit 1; }
                 elif [[ "$EVENT_REF" == "$main_ref" ]]; then
@@ -2037,6 +2044,14 @@ jobs:
           set -euo pipefail
           zero=0000000000000000000000000000000000000000
           fixed=a62c3394111c14d93f787b7b319faa0a9b13293d
+          reviewed_parent=aa123b9fc34a53a21dc80518bc777787f9aff313
+          reviewed_history=(
+            aa123b9fc34a53a21dc80518bc777787f9aff313
+            2761439c34caebc7598948d6aeb70ed8eb431932
+            cc61b625f6a46b3db9214c1fd1d30e16a9ac647a
+            fbdf876638f9d8666e2144d0b9431fd36c734575
+            a62c3394111c14d93f787b7b319faa0a9b13293d
+          )
           feature_ref=refs/heads/agent/booking-consent-ethiopia-written-decision-pack
           main_ref=refs/heads/main
           case "$EVENT_NAME" in
@@ -2053,10 +2068,25 @@ jobs:
               [[ "$candidate" =~ ^[0-9a-f]{40}$ && "$candidate" != "$zero" && "$candidate" == "$(git rev-parse HEAD)" ]]
               mapfile -t parents < <(git show -s --format='%P' "$candidate" | tr ' ' '\n')
               if [[ -z "$EVENT_BEFORE" || "$EVENT_BEFORE" == "$zero" ]]; then
-                [[ "$EVENT_REF" == "$feature_ref" && "$TRUSTED_COMPARISON_BASE_SHA" == "$fixed" && "${#parents[@]}" -eq 1 && "${parents[0]}" == cc61b625f6a46b3db9214c1fd1d30e16a9ac647a ]]
+                [[ "$EVENT_REF" == "$feature_ref" && "$TRUSTED_COMPARISON_BASE_SHA" == "$fixed" && "${#parents[@]}" -eq 1 && "${parents[0]}" == "$reviewed_parent" ]]
+                [[ "$(git merge-base "$candidate" "$fixed")" == "$fixed" ]]
+                history_cursor="$reviewed_parent"
+                for expected in "${reviewed_history[@]}"; do
+                  [[ "$history_cursor" == "$expected" ]] || {
+                    echo "Ethiopia written-cycle exact-identity reviewed history drift" >&2; exit 1; }
+                  [[ "$expected" == "$fixed" ]] && break
+                  mapfile -t history_parents < <(git show -s --format='%P' "$history_cursor" | tr ' ' '\n')
+                  [[ "${#history_parents[@]}" -eq 1 ]] || {
+                    echo "Ethiopia written-cycle exact-identity reviewed history is nonlinear" >&2; exit 1; }
+                  history_cursor="${history_parents[0]}"
+                done
               elif [[ "$EVENT_REF" == "$feature_ref" ]]; then
                 [[ "$TRUSTED_COMPARISON_BASE_SHA" == "$EVENT_BEFORE" && "${#parents[@]}" -eq 1 && "${parents[0]}" == "$EVENT_BEFORE" ]]
                 git merge-base --is-ancestor "$EVENT_BEFORE" "$candidate"
+                git fetch --no-tags origin \
+                  refs/heads/agent/booking-consent-ethiopia-written-decision-pack:refs/remotes/origin/ethiopia-written-cycle-feature
+                published_feature="$(git rev-parse refs/remotes/origin/ethiopia-written-cycle-feature)"
+                [[ "$published_feature" == "$EVENT_BEFORE" ]]
               elif [[ "$EVENT_REF" == "$main_ref" ]]; then
                 [[ "$TRUSTED_COMPARISON_BASE_SHA" == "$EVENT_BEFORE" && "${#parents[@]}" -eq 2 && "${parents[0]}" == "$fixed" && "$EVENT_BEFORE" == "$fixed" ]]
                 authorized_feature="$(git rev-parse refs/remotes/origin/ethiopia-written-cycle-feature)"
@@ -8601,6 +8631,74 @@ jobs:
           preflight = step_block("Preflight Ethiopia written decision cycle architecture authority before tooling")
           identity = step_block("Bind exact Ethiopia written decision cycle architecture candidate identity")
           scanner = step_block("Capture Ethiopia written decision cycle neutral secret inventory")
+          reviewed_chain = (
+              "aa123b9fc34a53a21dc80518bc777787f9aff313",
+              "2761439c34caebc7598948d6aeb70ed8eb431932",
+              "cc61b625f6a46b3db9214c1fd1d30e16a9ac647a",
+              "fbdf876638f9d8666e2144d0b9431fd36c734575",
+              "a62c3394111c14d93f787b7b319faa0a9b13293d",
+          )
+          def parse_reviewed_chain(block):
+              parent_matches = re.findall(r"(?m)^          reviewed_parent=([0-9a-f]{40})$", block)
+              history_matches = re.findall(
+                  r"(?ms)^          reviewed_history=\(\n((?:            [0-9a-f]{40}\n)+)          \)$",
+                  block,
+              )
+              if len(parent_matches) != 1 or len(history_matches) != 1:
+                  raise ValueError("Ethiopia written-cycle reviewed-chain authority inventory drift")
+              history = tuple(re.findall(r"(?m)^            ([0-9a-f]{40})$", history_matches[0]))
+              if parent_matches[0] != reviewed_chain[0] or history != reviewed_chain:
+                  raise ValueError("Ethiopia written-cycle reviewed-chain authority drift")
+              if block.count('history_cursor="$reviewed_parent"') != 1 or block.count('for expected in "${reviewed_history[@]}"; do') != 1:
+                  raise ValueError("Ethiopia written-cycle reviewed-chain consumer drift")
+              if "expected_history=" in block or "reviewed_head=" in block:
+                  raise ValueError("Ethiopia written-cycle alternate reviewed-chain authority")
+              return parent_matches[0], history
+          try:
+              preflight_chain = parse_reviewed_chain(preflight)
+              identity_chain = parse_reviewed_chain(identity)
+          except ValueError as error:
+              raise SystemExit(str(error)) from error
+          if preflight_chain != identity_chain:
+              raise SystemExit("Ethiopia written-cycle production gates disagree on reviewed chain")
+          chain_mutations = {
+              "old-parent-authority": preflight.replace(reviewed_chain[0], reviewed_chain[2], 1),
+              "old-capture-parent-authority": preflight.replace(reviewed_chain[0], reviewed_chain[1], 1),
+              "missing-reviewed-commit": preflight.replace("            " + reviewed_chain[1] + "\n", "", 1),
+              "reordered-reviewed-commits": preflight.replace(
+                  "            " + reviewed_chain[1] + "\n            " + reviewed_chain[2],
+                  "            " + reviewed_chain[2] + "\n            " + reviewed_chain[1],
+                  1,
+              ),
+              "duplicated-reviewed-commit": preflight.replace(reviewed_chain[2], reviewed_chain[1], 1),
+              "substituted-reviewed-commit": preflight.replace(reviewed_chain[2], "f" * 40, 1),
+              "unexpected-reviewed-commit": preflight.replace(
+                  "            " + reviewed_chain[1] + "\n",
+                  "            " + reviewed_chain[1] + "\n            " + "e" * 40 + "\n",
+                  1,
+              ),
+              "candidate-parented-by-base": preflight.replace(reviewed_chain[0], reviewed_chain[-1], 1),
+              "duplicate-chain-authority": preflight.replace(
+                  "          reviewed_history=(\n", "          reviewed_history=(\n", 1
+              ) + "\n          reviewed_history=(\n" + "".join(f"            {sha}\n" for sha in reviewed_chain) + "          )\n",
+          }
+          for case, altered_block in chain_mutations.items():
+              if altered_block == preflight:
+                  raise SystemExit(f"Ethiopia written-cycle reviewed-chain mutation was a no-op: {case}")
+              try:
+                  parse_reviewed_chain(altered_block)
+              except ValueError:
+                  continue
+              raise SystemExit(f"Ethiopia written-cycle reviewed-chain mutation accepted: {case}")
+          divergent_identity = identity.replace(reviewed_chain[1], "d" * 40, 1)
+          if divergent_identity == identity:
+              raise SystemExit("Ethiopia written-cycle gate-divergence mutation was a no-op")
+          try:
+              divergent_chain = parse_reviewed_chain(divergent_identity)
+          except ValueError:
+              divergent_chain = None
+          if divergent_chain is not None and divergent_chain == preflight_chain:
+              raise SystemExit("Ethiopia written-cycle divergent production chains accepted")
           selector_tokens = (
               "mode=booking-consent-ethiopia-written-decision-cycle-architecture",
               "cce6d8e81285cdd8fd1d52ea0537a2f7f66faba3",
