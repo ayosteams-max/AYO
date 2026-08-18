@@ -154,6 +154,8 @@ The 40 parent IDs above remain the canonical meeting and legal-issue groupings. 
 | Expiry/re-review | `UNRESOLVED` |
 | Downstream gate effect | `BLOCKED` |
 
+Every atomic child inherits, without substitution or widening, its parent’s exact jurisdiction/sub-jurisdiction, market, service, policy/instrument/domain, and question scope. The child adds only its canonical atomic issue and applicability result. Missing, conflicting, foreign, global, broader, substituted, or otherwise mismatched inherited scope is `BLOCKED`; it cannot satisfy parent completion, approval, implementation, deployment, or production authority.
+
 | Parent ID | Canonical child count | Complete ordered child inventory |
 |---|---:|---|
 | ETH-CNS-A01 | 9 | `ETH-CNS-A01.1` transport terms; `ETH-CNS-A01.2` fare/quote acceptance; `ETH-CNS-A01.3` cancellation/refund; `ETH-CNS-A01.4` safety disclosure; `ETH-CNS-A01.5` privacy notice; `ETH-CNS-A01.6` privacy consent where relied upon; `ETH-CNS-A01.7` marketing consent; `ETH-CNS-A01.8` payment terms; `ETH-CNS-A01.9` insurance/operator disclosure |
