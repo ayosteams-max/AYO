@@ -2479,7 +2479,7 @@ jobs:
           def validate_runner_authority(workflow_source, gate_owner, scanner_owner):
               if workflow_source.count("    runs-on: ubuntu-latest\n") != 1:
                   raise ValueError("runner declaration authority drift")
-              prohibited_runner = ("self-hosted", "runs-on: ${{", "runs-on:\n      -", "matrix.", "inputs.")
+              prohibited_runner = ("self-hosted", "runs-on: $" "{{", "runs-on:\n      -", "matrix.", "inputs.")
               if any(value in workflow_source.split("    steps:", 1)[0] for value in prohibited_runner):
                   raise ValueError("dynamic or self-hosted runner authority")
               required = (
