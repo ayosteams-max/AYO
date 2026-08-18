@@ -305,6 +305,44 @@ jobs:
               mobile_tree="$(git rev-parse "$mobile_candidate:AYO-Mobile")"
               case "$mobile_tests_tree|$mobile_tree" in
                 d7143a733cf14e70851406dab8131ce7c69dd364\|da39714a911ffbf02171d28348c88a39eab2d938)
+                  written_cycle_architecture_path=docs/AYO_BOOKING_CONSENT_ETHIOPIA_WRITTEN_DECISION_CYCLE_ARCHITECTURE.md
+                  written_cycle_template_path=docs/AYO_BOOKING_CONSENT_ETHIOPIA_COUNSEL_QUESTION_PACK_TEMPLATE.md
+                  written_cycle_architecture_present=false
+                  written_cycle_template_present=false
+                  git cat-file -e "$mobile_candidate:$written_cycle_architecture_path" 2>/dev/null && written_cycle_architecture_present=true
+                  git cat-file -e "$mobile_candidate:$written_cycle_template_path" 2>/dev/null && written_cycle_template_present=true
+                  if [[ "$written_cycle_architecture_present" == true || "$written_cycle_template_present" == true ]]; then
+                    [[ "$written_cycle_architecture_present" == true && "$written_cycle_template_present" == true ]] || {
+                      echo "Partial Ethiopia written decision cycle identity" >&2; exit 1; }
+                    written_cycle_architecture_blob="$(git rev-parse "$mobile_candidate:$written_cycle_architecture_path")"
+                    written_cycle_template_blob="$(git rev-parse "$mobile_candidate:$written_cycle_template_path")"
+                    decision_blob="$(git rev-parse "$mobile_candidate:docs/AYO_DECISION_LOG.md")"
+                    roadmap_blob="$(git rev-parse "$mobile_candidate:docs/AYO_ROADMAP.md")"
+                    approval_pack_architecture_blob="$(git rev-parse "$mobile_candidate:docs/AYO_BOOKING_CONSENT_APPROVAL_PACK_ARCHITECTURE.md")"
+                    approval_pack_template_blob="$(git rev-parse "$mobile_candidate:docs/AYO_BOOKING_CONSENT_APPROVAL_PACK_TEMPLATE.md")"
+                    consent_architecture_blob="$(git rev-parse "$mobile_candidate:docs/AYO_BOOKING_CONSENT_DOCUMENT_DELIVERY_CONTRACT_ARCHITECTURE.md")"
+                    baseline_blob="$(git rev-parse "$mobile_candidate:.secrets.baseline")"
+                    backend_tree="$(git rev-parse "$mobile_candidate:BACKEND")"
+                    migration_tree="$(git rev-parse "$mobile_candidate:database/migrations")"
+                    package_blob="$(git rev-parse "$mobile_candidate:AYO-Mobile/package.json")"
+                    lockfile_blob="$(git rev-parse "$mobile_candidate:AYO-Mobile/package-lock.json")"
+                    root_package_blob="$(git rev-parse "$mobile_candidate:pyproject.toml")"
+                    root_lockfile_blob="$(git rev-parse "$mobile_candidate:uv.lock")"
+                    alembic_blob="$(git rev-parse "$mobile_candidate:alembic.ini")"
+                    python_version_blob="$(git rev-parse "$mobile_candidate:.python-version")"
+                    written_cycle_tuple="$written_cycle_template_blob|$written_cycle_architecture_blob|$decision_blob|$roadmap_blob|$approval_pack_architecture_blob|$approval_pack_template_blob|$consent_architecture_blob|$baseline_blob|$backend_tree|$migration_tree|$package_blob|$lockfile_blob|$root_package_blob|$root_lockfile_blob|$alembic_blob|$python_version_blob"
+                    expected_written_cycle_tuple="6ff612676ba86f421980df59a2a96ad8f551e881|cce6d8e81285cdd8fd1d52ea0537a2f7f66faba3|0bc7c9e0999ee6a54473c5448fec6f448037f0cf|43301996e1d6f867fd25dc9366c1c1a815859447|a2285429b91f73de067807ababb0780a088d5e7a|5d7218a9bd2ecc5d4561fe6164a6864e50cadb16|54d69775049d6f0af12fe6ace2bfc5a8cf66ad81|71770a9e529e9af0c9ed5c72549b3a2f7ddcfb02|62500035ef60d94ccc6333f25cb3aa79ff5c3f21|253ecedebe58c31077a0baa7d2532adc46464f70|b4c26fea6a74ac9c1d3a442eb855cf63538fb5e2|ace7192e4a749f61a011f8e4293ccd1e053d648a|6b8425f6ed81258388c4e6bba39c80af0afa7fef|6a08d31b721b486950fd06df0ca3430fcbe8aabf|a2353502812251c10e36f8cd534de71c1dcca58b|ebe773d9eeab42ab1f896401f5b9c581f88d6709"
+                    [[ "$written_cycle_tuple" == "$expected_written_cycle_tuple" ]] || {
+                      echo "Unreviewed Ethiopia written decision cycle identity" >&2; exit 1; }
+                    mode=booking-consent-ethiopia-written-decision-cycle-architecture
+                  else
+                  candidate_written_decision_blob="$(git rev-parse "$mobile_candidate:docs/AYO_DECISION_LOG.md")"
+                  candidate_written_roadmap_blob="$(git rev-parse "$mobile_candidate:docs/AYO_ROADMAP.md")"
+                  if [[ "$candidate_written_decision_blob" == 0bc7c9e0999ee6a54473c5448fec6f448037f0cf \
+                    || "$candidate_written_roadmap_blob" == 43301996e1d6f867fd25dc9366c1c1a815859447 ]]; then
+                    echo "Missing Ethiopia written decision cycle identity" >&2
+                    exit 1
+                  fi
                   approval_pack_architecture_path=docs/AYO_BOOKING_CONSENT_APPROVAL_PACK_ARCHITECTURE.md
                   approval_pack_template_path=docs/AYO_BOOKING_CONSENT_APPROVAL_PACK_TEMPLATE.md
                   approval_pack_architecture_present=false
@@ -366,6 +404,7 @@ jobs:
                     fi
                     mode=mobile-booking-intent-foundation
                     fi
+                  fi
                   fi
                   ;;
                 53de44782c39f226918e719e2a05212f787fffcc\|6b46cae963c034aa2203e0e97c119fe68eadf908)
@@ -747,16 +786,160 @@ jobs:
             echo "Approval-pack executable dependency configuration boundary drift" >&2; exit 1; }
           echo "Booking consent approval-pack architecture authority before tooling: PASS"
 
+      - name: Preflight Ethiopia written decision cycle architecture authority before tooling
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'booking-consent-ethiopia-written-decision-cycle-architecture'
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_REF: ${{ github.ref }}
+          EVENT_BEFORE: ${{ github.event.before || '' }}
+          EVENT_HEAD_SHA: ${{ github.sha }}
+          PR_BASE_REF: ${{ github.base_ref || '' }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || '' }}
+        run: |
+          set -euo pipefail
+          zero=0000000000000000000000000000000000000000
+          fixed=a62c3394111c14d93f787b7b319faa0a9b13293d
+          reviewed_parent=8a1a64111c8feac8deb4d9bbde0e3485356884f4
+          reviewed_history=(
+            8a1a64111c8feac8deb4d9bbde0e3485356884f4
+            aa123b9fc34a53a21dc80518bc777787f9aff313
+            2761439c34caebc7598948d6aeb70ed8eb431932
+            cc61b625f6a46b3db9214c1fd1d30e16a9ac647a
+            fbdf876638f9d8666e2144d0b9431fd36c734575
+            a62c3394111c14d93f787b7b319faa0a9b13293d
+          )
+          feature_ref=refs/heads/agent/booking-consent-ethiopia-written-decision-pack
+          main_ref=refs/heads/main
+          refresh_authorized_feature() {
+            local destination=refs/remotes/origin/ethiopia-written-cycle-feature
+            git update-ref -d "$destination"
+            git fetch --no-tags origin \
+              "+refs/heads/agent/booking-consent-ethiopia-written-decision-pack:$destination"
+            authorized_feature="$(git rev-parse "$destination")"
+            [[ "$authorized_feature" =~ ^[0-9a-f]{40}$ && "$authorized_feature" != "$zero" ]] || {
+              echo "Ethiopia written-cycle fetched feature identity malformed" >&2; exit 1; }
+            git cat-file -e "$authorized_feature^{commit}" 2>/dev/null || {
+              echo "Ethiopia written-cycle fetched feature commit unavailable" >&2; exit 1; }
+          }
+          case "$EVENT_NAME" in
+            pull_request)
+              [[ "$PR_BASE_REF" == main && "$PR_BASE_SHA" == "$fixed" \
+                && "$PR_HEAD_SHA" =~ ^[0-9a-f]{40}$ && "$PR_HEAD_SHA" != "$zero" ]] || {
+                echo "Ethiopia written-cycle PR identity drift" >&2; exit 1; }
+              candidate="$PR_HEAD_SHA"
+              [[ "$candidate" != "$(git rev-parse HEAD)" ]] || {
+                echo "Ethiopia written-cycle synthetic merge used as candidate" >&2; exit 1; }
+              git cat-file -e "$candidate^{commit}" 2>/dev/null || {
+                echo "Ethiopia written-cycle PR candidate unavailable" >&2; exit 1; }
+              git merge-base --is-ancestor "$fixed" "$candidate"
+              git merge-base --is-ancestor "$fixed" HEAD
+              git merge-base --is-ancestor "$candidate" HEAD
+              ;;
+            push)
+              candidate="$EVENT_HEAD_SHA"
+              [[ "$candidate" =~ ^[0-9a-f]{40}$ && "$candidate" != "$zero" \
+                && "$candidate" == "$(git rev-parse HEAD)" ]] || {
+                echo "Ethiopia written-cycle push candidate drift" >&2; exit 1; }
+              mapfile -t parents < <(git show -s --format='%P' "$candidate" | tr ' ' '\n')
+              if [[ -z "$EVENT_BEFORE" || "$EVENT_BEFORE" == "$zero" ]]; then
+                [[ "$EVENT_REF" == "$feature_ref" ]] || {
+                  echo "Ethiopia written-cycle first publication requires exact feature ref" >&2; exit 1; }
+                git fetch --no-tags origin refs/heads/main:refs/remotes/origin/ethiopia-written-cycle-main
+                remote_main="$(git rev-parse refs/remotes/origin/ethiopia-written-cycle-main)"
+                [[ "$remote_main" == "$fixed" && "$(git merge-base "$candidate" "$remote_main")" == "$fixed" ]] || {
+                  echo "Ethiopia written-cycle first-publication base drift" >&2; exit 1; }
+                [[ "${#parents[@]}" -eq 1 && "${parents[0]}" == "$reviewed_parent" ]] || {
+                  echo "Ethiopia written-cycle first-publication capture parent drift" >&2; exit 1; }
+                history_cursor="$reviewed_parent"
+                for expected in "${reviewed_history[@]}"; do
+                  [[ "$history_cursor" == "$expected" ]] || {
+                    echo "Ethiopia written-cycle reviewed history drift" >&2; exit 1; }
+                  [[ "$expected" == "$fixed" ]] && break
+                  mapfile -t history_parents < <(git show -s --format='%P' "$history_cursor" | tr ' ' '\n')
+                  [[ "${#history_parents[@]}" -eq 1 ]] || {
+                    echo "Ethiopia written-cycle reviewed history is nonlinear" >&2; exit 1; }
+                  history_cursor="${history_parents[0]}"
+                done
+              else
+                [[ "$EVENT_BEFORE" =~ ^[0-9a-f]{40}$ && "$EVENT_BEFORE" != "$zero" ]] || {
+                  echo "Ethiopia written-cycle predecessor malformed" >&2; exit 1; }
+                git cat-file -e "$EVENT_BEFORE^{commit}" 2>/dev/null || {
+                  echo "Ethiopia written-cycle predecessor unavailable" >&2; exit 1; }
+                git merge-base --is-ancestor "$EVENT_BEFORE" "$candidate"
+                if [[ "$EVENT_REF" == "$feature_ref" ]]; then
+                  refresh_authorized_feature
+                  published_feature="$authorized_feature"
+                  [[ "$published_feature" == "$EVENT_BEFORE" ]] || {
+                    echo "Ethiopia written-cycle published predecessor drift" >&2; exit 1; }
+                  [[ "${#parents[@]}" -eq 1 && "${parents[0]}" == "$EVENT_BEFORE" ]] || {
+                    echo "Ethiopia written-cycle later feature push topology drift" >&2; exit 1; }
+                elif [[ "$EVENT_REF" == "$main_ref" ]]; then
+                  [[ "$EVENT_BEFORE" == "$fixed" && "${#parents[@]}" -eq 2 \
+                    && "${parents[0]}" == "$fixed" ]] || {
+                    echo "Ethiopia written-cycle regular merge topology drift" >&2; exit 1; }
+                  refresh_authorized_feature
+                  [[ "${parents[1]}" == "$authorized_feature" ]] || {
+                    echo "Ethiopia written-cycle merge second parent drift" >&2; exit 1; }
+                  git merge-base --is-ancestor "$fixed" "$authorized_feature"
+                  [[ "$(git rev-parse "$candidate^{tree}")" == "$(git rev-parse "$authorized_feature^{tree}")" ]] || {
+                    echo "Ethiopia written-cycle merge tree drift" >&2; exit 1; }
+                else
+                  echo "Ethiopia written-cycle push ref is not authorized" >&2
+                  exit 1
+                fi
+              fi
+              ;;
+            workflow_dispatch)
+              echo "Ethiopia written decision cycle architecture rejects workflow_dispatch" >&2
+              exit 1
+              ;;
+            *) echo "Unsupported Ethiopia written-cycle event" >&2; exit 1 ;;
+          esac
+          git cat-file -e "$fixed^{commit}"
+          git cat-file -e "$candidate^{commit}"
+          git merge-base --is-ancestor "$fixed" "$candidate"
+          mapfile -t changed < <(git diff --name-only "$fixed" "$candidate")
+          expected=(
+            .github/workflows/ci.yml
+            docs/AYO_BOOKING_CONSENT_ETHIOPIA_COUNSEL_QUESTION_PACK_TEMPLATE.md
+            docs/AYO_BOOKING_CONSENT_ETHIOPIA_WRITTEN_DECISION_CYCLE_ARCHITECTURE.md
+            docs/AYO_DECISION_LOG.md
+            docs/AYO_ROADMAP.md
+          )
+          [[ "${#changed[@]}" -eq 5 && "${changed[*]}" == "${expected[*]}" ]] || {
+            echo "Ethiopia written-cycle exact five-path manifest drift" >&2; exit 1; }
+          fingerprint="$(printf '%s\n' "${changed[@]}" | sha256sum | awk '{print $1}')"
+          [[ "$fingerprint" == 525a851db159c27cdeefae89015c4b21fb57fd9d57348b75a35c501b3233e423 ]] || {
+            echo "Ethiopia written-cycle manifest fingerprint drift" >&2; exit 1; }
+          [[ "$(git rev-parse "$candidate:tests")" == 2dbcb487bd27578a95d0db9a31c21ecde7032114 \
+            && "$(git rev-parse "$candidate:AYO-Mobile")" == da39714a911ffbf02171d28348c88a39eab2d938 \
+            && "$(git rev-parse "$candidate:AYO-Mobile/tests")" == d7143a733cf14e70851406dab8131ce7c69dd364 \
+            && "$(git rev-parse "$candidate:BACKEND")" == 62500035ef60d94ccc6333f25cb3aa79ff5c3f21 \
+            && "$(git rev-parse "$candidate:database/migrations")" == 253ecedebe58c31077a0baa7d2532adc46464f70 \
+            && "$(git rev-parse "$candidate:AYO-Mobile/package.json")" == b4c26fea6a74ac9c1d3a442eb855cf63538fb5e2 \
+            && "$(git rev-parse "$candidate:AYO-Mobile/package-lock.json")" == ace7192e4a749f61a011f8e4293ccd1e053d648a \
+            && "$(git rev-parse "$candidate:pyproject.toml")" == 6b8425f6ed81258388c4e6bba39c80af0afa7fef \
+            && "$(git rev-parse "$candidate:uv.lock")" == 6a08d31b721b486950fd06df0ca3430fcbe8aabf \
+            && "$(git rev-parse "$candidate:.secrets.baseline")" == 71770a9e529e9af0c9ed5c72549b3a2f7ddcfb02 \
+            && "$(git rev-parse "$candidate:alembic.ini")" == a2353502812251c10e36f8cd534de71c1dcca58b \
+            && "$(git rev-parse "$candidate:.python-version")" == ebe773d9eeab42ab1f896401f5b9c581f88d6709 ]] || {
+            echo "Ethiopia written-cycle immutable identity drift" >&2; exit 1; }
+          git diff --quiet "$fixed" "$candidate" -- BACKEND tests database AYO-Mobile \
+            pyproject.toml uv.lock alembic.ini .python-version .secrets.baseline || {
+            echo "Ethiopia written-cycle executable dependency configuration drift" >&2; exit 1; }
+          echo "Ethiopia written decision cycle architecture authority before tooling: PASS"
+
       - name: Verify lock file is current
-        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture' && steps.evidence_contract.outputs.mode != 'booking-consent-ethiopia-written-decision-cycle-architecture'
         run: uv lock --check
 
       - name: Check formatting
-        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture' && steps.evidence_contract.outputs.mode != 'booking-consent-ethiopia-written-decision-cycle-architecture'
         run: uv run --locked ruff format --check .
 
       - name: Lint
-        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture' && steps.evidence_contract.outputs.mode != 'booking-consent-ethiopia-written-decision-cycle-architecture'
         run: uv run --locked ruff check .
 
       - name: Preflight Mobile Booking candidate authority before tooling
@@ -1305,8 +1488,13 @@ jobs:
               elif [[ "$EVIDENCE_MODE" == "booking-consent-policy-authority" \
                 || "$EVIDENCE_MODE" == "mobile-booking-intent-foundation" \
                 || "$EVIDENCE_MODE" == "booking-consent-document-delivery-architecture" \
-                || "$EVIDENCE_MODE" == "booking-consent-approval-pack-architecture" ]]; then
-                if [[ "$EVIDENCE_MODE" == "booking-consent-approval-pack-architecture" ]]; then
+                || "$EVIDENCE_MODE" == "booking-consent-approval-pack-architecture" \
+                || "$EVIDENCE_MODE" == "booking-consent-ethiopia-written-decision-cycle-architecture" ]]; then
+                if [[ "$EVIDENCE_MODE" == "booking-consent-ethiopia-written-decision-cycle-architecture" ]]; then
+                  expected_base=a62c3394111c14d93f787b7b319faa0a9b13293d
+                  label="Ethiopia written decision cycle architecture"
+                  first_push_mode=verified-ethiopia-written-decision-cycle-first-push-base
+                elif [[ "$EVIDENCE_MODE" == "booking-consent-approval-pack-architecture" ]]; then
                   expected_base=6aa98a78953531b637413e54b3afa93c721ae863
                   label="Booking consent approval-pack architecture"
                   first_push_mode=verified-booking-consent-approval-pack-first-push-base
@@ -1849,6 +2037,96 @@ jobs:
             && "$(git rev-parse "$candidate:docs/AYO_BOOKING_CONSENT_DOCUMENT_DELIVERY_CONTRACT_ARCHITECTURE.md")" == 54d69775049d6f0af12fe6ace2bfc5a8cf66ad81 ]] || {
             echo "Approval-pack documentation identity drift" >&2; exit 1; }
           echo "Booking consent approval-pack architecture exact candidate identity: PASS"
+
+      - name: Bind exact Ethiopia written decision cycle architecture candidate identity
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'booking-consent-ethiopia-written-decision-cycle-architecture'
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_REF: ${{ github.ref }}
+          EVENT_BEFORE: ${{ github.event.before || '' }}
+          EVENT_HEAD_SHA: ${{ github.sha }}
+          PR_BASE_REF: ${{ github.base_ref || '' }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || '' }}
+          TRUSTED_COMPARISON_BASE_SHA: ${{ steps.trusted_comparison_base.outputs.sha }}
+        run: |
+          set -euo pipefail
+          zero=0000000000000000000000000000000000000000
+          fixed=a62c3394111c14d93f787b7b319faa0a9b13293d
+          reviewed_parent=8a1a64111c8feac8deb4d9bbde0e3485356884f4
+          reviewed_history=(
+            8a1a64111c8feac8deb4d9bbde0e3485356884f4
+            aa123b9fc34a53a21dc80518bc777787f9aff313
+            2761439c34caebc7598948d6aeb70ed8eb431932
+            cc61b625f6a46b3db9214c1fd1d30e16a9ac647a
+            fbdf876638f9d8666e2144d0b9431fd36c734575
+            a62c3394111c14d93f787b7b319faa0a9b13293d
+          )
+          feature_ref=refs/heads/agent/booking-consent-ethiopia-written-decision-pack
+          main_ref=refs/heads/main
+          refresh_authorized_feature() {
+            local destination=refs/remotes/origin/ethiopia-written-cycle-feature
+            git update-ref -d "$destination"
+            git fetch --no-tags origin \
+              "+refs/heads/agent/booking-consent-ethiopia-written-decision-pack:$destination"
+            authorized_feature="$(git rev-parse "$destination")"
+            [[ "$authorized_feature" =~ ^[0-9a-f]{40}$ && "$authorized_feature" != "$zero" ]] || {
+              echo "Ethiopia written-cycle fetched feature identity malformed" >&2; exit 1; }
+            git cat-file -e "$authorized_feature^{commit}" 2>/dev/null || {
+              echo "Ethiopia written-cycle fetched feature commit unavailable" >&2; exit 1; }
+          }
+          case "$EVENT_NAME" in
+            pull_request)
+              candidate="$PR_HEAD_SHA"
+              [[ "$PR_BASE_REF" == main && "$PR_BASE_SHA" == "$fixed" && "$TRUSTED_COMPARISON_BASE_SHA" == "$fixed" ]]
+              [[ "$candidate" =~ ^[0-9a-f]{40}$ && "$candidate" != "$zero" && "$candidate" != "$(git rev-parse HEAD)" ]]
+              git merge-base --is-ancestor "$fixed" "$candidate"
+              git merge-base --is-ancestor "$fixed" HEAD
+              git merge-base --is-ancestor "$candidate" HEAD
+              ;;
+            push)
+              candidate="$EVENT_HEAD_SHA"
+              [[ "$candidate" =~ ^[0-9a-f]{40}$ && "$candidate" != "$zero" && "$candidate" == "$(git rev-parse HEAD)" ]]
+              mapfile -t parents < <(git show -s --format='%P' "$candidate" | tr ' ' '\n')
+              if [[ -z "$EVENT_BEFORE" || "$EVENT_BEFORE" == "$zero" ]]; then
+                [[ "$EVENT_REF" == "$feature_ref" && "$TRUSTED_COMPARISON_BASE_SHA" == "$fixed" && "${#parents[@]}" -eq 1 && "${parents[0]}" == "$reviewed_parent" ]]
+                [[ "$(git merge-base "$candidate" "$fixed")" == "$fixed" ]]
+                history_cursor="$reviewed_parent"
+                for expected in "${reviewed_history[@]}"; do
+                  [[ "$history_cursor" == "$expected" ]] || {
+                    echo "Ethiopia written-cycle exact-identity reviewed history drift" >&2; exit 1; }
+                  [[ "$expected" == "$fixed" ]] && break
+                  mapfile -t history_parents < <(git show -s --format='%P' "$history_cursor" | tr ' ' '\n')
+                  [[ "${#history_parents[@]}" -eq 1 ]] || {
+                    echo "Ethiopia written-cycle exact-identity reviewed history is nonlinear" >&2; exit 1; }
+                  history_cursor="${history_parents[0]}"
+                done
+              elif [[ "$EVENT_REF" == "$feature_ref" ]]; then
+                [[ "$TRUSTED_COMPARISON_BASE_SHA" == "$EVENT_BEFORE" && "${#parents[@]}" -eq 1 && "${parents[0]}" == "$EVENT_BEFORE" ]]
+                git merge-base --is-ancestor "$EVENT_BEFORE" "$candidate"
+                refresh_authorized_feature
+                published_feature="$authorized_feature"
+                [[ "$published_feature" == "$EVENT_BEFORE" ]]
+              elif [[ "$EVENT_REF" == "$main_ref" ]]; then
+                [[ "$TRUSTED_COMPARISON_BASE_SHA" == "$EVENT_BEFORE" && "${#parents[@]}" -eq 2 && "${parents[0]}" == "$fixed" && "$EVENT_BEFORE" == "$fixed" ]]
+                refresh_authorized_feature
+                [[ "${parents[1]}" == "$authorized_feature" ]]
+                git merge-base --is-ancestor "$fixed" "$authorized_feature"
+                [[ "$(git rev-parse "$candidate^{tree}")" == "$(git rev-parse "$authorized_feature^{tree}")" ]]
+              else
+                echo "Ethiopia written decision cycle push ref or topology unauthorized" >&2; exit 1
+              fi
+              ;;
+            workflow_dispatch) echo "Ethiopia written decision cycle dispatch prohibited" >&2; exit 1 ;;
+            *) echo "Unsupported Ethiopia written decision cycle event" >&2; exit 1 ;;
+          esac
+          git cat-file -e "$candidate^{commit}"
+          git merge-base --is-ancestor "$fixed" "$candidate"
+          [[ "$(git rev-parse "$candidate:docs/AYO_BOOKING_CONSENT_ETHIOPIA_COUNSEL_QUESTION_PACK_TEMPLATE.md")" == 6ff612676ba86f421980df59a2a96ad8f551e881 \
+            && "$(git rev-parse "$candidate:docs/AYO_BOOKING_CONSENT_ETHIOPIA_WRITTEN_DECISION_CYCLE_ARCHITECTURE.md")" == cce6d8e81285cdd8fd1d52ea0537a2f7f66faba3 \
+            && "$(git rev-parse "$candidate:docs/AYO_DECISION_LOG.md")" == 0bc7c9e0999ee6a54473c5448fec6f448037f0cf \
+            && "$(git rev-parse "$candidate:docs/AYO_ROADMAP.md")" == 43301996e1d6f867fd25dc9366c1c1a815859447 ]]
+          echo "Ethiopia written decision cycle exact candidate identity: PASS"
 
       - name: Bind tested Courier Pickup tree to trusted authoritative base
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'courier-pickup-idempotency-v1'
@@ -3048,7 +3326,7 @@ jobs:
           PY
 
       - name: Verify PostgreSQL 17/PostGIS integration tests without skips
-        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-policy-authority' && steps.evidence_contract.outputs.mode != 'mobile-booking-intent-foundation' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-policy-authority' && steps.evidence_contract.outputs.mode != 'mobile-booking-intent-foundation' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture' && steps.evidence_contract.outputs.mode != 'booking-consent-ethiopia-written-decision-cycle-architecture'
         run: uv run --locked pytest -m "integration and not migration" --no-cov -q
 
       - name: Capture Booking consent authority PostgreSQL evidence
@@ -3212,7 +3490,7 @@ jobs:
           PY
 
       - name: Install and verify PostgreSQL 17 client
-        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture' && steps.evidence_contract.outputs.mode != 'booking-consent-ethiopia-written-decision-cycle-architecture'
         id: pg_client
         run: |
           sudo install -d /usr/share/postgresql-common/pgdg
@@ -3229,7 +3507,7 @@ jobs:
           echo "ready=true" >> "$GITHUB_OUTPUT"
 
       - name: Initialize and verify canonical migration head
-        if: (success() || failure()) && steps.pg_client.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
+        if: (success() || failure()) && steps.pg_client.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture' && steps.evidence_contract.outputs.mode != 'booking-consent-ethiopia-written-decision-cycle-architecture'
         id: canonical_schema
         env:
           AYO_DATABASE_URL: postgresql+psycopg://ayo_test:ayo_test_password@127.0.0.1:5432/ayo_certification
@@ -3270,13 +3548,13 @@ jobs:
           echo "ready=true" >> "$GITHUB_OUTPUT"
 
       - name: Certify PostgreSQL backup and restore
-        if: (success() || failure()) && steps.canonical_schema.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
+        if: (success() || failure()) && steps.canonical_schema.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture' && steps.evidence_contract.outputs.mode != 'booking-consent-ethiopia-written-decision-cycle-architecture'
         env:
           AYO_TEST_DATABASE_URL: postgresql+psycopg://ayo_test:ayo_test_password@127.0.0.1:5432/ayo_certification
         run: uv run --locked python database/certify_restore.py
 
       - name: Certify Migration 0055 and 0056 round trip
-        if: (success() || failure()) && steps.canonical_schema.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
+        if: (success() || failure()) && steps.canonical_schema.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture' && steps.evidence_contract.outputs.mode != 'booking-consent-ethiopia-written-decision-cycle-architecture'
         env:
           AYO_DATABASE_URL: postgresql+psycopg://ayo_test:ayo_test_password@127.0.0.1:5432/ayo_roundtrip
           AYO_DATABASE_SSL_MODE: disable
@@ -3482,7 +3760,7 @@ jobs:
           PY
 
       - name: Remove certification databases before downstream suites
-        if: (success() || failure()) && steps.pg_client.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
+        if: (success() || failure()) && steps.pg_client.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture' && steps.evidence_contract.outputs.mode != 'booking-consent-ethiopia-written-decision-cycle-architecture'
         run: |
           uv run --locked python - <<'PY'
           import psycopg
@@ -3554,7 +3832,7 @@ jobs:
           PY
 
       - name: Verify Batch 1 typing evidence equivalence
-        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-document-delivery-architecture' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-document-delivery-architecture' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture' && steps.evidence_contract.outputs.mode != 'booking-consent-ethiopia-written-decision-cycle-architecture'
         env:
           EVIDENCE_MODE: ${{ steps.evidence_contract.outputs.mode }}
           BOOKING_CONSENT_MYPY_EVIDENCE_PATH: ${{ runner.temp }}/booking-consent-mypy-v1.txt
@@ -3987,7 +4265,7 @@ jobs:
             source-configured.txt candidate-configured.txt
 
       - name: Scan exact candidate for secrets
-        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture' && steps.evidence_contract.outputs.mode != 'booking-consent-ethiopia-written-decision-cycle-architecture'
         env:
           BOOKING_CONSENT_SECRET_EVIDENCE_PATH: ${{ runner.temp }}/booking-consent-secrets-v1.txt
           MOBILE_SECRET_EVIDENCE_PATH: ${{ runner.temp }}/mobile-booking-evidence-sections/MOBILE_SECRET_INVENTORY_V1.txt
@@ -4622,23 +4900,23 @@ jobs:
           PY
 
       - name: Verify audit suite against PostgreSQL 17/PostGIS without skips
-        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture' && steps.evidence_contract.outputs.mode != 'booking-consent-ethiopia-written-decision-cycle-architecture'
         run: uv run --locked pytest -m audit --no-cov -q
 
       - name: Verify session persistence suite without skips
-        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture' && steps.evidence_contract.outputs.mode != 'booking-consent-ethiopia-written-decision-cycle-architecture'
         run: uv run --locked pytest -m session_persistence --no-cov -q
 
       - name: Verify authentication foundation without skips
-        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture' && steps.evidence_contract.outputs.mode != 'booking-consent-ethiopia-written-decision-cycle-architecture'
         run: uv run --locked pytest -m authentication --no-cov -q
 
       - name: Verify authorization foundation without skips
-        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture' && steps.evidence_contract.outputs.mode != 'booking-consent-ethiopia-written-decision-cycle-architecture'
         run: uv run --locked pytest -m authorization --no-cov -q
 
       - name: Verify support foundation without skips
-        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture' && steps.evidence_contract.outputs.mode != 'booking-consent-ethiopia-written-decision-cycle-architecture'
         run: uv run --locked pytest -m support --no-cov -q
 
       - name: Verify exact historical migration-suite debt
@@ -4931,6 +5209,7 @@ jobs:
               "Bind exact Mobile Booking intent foundation candidate identity",
               "Bind exact consent document architecture candidate identity",
               "Bind exact Booking consent approval-pack architecture candidate identity",
+              "Bind exact Ethiopia written decision cycle architecture candidate identity",
               "Test all admitted non-PostgreSQL behavior with coverage",
               "Verify exact Batch 2 test and coverage contract",
           )
@@ -4941,6 +5220,7 @@ jobs:
           consumer_steps = []
           predecessor_steps = []
           approval_pack_consumer_block = ""
+          ethiopia_written_cycle_consumer_block = ""
           for index, match in enumerate(step_headers):
               end = step_headers[index + 1].start() if index + 1 < len(step_headers) else len(workflow)
               step_block = workflow[match.start():end]
@@ -4950,6 +5230,8 @@ jobs:
                   predecessor_steps.append(match.group(1))
               if match.group(1) == "Bind exact Booking consent approval-pack architecture candidate identity":
                   approval_pack_consumer_block = step_block
+              if match.group(1) == "Bind exact Ethiopia written decision cycle architecture candidate identity":
+                  ethiopia_written_cycle_consumer_block = step_block
           if (
               workflow.count(authoritative_mapping) != len(expected_consumer_steps)
               or tuple(consumer_steps) != expected_consumer_steps
@@ -4969,6 +5251,18 @@ jobs:
               ) != ["trusted_comparison_base"]
           ):
               raise SystemExit("approval-pack trusted comparison-base consumer drift")
+          if (
+              consumer_steps.count(
+                  "Bind exact Ethiopia written decision cycle architecture candidate identity"
+              ) != 1
+              or ethiopia_written_cycle_consumer_block.count(authoritative_mapping) != 1
+              or ethiopia_written_cycle_consumer_block.count("TRUSTED_COMPARISON_BASE_SHA:") != 1
+              or re.findall(
+                  r"steps\.([A-Za-z0-9_-]+)\.outputs\.sha",
+                  ethiopia_written_cycle_consumer_block,
+              ) != ["trusted_comparison_base"]
+          ):
+              raise SystemExit("Ethiopia written-cycle trusted comparison-base consumer drift")
           forbidden = (
               "COVERAGE_" + "COMPARE_SHA",
               "steps.coverage_" + "base.outputs.sha",
@@ -5588,13 +5882,13 @@ jobs:
           PY
 
       - name: Scan Python source
-        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture' && steps.evidence_contract.outputs.mode != 'booking-consent-ethiopia-written-decision-cycle-architecture'
         run: >-
           uv run --locked bandit -c pyproject.toml -r
           BACKEND ayo.py database/certify_restore.py
 
       - name: Audit installed dependencies
-        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture' && steps.evidence_contract.outputs.mode != 'booking-consent-ethiopia-written-decision-cycle-architecture'
         run: uv run --locked pip-audit
 
       - name: Final PostgreSQL lifecycle cleanup
@@ -5663,7 +5957,8 @@ jobs:
             exit 1
           fi
           if [[ ("${{ steps.evidence_contract.outputs.mode }}" == "mobile-booking-intent-foundation" \
-            || "${{ steps.evidence_contract.outputs.mode }}" == "booking-consent-approval-pack-architecture") \
+            || "${{ steps.evidence_contract.outputs.mode }}" == "booking-consent-approval-pack-architecture" \
+            || "${{ steps.evidence_contract.outputs.mode }}" == "booking-consent-ethiopia-written-decision-cycle-architecture") \
             && -n "$(git status --porcelain --untracked-files=all)" ]]; then
             git status --short --untracked-files=all
             echo "Mobile Booking candidate generated Git-visible artifacts" >&2
@@ -6703,6 +6998,186 @@ jobs:
         run: |
           echo "booking consent document delivery architecture evidence awaiting CTO admission" >&2
           exit 1
+      - name: Capture Ethiopia written decision cycle neutral secret inventory
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'booking-consent-ethiopia-written-decision-cycle-architecture'
+        env:
+          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          ETHIOPIA_WRITTEN_CYCLE_SECRET_EVIDENCE_PATH: ${{ runner.temp }}/booking-consent-ethiopia-written-decision-cycle-secret-inventory-v1.txt
+          ETHIOPIA_WRITTEN_CYCLE_SECRET_CLEANUP_PATH: ${{ runner.temp }}/booking-consent-ethiopia-written-decision-cycle-secret-cleanup-v1.txt
+        run: |
+          set -euo pipefail
+          zero=0000000000000000000000000000000000000000
+          fixed=a62c3394111c14d93f787b7b319faa0a9b13293d
+          [[ "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ && "$CANDIDATE_SHA" != "$zero" ]] || {
+            echo "Approval-pack secret candidate malformed" >&2; exit 1; }
+          git cat-file -e "$CANDIDATE_SHA^{commit}" 2>/dev/null || {
+            echo "Approval-pack secret candidate unavailable" >&2; exit 1; }
+          git cat-file -e "$fixed^{commit}" 2>/dev/null || {
+            echo "Approval-pack secret base unavailable" >&2; exit 1; }
+          [[ -n "$RUNNER_TEMP" && "$RUNNER_TEMP" == /* && -d "$RUNNER_TEMP" && ! -L "$RUNNER_TEMP" ]] || {
+            echo "Approval-pack scanner temporary root unsafe" >&2; exit 1; }
+          scan_dir="$(mktemp -d "$RUNNER_TEMP/ethiopia-written-cycle-scan.XXXXXX")"
+          [[ "$scan_dir" == "$RUNNER_TEMP"/ethiopia-written-cycle-scan.* \
+            && -d "$scan_dir" && ! -L "$scan_dir" ]] || {
+            echo "Approval-pack scanner directory unsafe" >&2; exit 1; }
+          candidate_root="$scan_dir/candidate-tree"
+          base_root="$scan_dir/base-tree"
+          candidate_json="$scan_dir/candidate.json"
+          base_json="$scan_dir/base.json"
+          baseline_json="$scan_dir/baseline.json"
+          staged_evidence="$scan_dir/neutral-evidence.txt"
+
+          cleanup_ethiopia_written_cycle_scan() {
+            local rc=$? cleanup_failed=0
+            trap - EXIT
+            if [[ -z "$scan_dir" || "$scan_dir" != "$RUNNER_TEMP"/ethiopia-written-cycle-scan.* \
+              || "$scan_dir" == "$RUNNER_TEMP" || ! -d "$RUNNER_TEMP" || -L "$RUNNER_TEMP" ]]; then
+              cleanup_failed=1
+            else
+              rm -rf -- "$scan_dir" || cleanup_failed=1
+              [[ ! -e "$scan_dir" && ! -L "$scan_dir" ]] || cleanup_failed=1
+            fi
+            for raw in "$candidate_root" "$base_root" "$candidate_json" "$base_json" \
+              "$baseline_json" "$staged_evidence"; do
+              [[ ! -e "$raw" && ! -L "$raw" ]] || cleanup_failed=1
+            done
+            if [[ "$cleanup_failed" -eq 0 && "$rc" -eq 0 ]]; then
+              printf 'raw_scanner_cleanup=PASS\n' > "$ETHIOPIA_WRITTEN_CYCLE_SECRET_CLEANUP_PATH"
+            else
+              rm -f -- "$ETHIOPIA_WRITTEN_CYCLE_SECRET_CLEANUP_PATH" "$ETHIOPIA_WRITTEN_CYCLE_SECRET_EVIDENCE_PATH"
+              [[ "$cleanup_failed" -eq 0 ]] || rc=1
+            fi
+            exit "$rc"
+          }
+          trap cleanup_ethiopia_written_cycle_scan EXIT
+
+          mkdir -- "$candidate_root" "$base_root"
+          rm -f -- "$ETHIOPIA_WRITTEN_CYCLE_SECRET_EVIDENCE_PATH" "$ETHIOPIA_WRITTEN_CYCLE_SECRET_CLEANUP_PATH"
+          git archive "$CANDIDATE_SHA" | tar -x -C "$candidate_root"
+          git archive "$fixed" | tar -x -C "$base_root"
+          git show "$CANDIDATE_SHA:.secrets.baseline" > "$baseline_json"
+          [[ "$(git hash-object "$baseline_json")" == 71770a9e529e9af0c9ed5c72549b3a2f7ddcfb02 ]] || {
+            echo "Approval-pack secret baseline drift" >&2; exit 1; }
+          scanner_version="$(uv tool run --from 'detect-secrets==1.5.0' detect-secrets --version)"
+          (
+            cd "$candidate_root"
+            uv tool run --from 'detect-secrets==1.5.0' detect-secrets scan \
+              --all-files --exclude-files '^\.git/'
+          ) > "$candidate_json"
+          (
+            cd "$base_root"
+            uv tool run --from 'detect-secrets==1.5.0' detect-secrets scan \
+              --all-files --exclude-files '^\.git/'
+          ) > "$base_json"
+
+          SCANNER_VERSION="$scanner_version" CANDIDATE_JSON="$candidate_json" \
+            BASE_JSON="$base_json" BASELINE_JSON="$baseline_json" \
+            STAGED_EVIDENCE="$staged_evidence" uv run --locked python - <<'PY'
+          from collections import Counter
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          VERSION = "1.5.0"
+
+          def load(name):
+              try:
+                  value = json.loads(Path(os.environ[name]).read_text(encoding="utf-8"))
+              except (OSError, UnicodeError, json.JSONDecodeError) as error:
+                  raise SystemExit(f"Approval-pack scanner {name} parse failure") from error
+              if not isinstance(value, dict):
+                  raise SystemExit(f"Approval-pack scanner {name} root malformed")
+              return value
+
+          def canonical(value):
+              return json.dumps(value, sort_keys=True, separators=(",", ":"))
+
+          def inventory(scan):
+              results = scan.get("results")
+              if not isinstance(results, dict):
+                  raise SystemExit("Approval-pack scanner results malformed")
+              items = []
+              for raw_path, records in results.items():
+                  if not isinstance(raw_path, str) or not isinstance(records, list):
+                      raise SystemExit("Approval-pack scanner inventory shape malformed")
+                  path = raw_path.replace("\\", "/")
+                  for record in records:
+                      if not isinstance(record, dict):
+                          raise SystemExit("Approval-pack scanner record malformed")
+                      try:
+                          item = (
+                              path, int(record["line_number"]), str(record["type"]),
+                              str(record["hashed_secret"]), bool(record["is_verified"]),
+                          )
+                      except (KeyError, TypeError, ValueError) as error:
+                          raise SystemExit("Approval-pack scanner record fields malformed") from error
+                      items.append(item)
+              if len(items) != len(set(items)):
+                  raise SystemExit("Approval-pack scanner inventory duplicates")
+              return sorted(items)
+
+          def digest(items):
+              data = "\n".join(
+                  f"{path}|{line}|{detector}|{fingerprint}|{str(verified).lower()}"
+                  for path, line, detector, fingerprint, verified in items
+              )
+              return hashlib.sha256(data.encode()).hexdigest()
+
+          candidate_scan = load("CANDIDATE_JSON")
+          base_scan = load("BASE_JSON")
+          baseline = load("BASELINE_JSON")
+          if os.environ["SCANNER_VERSION"] != VERSION:
+              raise SystemExit("Approval-pack scanner executable version drift")
+          for label, scan in (("candidate", candidate_scan), ("base", base_scan)):
+              if scan.get("version") != VERSION:
+                  raise SystemExit(f"Approval-pack {label} scanner version drift")
+              if canonical(scan.get("plugins_used")) != canonical(baseline.get("plugins_used")):
+                  raise SystemExit(f"Approval-pack {label} plugin inventory drift")
+              if canonical(scan.get("filters_used")) != canonical(baseline.get("filters_used")):
+                  raise SystemExit(f"Approval-pack {label} filter inventory drift")
+
+          base = inventory(base_scan)
+          candidate = inventory(candidate_scan)
+          base_only = sorted(set(base) - set(candidate))
+          candidate_only = sorted(set(candidate) - set(base))
+          base_workflow = Counter(
+              (path, detector, fingerprint, verified)
+              for path, _, detector, fingerprint, verified in base
+              if path == ".github/workflows/ci.yml"
+          )
+          candidate_workflow = Counter(
+              (path, detector, fingerprint, verified)
+              for path, _, detector, fingerprint, verified in candidate
+              if path == ".github/workflows/ci.yml"
+          )
+          boundary = "PASS" if base_workflow and not (base_workflow - candidate_workflow) else "FAIL"
+          if boundary != "PASS":
+              raise SystemExit("Approval-pack defensive scanner boundary drift")
+          lines = [
+              "SECRET_INVENTORY_V1",
+              f"scanner_version={VERSION}",
+              f"base_item_count={len(base)}",
+              f"candidate_item_count={len(candidate)}",
+              f"base_inventory_digest={digest(base)}",
+              f"candidate_inventory_digest={digest(candidate)}",
+              f"base_only_item_count={len(base_only)}",
+              f"candidate_only_item_count={len(candidate_only)}",
+              f"defensive_boundary_check={boundary}",
+              "normalized_comparison=COMPLETE_LINE_SENSITIVE_INVENTORY",
+              "END_SECRET_INVENTORY_V1",
+          ]
+          block = "\n".join(lines) + "\n"
+          path = Path(os.environ["STAGED_EVIDENCE"])
+          with path.open("xb") as output:
+              output.write(block.encode()); output.flush(); os.fsync(output.fileno())
+          if path.is_symlink() or path.stat().st_nlink != 1 or path.read_bytes() != block.encode():
+              raise SystemExit("Approval-pack neutral scanner evidence retention drift")
+          PY
+          [[ -f "$staged_evidence" && ! -L "$staged_evidence" ]] || {
+            echo "Approval-pack neutral scanner evidence missing" >&2; exit 1; }
+          mv -- "$staged_evidence" "$ETHIOPIA_WRITTEN_CYCLE_SECRET_EVIDENCE_PATH"
+
 
       - name: Assemble Booking consent approval-pack architecture evidence
         if: success() && steps.evidence_contract.outputs.mode == 'booking-consent-approval-pack-architecture'
@@ -7309,6 +7784,1086 @@ jobs:
           echo "booking consent approval pack architecture evidence awaiting CTO admission" >&2
           exit 1
 
+      - name: Assemble Ethiopia written decision cycle architecture evidence
+        if: success() && steps.evidence_contract.outputs.mode == 'booking-consent-ethiopia-written-decision-cycle-architecture'
+        env:
+          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          EVIDENCE_PATH: ${{ runner.temp }}/booking-consent-ethiopia-written-decision-cycle-architecture-evidence-v1.txt
+          SECRET_PATH: ${{ runner.temp }}/booking-consent-ethiopia-written-decision-cycle-secret-inventory-v1.txt
+          SECRET_CLEANUP_PATH: ${{ runner.temp }}/booking-consent-ethiopia-written-decision-cycle-secret-cleanup-v1.txt
+        run: |
+          set -euo pipefail
+          uv run --locked python - <<'PY'
+          import hashlib
+          import os
+          import re
+          import subprocess
+          from pathlib import Path
+
+          FIXED = "a62c3394111c14d93f787b7b319faa0a9b13293d"
+          MANIFEST = [
+              ".github/workflows/ci.yml",
+              "docs/AYO_BOOKING_CONSENT_ETHIOPIA_COUNSEL_QUESTION_PACK_TEMPLATE.md",
+              "docs/AYO_BOOKING_CONSENT_ETHIOPIA_WRITTEN_DECISION_CYCLE_ARCHITECTURE.md",
+              "docs/AYO_DECISION_LOG.md",
+              "docs/AYO_ROADMAP.md",
+          ]
+          MANIFEST_FINGERPRINT = "525a851db159c27cdeefae89015c4b21fb57fd9d57348b75a35c501b3233e423"
+          DOCS = {
+              MANIFEST[1]: ("6ff612676ba86f421980df59a2a96ad8f551e881", True),
+              MANIFEST[2]: ("cce6d8e81285cdd8fd1d52ea0537a2f7f66faba3", True),
+              MANIFEST[3]: ("0bc7c9e0999ee6a54473c5448fec6f448037f0cf", False),
+              MANIFEST[4]: ("43301996e1d6f867fd25dc9366c1c1a815859447", True),
+          }
+          LIFECYCLE = (
+              "NOT_STARTED", "RESEARCHED_UNVERIFIED", "QUESTION_PREPARED", "SUBMITTED",
+              "ANSWER_RECEIVED_UNVERIFIED", "VERIFIED", "APPROVED", "REJECTED",
+              "EXPIRED", "SUPERSEDED", "BLOCKED",
+          )
+          EMPTY_CONDITION = b"CONDITION_SET_V1\ncondition_count=0\n"
+          EMPTY_CONDITION_SHA = "e34d0c7c0c5ec8a6935d13fec9929b0905ee74b76ecbf49451a032ec3edd8a24"
+          sha = os.environ["CANDIDATE_SHA"]
+          if not re.fullmatch(r"[0-9a-f]{40}", sha) or sha == "0" * 40:
+              raise SystemExit("ethiopia-written-cycle document candidate malformed")
+          commit = subprocess.run(["git", "cat-file", "-e", f"{sha}^{{commit}}"], capture_output=True)
+          if commit.returncode:
+              raise SystemExit("ethiopia-written-cycle document candidate missing")
+
+          def object_bytes(path, expected, terminal_lf):
+              tree = subprocess.run(
+                  ["git", "ls-tree", sha, "--", path], capture_output=True, text=True,
+                  encoding="utf-8", errors="strict",
+              )
+              if tree.returncode:
+                  raise SystemExit(f"ethiopia-written-cycle object command failure: {path}")
+              line = tree.stdout.rstrip("\n")
+              match = re.fullmatch(r"100644 blob ([0-9a-f]{40})\t(.+)", line)
+              if not match or match.group(2) != path:
+                  raise SystemExit(f"ethiopia-written-cycle object missing or non-regular: {path}")
+              if match.group(1) != expected:
+                  raise SystemExit(f"ethiopia-written-cycle object blob drift: {path}")
+              result = subprocess.run(["git", "cat-file", "blob", match.group(1)], capture_output=True)
+              if result.returncode:
+                  raise SystemExit(f"ethiopia-written-cycle blob read failure: {path}")
+              raw = result.stdout
+              if raw.startswith(b"\xef\xbb\xbf") or b"\r" in raw or b"\x00" in raw:
+                  raise SystemExit(f"ethiopia-written-cycle object byte convention drift: {path}")
+              try:
+                  text = raw.decode("utf-8")
+              except UnicodeDecodeError as error:
+                  raise SystemExit(f"ethiopia-written-cycle object encoding drift: {path}") from error
+              if raw.endswith(b"\n") != terminal_lf:
+                  raise SystemExit(f"ethiopia-written-cycle object terminal newline drift: {path}")
+              return text
+
+          texts = {path: object_bytes(path, *contract) for path, contract in DOCS.items()}
+          template, architecture, decision, roadmap = (texts[path] for path in MANIFEST[1:])
+
+          def require(text, tokens, label):
+              missing = [token for token in tokens if token not in text]
+              if missing:
+                  raise ValueError(f"{label} missing governed structure: {missing[0]}")
+
+          def validate_documents(documents):
+              arch, form, log, road = documents
+              headings = [
+                  "## 1. Purpose", "## 2. Existing architecture truth", "## 3. Research basis and limitations",
+                  "## 4. Goals", "## 5. Non-goals", "## 6. Approval domains", "## 7. Evidence types",
+                  "## 8. Decision and status model", "## 9. Authority and separation of duties",
+                  "## 10. Source provenance", "## 11. Legal-instrument classification",
+                  "## 12. Counsel and regulator answer governance", "## 13. Language and rendition approvals",
+                  "## 14. Accessibility approval", "## 15. Privacy and retention decisions",
+                  "## 16. Rotation and withdrawal decisions", "## 17. Product and security approvals",
+                  "## 18. Founder approval and red lines", "## 19. Expiry and re-review",
+                  "## 20. Conflict and uncertainty handling", "## 21. Implementation gates",
+                  "## 22. Activation gates", "## 23. Audit and privacy", "## 24. Failure model",
+                  "## 25. Threat model", "## 26. Alternatives rejected", "## 27. CI consequences",
+                  "## 28. Production prohibition", "## 29. Open decisions",
+              ]
+              positions = [arch.find(item) for item in headings]
+              if any(pos < 0 for pos in positions) or positions != sorted(positions):
+                  raise ValueError("architecture heading inventory/order drift")
+              require(arch, [
+                  "PROPOSED / PRE-PRODUCTION", "21. production authorization.", "NOT_STARTED",
+                  "ANSWER_RECEIVED_UNVERIFIED", "SUPERSEDED", "NOT_APPROVED",
+                  "No checkbox, button, tap", "condition-set ID", "condition-set fingerprint",
+                  EMPTY_CONDITION_SHA, "authoritative evidence store is `UNRESOLVED`",
+                  "Ibrahim Hambentu Shibiru, Founder & CEO", "Ethiopia",
+                  "WCAG 2.2 Level AA", "WCAG2Mobile", "Production is inactive and prohibited",
+              ], "architecture")
+              if tuple(re.findall(r"`(NOT_STARTED|RESEARCHED_UNVERIFIED|QUESTION_PREPARED|SUBMITTED|ANSWER_RECEIVED_UNVERIFIED|VERIFIED|APPROVED|REJECTED|EXPIRED|SUPERSEDED|BLOCKED)`", arch)[:11]) != LIFECYCLE:
+                  raise ValueError("lifecycle enumeration drift")
+              if "`NOT_APPROVED` is only the safe default for an approval or authorization result and is never a lifecycle state" not in arch:
+                  raise ValueError("approval-result separation drift")
+              require(arch, [
+                  "Direct approval is prohibited", "new attributable decision version",
+                  "widened retroactively", "Cross-jurisdiction", "cross-rendition",
+                  "Git contains only safe governance metadata", "must not be committed",
+                  "No self-approval", "maker-checker", "permanent red line",
+                  "material byte change", "nonexistent future UI",
+                  "canonical nonnegative decimal condition count", "complete ordered condition inventory",
+                  "Every applicable condition must be current and `SATISFIED`",
+                  "invalidates the evidence-bundle fingerprint",
+                  "Translator, native-language reviewer and legal-equivalence reviewer are distinct roles",
+                  "Every accessibility decision binds exact rendition",
+                  "evidence-link rot", "insider collusion", "separation-of-duties bypass",
+              ], "architecture controls")
+              template_headings = [f"## {number}." for number in range(1, 26)]
+              if any(form.count(marker) != 1 for marker in template_headings):
+                  raise ValueError("template component inventory drift")
+              require(form, [
+                  "TEMPLATE / NOT APPROVED / PRE-PRODUCTION", "Current lifecycle state | `NOT_STARTED`",
+                  "Approval result | `NOT_APPROVED`", "Complete ordered condition inventory",
+                  EMPTY_CONDITION_SHA, "explicitly empty ordered inventory `[]`",
+                  "Overall result: `BLOCKED`", "Production | `PROHIBITED`",
+                  "Authoritative evidence store: `UNRESOLVED`",
+              ], "template")
+              if re.search(r"\|\s*Status\s*\|", form):
+                  raise ValueError("generic Status table header remains")
+              if "NOT_APPROVED` is an approval/authorization-result default, never a lifecycle state" not in form:
+                  raise ValueError("template lifecycle/result separation drift")
+              unsafe_scenarios = (
+                  "All fields blank", "One approval present", "All except Legal", "All except language",
+                  "All except accessibility", "Founder approved with a missing prerequisite",
+                  "Expired Legal approval", "Conflicting regulator answers", "Permanent red-line conflict",
+                  "Implementation approved while production is prohibited",
+                  "Every prerequisite valid but production authorization absent",
+              )
+              for scenario in unsafe_scenarios:
+                  if not re.search(rf"\|\s*{re.escape(scenario)}\s*\|\s*`BLOCKED", form):
+                      raise ValueError(f"derived gate scenario drift: {scenario}")
+              if log.count("### AP-076 ") != 1 or log.count("### AP-077 ") != 1:
+                  raise ValueError("AP-076/AP-077 uniqueness drift")
+              require(log, ["Lifecycle state is a closed eleven-state", "fingerprinted complete condition set"], "AP-077")
+              stages = [
+                  "governed consent ethiopia-written-cycle architecture", "attributable written external decisions and approvals",
+                  "passive authenticated consent-document delivery implementation", "mobile consent-presentation foundation",
+                  "dependency reachability review", "durable encrypted confirmation-intent and authoritative recovery architecture",
+                  "executable confirmation/recovery", "UI/navigation integration",
+                  "separately authorized deployment", "separate production authorization",
+              ]
+              locations = [road.lower().find(stage.lower()) for stage in stages]
+              if any(pos < 0 for pos in locations) or locations != sorted(locations):
+                  raise ValueError("ten-stage roadmap ordering drift")
+              combined = "\n".join(documents).lower()
+              forbidden = (
+                  "status: approved", "production is authorized", "worldwide compliance is established",
+                  "legal compliance is confirmed", "all languages are approved",
+              )
+              if any(item in combined for item in forbidden):
+                  raise ValueError("prohibited approval or authority claim")
+              return True
+
+          CHILD_STATE_KEYS = (
+              "answered", "current", "verified", "attributable", "nonconflicting",
+              "condition_satisfied", "scoped", "not_applicable_authorized",
+          )
+
+          def derive_parent(parent, expected, observed, recorded_count, child_states):
+              if recorded_count != len(expected):
+                  raise ValueError(f"child count: {parent}")
+              if observed != expected or len(observed) != len(set(observed)):
+                  raise ValueError(f"child inventory: {parent}")
+              if set(child_states) != set(expected):
+                  raise ValueError(f"child state identity: {parent}")
+              for child_id in expected:
+                  state = child_states[child_id]
+                  if tuple(state) != CHILD_STATE_KEYS or not all(state.values()):
+                      raise ValueError(f"child state: {child_id}")
+              return "COMPLETE"
+
+          def validate_documents(documents):
+              arch, form, log, road = documents
+              lifecycle_line = re.search(r"(?m)^`NOT_STARTED`, .* or `BLOCKED`\.$", arch)
+              lifecycle = re.findall(r"`(NOT_STARTED|RESEARCHED_UNVERIFIED|QUESTION_PREPARED|SUBMITTED|ANSWER_RECEIVED_UNVERIFIED|VERIFIED|APPROVED|REJECTED|EXPIRED|SUPERSEDED|BLOCKED)`", lifecycle_line.group(0) if lifecycle_line else "")
+              if tuple(lifecycle) != LIFECYCLE:
+                  raise ValueError("closed lifecycle inventory drift")
+              source_blocks = re.findall(r"(?ms)^### (ETH-SRC-[A-Z]+-001)\n\n(.*?)(?=^### ETH-SRC-|^## 4\.)", arch)
+              fields = (
+                  "Source ID", "Title", "Issuing authority", "Instrument/source type",
+                  "Proclamation/instrument/version identifier", "Publication date", "Effective date",
+                  "Authoritative language", "Official source URL/reference", "Source-copy digest/commitment",
+                  "Access date", "Availability descriptor", "Authority classification",
+                  "Governing lifecycle status", "Amendment status", "Repeal status",
+                  "Supersession status", "Proposition supported", "Limitations", "Applicability status",
+              )
+              if len(source_blocks) != 10 or len({item[0] for item in source_blocks}) != 10:
+                  raise ValueError("source record count or identity drift")
+              for source_id, body in source_blocks:
+                  found = re.findall(r"(?m)^- ([^:]+): (.+)$", body)
+                  if tuple(name for name, _ in found) != fields or len(found) != 20:
+                      raise ValueError(f"source field inventory/order drift: {source_id}")
+                  values = dict(found)
+                  if any(not values[name].strip() for name in fields):
+                      raise ValueError(f"blank source field: {source_id}")
+                  if values["Access date"] != "16 August 2026":
+                      raise ValueError(f"source access date drift: {source_id}")
+                  if values["Availability descriptor"].strip("`") not in {"PRIMARY_SOURCE_AVAILABLE", "OFFICIAL_SOURCE_UNAVAILABLE", "INDEX_ONLY", "PARTIAL_SOURCE_AVAILABLE", "SECONDARY_TEXT_ONLY"}:
+                      raise ValueError(f"source availability descriptor drift: {source_id}")
+                  if values["Authority classification"].strip("`") not in {"BINDING_LEGISLATION", "TREATY_STATUS", "NORMATIVE_TECHNICAL_STANDARD", "INFORMATIVE_GUIDANCE", "PLATFORM_POLICY", "RESEARCH_LEAD"}:
+                      raise ValueError(f"source authority classification drift: {source_id}")
+                  availability = values["Availability descriptor"].strip("`")
+                  lifecycle = values["Governing lifecycle status"].strip("`")
+                  if lifecycle not in LIFECYCLE:
+                      raise ValueError(f"descriptor substituted for lifecycle: {source_id}")
+                  unresolved_fields = (
+                      "Source-copy digest/commitment", "Amendment status", "Repeal status",
+                      "Supersession status", "Applicability status",
+                  )
+                  if lifecycle in {"RESEARCHED_UNVERIFIED", "BLOCKED"} and any(
+                      values[name].strip("`") != "UNRESOLVED" for name in unresolved_fields
+                  ):
+                      raise ValueError(f"unverified source relationship drift: {source_id}")
+                  if availability in {"OFFICIAL_SOURCE_UNAVAILABLE", "INDEX_ONLY"}:
+                      if lifecycle in {"VERIFIED", "APPROVED"}:
+                          raise ValueError(f"unavailable source authority escalation: {source_id}")
+                      if values["Authoritative language"].strip("`") != "UNRESOLVED":
+                          raise ValueError(f"unavailable source language escalation: {source_id}")
+                      if any(values[name].strip("`") != "UNRESOLVED" for name in unresolved_fields):
+                          raise ValueError(f"unavailable source resolved relationship: {source_id}")
+                      if "binding authority established" in values["Proposition supported"].lower():
+                          raise ValueError(f"unavailable source treated as binding authority: {source_id}")
+                  if lifecycle == "RESEARCHED_UNVERIFIED" and values["Applicability status"].strip("`") != "UNRESOLVED":
+                      raise ValueError(f"research implied applicability: {source_id}")
+                  if lifecycle not in {"VERIFIED", "APPROVED"} and values["Source-copy digest/commitment"].strip("`") != "UNRESOLVED":
+                      raise ValueError(f"unverified source treated as byte-authenticated: {source_id}")
+              child_region = form[form.index("| Child field | Safe default |"):form.index("| Parent ID | Canonical child count |")]
+              child_defaults = re.findall(r"(?m)^\| ([^|]+?) \| (.+?) \|$", child_region)[1:]
+              expected_child_fields = (
+                  "Stable parent-derived child ID", "Exact atomic issue", "Applicability",
+                  "Expected answer type", "Result lifecycle state", "Approval result", "Evidence ID",
+                  "Authority/reviewer", "Conditions", "Expiry/re-review", "Downstream gate effect",
+              )
+              if tuple(name for name, _ in child_defaults) != expected_child_fields:
+                  raise ValueError("atomic child record field inventory/order drift")
+              defaults = dict(child_defaults)
+              required_defaults = {
+                  "Applicability": "`MANDATORY` unless an authorized reviewer records `CONDITIONAL` and later decides `NOT_APPLICABLE_WITH_REASON` with attributable authority and reason",
+                  "Result lifecycle state": "`NOT_STARTED`", "Approval result": "`NOT_APPROVED`",
+                  "Evidence ID": "`UNRESOLVED`", "Authority/reviewer": "`UNRESOLVED`",
+                  "Conditions": "`UNRESOLVED`", "Expiry/re-review": "`UNRESOLVED`",
+                  "Downstream gate effect": "`BLOCKED`",
+              }
+              if any(defaults.get(name) != value for name, value in required_defaults.items()):
+                  raise ValueError("atomic child fail-closed default drift")
+              lifecycle_defaults = re.findall(r"(?m)^\| (?:Current lifecycle state|Result lifecycle state) \| `([^`]+)` \|$", form)
+              approval_defaults = re.findall(r"(?m)^\| Approval result \| `([^`]+)` \|$", form)
+              if not lifecycle_defaults or any(value != "NOT_STARTED" for value in lifecycle_defaults):
+                  raise ValueError("template initial lifecycle default drift")
+              if not approval_defaults or any(value != "NOT_APPROVED" for value in approval_defaults):
+                  raise ValueError("template approval-result default drift")
+              parent_region = form[:form.index("### Atomic child record and inventories")]
+              parents = re.findall(r"(?m)^\| (ETH-CNS-[A-H]\d{2}) \|", parent_region)
+              if len(parents) != 40 or len(set(parents)) != 40 or set(x[8] for x in parents) != set("ABCDEFGH"):
+                  raise ValueError("parent question inventory drift")
+              compound = re.findall(r"(?m)^\| (ETH-CNS-[A-H]\d{2}) \| (\d+) \| (.+) \|$", form)
+              children = []
+              if len(compound) != 34:
+                  raise ValueError("compound parent count drift")
+              for parent, count, inventory in compound:
+                  ids = re.findall(r"`(ETH-CNS-[A-H]\d{2}\.\d+)`", inventory)
+                  if len(ids) != int(count) or ids != [f"{parent}.{index}" for index in range(1, int(count) + 1)]:
+                      raise ValueError(f"canonical child inventory drift: {parent}")
+                  positive_states = {
+                      child_id: {key: True for key in CHILD_STATE_KEYS} for child_id in ids
+                  }
+                  if derive_parent(parent, ids, ids, int(count), positive_states) != "COMPLETE":
+                      raise ValueError(f"derived parent completion drift: {parent}")
+                  children.extend(ids)
+              if len(children) != 124 or len(set(children)) != 124:
+                  raise ValueError("atomic child inventory drift")
+              regulators = re.findall(r"(?m)^\| (ETH-REG-[A-Z]\d{2}) \|", form)
+              if len(regulators) != 6 or len(set(regulators)) != 6:
+                  raise ValueError("regulator inventory drift")
+              require(arch, [
+                  "PROPOSED / PRE-PRODUCTION", "authoritative evidence store is **`UNRESOLVED`**",
+                  "Founder Evidence Intake and Intelligence Board Architecture", "fully operable from a phone",
+                  "laptop use is optional", "multi-page capture", "Amharic, Afaan Oromo and English",
+                  "weak-network pause/resume", "OCR uncertainty", "Original bytes remain the authoritative evidence input",
+                  "Ordinary AI chat", "Production is inactive and **PROHIBITED**",
+                  "Ibrahim Hambentu Shibiru, Founder & CEO", "Ethiopia-only",
+              ], "written decision architecture")
+              require(form, [
+                  "Lifecycle state | `NOT_STARTED`", "Approval result | `NOT_APPROVED`",
+                  "All parent results are derived", "One broad answer cannot silently satisfy multiple children",
+                  "Authoritative evidence store | `UNRESOLVED`", "| Final derived result | `BLOCKED` |",
+              ], "question pack")
+              if log.count("### AP-078 ") != 1 or log.count("### AP-076 ") != 1 or log.count("### AP-077 ") != 1:
+                  raise ValueError("AP record uniqueness drift")
+              require(log, ["Founder Evidence Intake and Intelligence Board Architecture", "PRE-PRODUCTION"], "AP-078")
+              sequence_match = re.search(r"(?m)^\*\*Booking consent written-decision and delivery sequence:\*\* (.+)$", road)
+              sequence = sequence_match.group(1) if sequence_match else ""
+              positions = [sequence.find(f"({n})") for n in range(1, 11)]
+              if any(position < 0 for position in positions) or positions != sorted(positions):
+                  raise ValueError("ten-stage roadmap sequence drift")
+              require(road, ["Founder Evidence Intake and Intelligence Board Architecture", "changes neither the ten-stage Ethiopia consent sequence"], "roadmap")
+              combined = "\n".join(documents).lower()
+              for claim in ("production is authorized", "legal compliance is confirmed", "worldwide compliance", "evidence store is selected"):
+                  if claim in combined:
+                      raise ValueError("prohibited authority claim")
+              return True
+
+          try:
+              validate_documents((architecture, template, decision, roadmap))
+          except ValueError as error:
+              raise SystemExit(f"ethiopia-written-cycle governance validation failed: {error}") from error
+          mutations = {
+              "source_field": architecture.replace("- Access date: 16 August 2026", "- Access date:", 1),
+              "source_authority": architecture.replace("`BINDING_LEGISLATION`", "`CONFIRMED_AUTHORITY`", 1),
+              "source_lifecycle": architecture.replace("`RESEARCHED_UNVERIFIED`", "`OFFICIAL_SOURCE_UNAVAILABLE`", 1),
+              "source_count": architecture.replace("### ETH-SRC-CONST-001", "### ETH-SRC-CONST-X", 1),
+              "unavailable_verified": architecture.replace("- Governing lifecycle status: `RESEARCHED_UNVERIFIED`", "- Governing lifecycle status: `VERIFIED`", 1),
+              "index_verified": architecture.replace("- Availability descriptor: `INDEX_ONLY`\n- Authority classification: `BINDING_LEGISLATION`\n- Governing lifecycle status: `RESEARCHED_UNVERIFIED`", "- Availability descriptor: `INDEX_ONLY`\n- Authority classification: `BINDING_LEGISLATION`\n- Governing lifecycle status: `VERIFIED`", 1),
+              "unavailable_language": architecture.replace("- Authoritative language: `UNRESOLVED`", "- Authoritative language: Amharic", 1),
+              "unavailable_made_binding": architecture.replace("- Proposition supported: Federal constitutional and language framework exists.", "- Proposition supported: BINDING AUTHORITY ESTABLISHED.", 1),
+              "false_digest": architecture.replace("- Source-copy digest/commitment: `UNRESOLVED`", "- Source-copy digest/commitment: `BYTE_AUTHENTICATED`", 1),
+              "false_amendment": architecture.replace("- Amendment status: `UNRESOLVED`", "- Amendment status: CURRENT", 1),
+              "false_repeal": architecture.replace("- Repeal status: `UNRESOLVED`", "- Repeal status: NOT_REPEALED", 1),
+              "false_supersession": architecture.replace("- Supersession status: `UNRESOLVED`", "- Supersession status: NOT_SUPERSEDED", 1),
+              "false_applicability": architecture.replace("- Applicability status: `UNRESOLVED`", "- Applicability status: APPLICABLE", 1),
+              "descriptor_as_approval": architecture.replace("- Governing lifecycle status: `RESEARCHED_UNVERIFIED`", "- Governing lifecycle status: `PRIMARY_SOURCE_AVAILABLE`", 1),
+              "malformed_relationship": architecture.replace("- Repeal status: `UNRESOLVED`", "- Repeal status:", 1),
+              "custody": architecture.replace("authoritative evidence store is **`UNRESOLVED`**", "authoritative evidence store is selected", 1),
+              "phone": architecture.replace("fully operable from a phone", "operable from a laptop", 1),
+              "laptop": architecture.replace("laptop use is optional", "laptop use is required", 1),
+              "ocr": architecture.replace("OCR uncertainty", "OCR certainty", 1),
+              "original": architecture.replace("Original bytes remain the authoritative evidence input", "OCR bytes are authoritative", 1),
+              "ai_authority": architecture.replace("Ordinary AI chat", "Approved AI chat", 1),
+              "jurisdiction": architecture.replace("Ethiopia-only", "worldwide", 1),
+              "production": architecture.replace("Production is inactive and **PROHIBITED**", "Production is authorized", 1),
+          }
+          for case, altered in mutations.items():
+              if altered == architecture:
+                  raise SystemExit(f"ethiopia-written-cycle connected negative was a no-op: {case}")
+              try:
+                  validate_documents((altered, template, decision, roadmap))
+              except ValueError:
+                  continue
+              raise SystemExit(f"ethiopia-written-cycle connected negative unexpectedly passed: {case}")
+          template_mutations = {
+              "initial_state": template.replace("| Result lifecycle state | `NOT_STARTED` |", "| Result lifecycle state | `APPROVED` |", 1),
+              "approval_default": template.replace("| Approval result | `NOT_APPROVED` |", "| Approval result | `APPROVED` |", 1),
+              "parent_authority": template.replace("All parent results are derived", "Parent results are editable", 1),
+              "broad_answer": template.replace("One broad answer cannot silently satisfy multiple children", "One answer satisfies all children", 1),
+              "child_omission": template.replace("`ETH-CNS-A02.5` integrity", "integrity omitted", 1),
+              "child_duplicate": template.replace("`ETH-CNS-A02.5` integrity", "`ETH-CNS-A02.4` integrity", 1),
+              "child_reorder": template.replace("`ETH-CNS-A02.1` affirmative action; `ETH-CNS-A02.2` attribution", "`ETH-CNS-A02.2` attribution; `ETH-CNS-A02.1` affirmative action", 1),
+              "child_count": template.replace("| ETH-CNS-A02 | 5 |", "| ETH-CNS-A02 | 4 |", 1),
+              "child_unanswered": template.replace("| Evidence ID | `UNRESOLVED` |", "| Evidence ID | `ANSWER_MISSING` |", 1),
+              "child_not_current": template.replace("| Conditions | `UNRESOLVED` |\n| Expiry/re-review | `UNRESOLVED` |", "| Conditions | `UNRESOLVED` |\n| Expiry/re-review | `EXPIRED` |", 1),
+              "child_unverified": template.replace("| Result lifecycle state | `NOT_STARTED` |", "| Result lifecycle state | `ANSWER_RECEIVED_UNVERIFIED` |", 1),
+              "child_unattributable": template.replace("| Authority/reviewer | `UNRESOLVED` |", "| Authority/reviewer | `UNATTRIBUTABLE` |", 1),
+              "child_condition_unsatisfied": template.replace("| Conditions | `UNRESOLVED` |", "| Conditions | `UNSATISFIED` |", 1),
+              "child_scope_mismatch": template.replace("| Downstream gate effect | `BLOCKED` |", "| Downstream gate effect | `OUT_OF_SCOPE` |", 1),
+              "child_not_applicable_unauthorized": template.replace("`NOT_APPLICABLE_WITH_REASON` with attributable authority and reason", "`NOT_APPLICABLE_WITH_REASON` without authority or reason", 1),
+              "store": template.replace("Authoritative evidence store | `UNRESOLVED`", "Authoritative evidence store | `SELECTED`", 1),
+              "blank_gate": template.replace("| Final derived result | `BLOCKED` |", "| Final derived result | `APPROVED` |", 1),
+          }
+          for case, altered in template_mutations.items():
+              if altered == template:
+                  raise SystemExit(f"ethiopia-written-cycle template negative was a no-op: {case}")
+              try:
+                  validate_documents((architecture, altered, decision, roadmap))
+              except ValueError:
+                  continue
+              raise SystemExit(f"ethiopia-written-cycle template negative unexpectedly passed: {case}")
+          parsed_compound = re.findall(r"(?m)^\| (ETH-CNS-[A-H]\d{2}) \| (\d+) \| (.+) \|$", template)
+          mutation_types = (
+              "unanswered", "not-current", "not-verified", "unattributable", "conflicting",
+              "condition-unsatisfied", "scope-mismatch", "unauthorized-not-applicable",
+              "omitted", "extra", "duplicate", "reordered", "count-mismatch", "unknown-identity",
+          )
+          expected_case_ids = []
+          observed_case_ids = []
+          for parent, count, inventory in parsed_compound:
+              expected = re.findall(r"`(ETH-CNS-[A-H]\d{2}\.\d+)`", inventory)
+              child_id = expected[0]
+              baseline_states = {item: {key: True for key in CHILD_STATE_KEYS} for item in expected}
+              for mutation_type in mutation_types:
+                  case_id = f"{parent}:{child_id}:{mutation_type}"
+                  expected_case_ids.append(case_id)
+                  observed = list(expected)
+                  recorded_count = int(count)
+                  states = {item: dict(values) for item, values in baseline_states.items()}
+                  state_key = {
+                      "unanswered": "answered", "not-current": "current", "not-verified": "verified",
+                      "unattributable": "attributable", "conflicting": "nonconflicting",
+                      "condition-unsatisfied": "condition_satisfied", "scope-mismatch": "scoped",
+                      "unauthorized-not-applicable": "not_applicable_authorized",
+                  }.get(mutation_type)
+                  if state_key:
+                      states[child_id][state_key] = False
+                  elif mutation_type == "omitted":
+                      observed = expected[:-1]
+                  elif mutation_type == "extra":
+                      observed = expected + ["ETH-CNS-A01"]
+                  elif mutation_type == "duplicate":
+                      observed = expected + [child_id]
+                  elif mutation_type == "reordered":
+                      observed = [expected[1], expected[0], *expected[2:]]
+                  elif mutation_type == "count-mismatch":
+                      recorded_count -= 1
+                  elif mutation_type == "unknown-identity":
+                      observed = [parent + ".999", *expected[1:]]
+                  baseline = repr((expected, int(count), baseline_states))
+                  mutated = repr((observed, recorded_count, states))
+                  if mutated == baseline:
+                      raise SystemExit(f"atomic mutation was a no-op: {case_id}")
+                  try:
+                      derive_parent(parent, expected, observed, recorded_count, states)
+                  except ValueError:
+                      observed_case_ids.append(case_id)
+                  else:
+                      raise SystemExit(f"atomic mutation accepted: {case_id}")
+          if (
+              observed_case_ids != expected_case_ids
+              or len(observed_case_ids) != 34 * len(mutation_types)
+              or len(set(observed_case_ids)) != len(observed_case_ids)
+          ):
+              raise SystemExit("atomic exact labeled negative-control inventory drift")
+          manifest = subprocess.check_output(
+              ["git", "diff", "--name-only", "-z", FIXED, sha]
+          ).split(b"\0")[:-1]
+          decoded_manifest = [item.decode("utf-8") for item in manifest]
+          if decoded_manifest != MANIFEST:
+              raise SystemExit("ethiopia-written-cycle evidence manifest drift")
+          if hashlib.sha256(("\n".join(decoded_manifest) + "\n").encode()).hexdigest() != MANIFEST_FINGERPRINT:
+              raise SystemExit("ethiopia-written-cycle evidence manifest fingerprint drift")
+
+          def read_kv_block(path, start, end):
+              raw = Path(path).read_bytes()
+              if raw.startswith(b"\xef\xbb\xbf") or b"\r" in raw or not raw.endswith(b"\n"):
+                  raise SystemExit(f"ethiopia-written-cycle intermediate byte drift: {start}")
+              lines = raw.decode("utf-8").splitlines()
+              if lines[0] != start or lines[-1] != end:
+                  raise SystemExit(f"ethiopia-written-cycle intermediate envelope drift: {start}")
+              fields = []
+              for line in lines[1:-1]:
+                  if line.count("=") != 1:
+                      raise SystemExit(f"ethiopia-written-cycle intermediate field drift: {start}")
+                  fields.append(line)
+              return fields
+
+          secret_fields = read_kv_block(os.environ["SECRET_PATH"], "SECRET_INVENTORY_V1", "END_SECRET_INVENTORY_V1")
+          cleanup_fields = Path(os.environ["SECRET_CLEANUP_PATH"]).read_text(encoding="utf-8").splitlines()
+          if cleanup_fields != ["raw_scanner_cleanup=PASS"]:
+              raise SystemExit("ethiopia-written-cycle scanner cleanup evidence drift")
+          event_fields = [
+              "event_authority=PASS", "ancestry_topology=PASS", "fixed_base_authority=PASS",
+              "manifest_validation=PASS",
+          ]
+          sections = [
+              ("WRITTEN_DECISION_IDENTITY_V1", [
+                  "ethiopia_written_cycle_architecture_blob=cce6d8e81285cdd8fd1d52ea0537a2f7f66faba3",
+                  "ethiopia_written_cycle_template_blob=6ff612676ba86f421980df59a2a96ad8f551e881",
+                  "decision_log_blob=0bc7c9e0999ee6a54473c5448fec6f448037f0cf",
+                  "roadmap_blob=43301996e1d6f867fd25dc9366c1c1a815859447",
+                  "approval_pack_architecture_blob=a2285429b91f73de067807ababb0780a088d5e7a",
+                  "approval_pack_template_blob=5d7218a9bd2ecc5d4561fe6164a6864e50cadb16",
+                  "consent_document_architecture_blob=54d69775049d6f0af12fe6ace2bfc5a8cf66ad81",
+              ]),
+              ("EVENT_ANCESTRY_AND_MANIFEST_V1", event_fields),
+              ("DOCUMENT_OBJECT_INTEGRITY_V1", [
+                  "committed_object_validation=PASS", "utf8_without_bom=PASS",
+                  "newline_contract=PASS", "cross_document_consistency=PASS",
+              ]),
+              ("SOURCE_PROVENANCE_AND_LIFECYCLE_V1", [
+                  "source_record_count=10", "source_field_count=20", "lifecycle_state_count=11",
+                  "source_record_validation=PASS", "lifecycle_result_separation=PASS",
+              ]),
+              ("PARENT_AND_ATOMIC_QUESTION_GOVERNANCE_V1", [
+                  "parent_question_count=40", "question_domain_count=8", "compound_parent_count=34",
+                  "atomic_child_count=124", "regulator_question_count=6",
+                  "canonical_child_inventory=PASS", "derived_parent_completion=PASS",
+              ]),
+              ("WRITTEN_ANSWER_CUSTODY_AND_SEPARATION_OF_DUTIES_V1", [
+                  "evidence_authenticity_custody=PASS", "authoritative_evidence_store=UNRESOLVED",
+                  "confidential_evidence_exclusion=PASS", "separation_of_duties=PASS",
+              ]),
+              ("FOUNDER_RED_CONDITIONS_AND_PHONE_FIRST_HANDOFF_V1", [
+                  "founder_red_lines=PASS", "phone_first_handoff=PASS",
+                  "original_derived_separation=PASS", "nonimplementation_boundary=PASS",
+              ]),
+              ("JURISDICTION_EXTERNAL_AUTHORITY_AND_ROADMAP_BOUNDARIES_V1", [
+                  "ethiopia_profile_only=PASS", "future_jurisdiction_separation=PASS",
+                  "external_authority_boundary=PASS", "ten_stage_roadmap=PASS",
+              ]),
+              ("IMMUTABLE_EXECUTABLE_PROVENANCE_V1", [
+                  "root_tests_tree=2dbcb487bd27578a95d0db9a31c21ecde7032114",
+                  "mobile_tree=da39714a911ffbf02171d28348c88a39eab2d938",
+                  "mobile_tests_tree=d7143a733cf14e70851406dab8131ce7c69dd364",
+                  "backend_tree=62500035ef60d94ccc6333f25cb3aa79ff5c3f21",
+                  "migration_tree=253ecedebe58c31077a0baa7d2532adc46464f70",
+                  "mobile_package_blob=b4c26fea6a74ac9c1d3a442eb855cf63538fb5e2",
+                  "mobile_lockfile_blob=ace7192e4a749f61a011f8e4293ccd1e053d648a",
+                  "root_package_blob=6b8425f6ed81258388c4e6bba39c80af0afa7fef",
+                  "root_lockfile_blob=6a08d31b721b486950fd06df0ca3430fcbe8aabf",
+                  "secret_baseline_blob=71770a9e529e9af0c9ed5c72549b3a2f7ddcfb02",
+                  "alembic_config_blob=a2353502812251c10e36f8cd534de71c1dcca58b",
+                  "python_version_blob=ebe773d9eeab42ab1f896401f5b9c581f88d6709",
+                  "executable_tree_diff=EMPTY", "dependency_blob_diff=EMPTY",
+                  "schema_migration_diff=EMPTY", "executable_validation_reused=NO",
+                  "historical_evidence_relabelled=NO", "architecture_validation=PASS",
+              ]),
+              ("SECRET_INVENTORY_V1", secret_fields),
+              ("WORKFLOW_STRUCTURE_CLEANUP_AND_CLEANLINESS_V1", [
+                  *cleanup_fields, "workflow_structure_validation=PASS",
+                  "candidate_tree_cleanliness=PASS", "production_prohibition=PASS",
+              ]),
+          ]
+          lines = [
+              "BOOKING_CONSENT_ETHIOPIA_WRITTEN_CYCLE_ARCHITECTURE_EVIDENCE_V1",
+              "event_scope=push-and-pull-request-comparable",
+              "mode=booking-consent-ethiopia-written-decision-cycle-architecture", f"candidate_sha={sha}",
+              f"governed_base={FIXED}", "manifest_count=5",
+              f"manifest_fingerprint={MANIFEST_FINGERPRINT}",
+          ]
+          for marker, fields in sections:
+              lines.extend([marker, *fields, f"END_{marker}"])
+          lines.append("END_BOOKING_CONSENT_ETHIOPIA_WRITTEN_CYCLE_ARCHITECTURE_EVIDENCE_V1")
+          block = "\n".join(lines) + "\n"
+          encoded = block.encode("utf-8")
+          if len(encoded) > 16384 or len(lines) > 160:
+              raise SystemExit("ethiopia-written-cycle evidence bound exceeded")
+          unsafe = re.compile(r"https?://|traceback|environment dump|raw scanner|source excerpt|legal correspondence|credential", re.I)
+          if unsafe.search(block):
+              raise SystemExit("unsafe content entered ethiopia-written-cycle evidence")
+          path = Path(os.environ["EVIDENCE_PATH"])
+          if path.exists() or path.is_symlink():
+              raise SystemExit("ethiopia-written-cycle evidence path already exists")
+          with path.open("xb") as output:
+              output.write(encoded); output.flush(); os.fsync(output.fileno())
+          if path.is_symlink() or path.stat().st_nlink != 1 or path.read_bytes() != encoded:
+              raise SystemExit("ethiopia-written-cycle evidence retention drift")
+          print("Ethiopia written decision cycle committed governance validation: PASS")
+          PY
+
+      - name: Verify Ethiopia written decision cycle architecture capture state
+        id: ethiopia_written_cycle_admission
+        if: success() && steps.evidence_contract.outputs.mode == 'booking-consent-ethiopia-written-decision-cycle-architecture'
+        env:
+          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          EVIDENCE_PATH: ${{ runner.temp }}/booking-consent-ethiopia-written-decision-cycle-architecture-evidence-v1.txt
+          ETHIOPIA_WRITTEN_CYCLE_CAPTURE_STATE: ETHIOPIA_WRITTEN_DECISION_CYCLE_CAPTURE_PENDING_CTO_REVIEW
+        run: |
+          set -euo pipefail
+          ETHIOPIA_WRITTEN_CYCLE_ADMISSION_STATE="$ETHIOPIA_WRITTEN_CYCLE_CAPTURE_STATE" uv run --locked python - <<'PY'
+          import hashlib
+          import os
+          import re
+          from pathlib import Path
+
+          CAPTURE_STATE = os.environ["ETHIOPIA_WRITTEN_CYCLE_CAPTURE_STATE"]
+          ACTIVE_STATE = "ADMITTED_PREPRODUCTION_ETHIOPIA_WRITTEN_DECISION_CYCLE_EVIDENCE"
+          ADMISSION_STATE = os.environ["ETHIOPIA_WRITTEN_CYCLE_ADMISSION_STATE"]
+          REVIEWED_COMMITMENT = bytes(32)
+          MAGIC = "BOOKING_CONSENT_ETHIOPIA_WRITTEN_CYCLE_ARCHITECTURE_EVIDENCE_V1"
+          END = "END_BOOKING_CONSENT_ETHIOPIA_WRITTEN_CYCLE_ARCHITECTURE_EVIDENCE_V1"
+          SECTION_FIELDS = [
+              ("WRITTEN_DECISION_IDENTITY_V1", ["ethiopia_written_cycle_architecture_blob", "ethiopia_written_cycle_template_blob", "decision_log_blob", "roadmap_blob", "approval_pack_architecture_blob", "approval_pack_template_blob", "consent_document_architecture_blob"]),
+              ("EVENT_ANCESTRY_AND_MANIFEST_V1", ["event_authority", "ancestry_topology", "fixed_base_authority", "manifest_validation"]),
+              ("DOCUMENT_OBJECT_INTEGRITY_V1", ["committed_object_validation", "utf8_without_bom", "newline_contract", "cross_document_consistency"]),
+              ("SOURCE_PROVENANCE_AND_LIFECYCLE_V1", ["source_record_count", "source_field_count", "lifecycle_state_count", "source_record_validation", "lifecycle_result_separation"]),
+              ("PARENT_AND_ATOMIC_QUESTION_GOVERNANCE_V1", ["parent_question_count", "question_domain_count", "compound_parent_count", "atomic_child_count", "regulator_question_count", "canonical_child_inventory", "derived_parent_completion"]),
+              ("WRITTEN_ANSWER_CUSTODY_AND_SEPARATION_OF_DUTIES_V1", ["evidence_authenticity_custody", "authoritative_evidence_store", "confidential_evidence_exclusion", "separation_of_duties"]),
+              ("FOUNDER_RED_CONDITIONS_AND_PHONE_FIRST_HANDOFF_V1", ["founder_red_lines", "phone_first_handoff", "original_derived_separation", "nonimplementation_boundary"]),
+              ("JURISDICTION_EXTERNAL_AUTHORITY_AND_ROADMAP_BOUNDARIES_V1", ["ethiopia_profile_only", "future_jurisdiction_separation", "external_authority_boundary", "ten_stage_roadmap"]),
+              ("IMMUTABLE_EXECUTABLE_PROVENANCE_V1", ["root_tests_tree", "mobile_tree", "mobile_tests_tree", "backend_tree", "migration_tree", "mobile_package_blob", "mobile_lockfile_blob", "root_package_blob", "root_lockfile_blob", "secret_baseline_blob", "alembic_config_blob", "python_version_blob", "executable_tree_diff", "dependency_blob_diff", "schema_migration_diff", "executable_validation_reused", "historical_evidence_relabelled", "architecture_validation"]),
+              ("SECRET_INVENTORY_V1", ["scanner_version", "base_item_count", "candidate_item_count", "base_inventory_digest", "candidate_inventory_digest", "base_only_item_count", "candidate_only_item_count", "defensive_boundary_check", "normalized_comparison"]),
+              ("WORKFLOW_STRUCTURE_CLEANUP_AND_CLEANLINESS_V1", ["raw_scanner_cleanup", "workflow_structure_validation", "candidate_tree_cleanliness", "production_prohibition"]),
+          ]
+          ENVELOPE = ["event_scope", "mode", "candidate_sha", "governed_base", "manifest_count", "manifest_fingerprint"]
+          FIXED_VALUES = {
+              "event_scope": "push-and-pull-request-comparable", "mode": "booking-consent-ethiopia-written-decision-cycle-architecture",
+              "governed_base": "a62c3394111c14d93f787b7b319faa0a9b13293d", "manifest_count": "5",
+              "manifest_fingerprint": "525a851db159c27cdeefae89015c4b21fb57fd9d57348b75a35c501b3233e423",
+              "ethiopia_written_cycle_architecture_blob": "cce6d8e81285cdd8fd1d52ea0537a2f7f66faba3",
+              "ethiopia_written_cycle_template_blob": "6ff612676ba86f421980df59a2a96ad8f551e881",
+              "decision_log_blob": "0bc7c9e0999ee6a54473c5448fec6f448037f0cf",
+              "roadmap_blob": "43301996e1d6f867fd25dc9366c1c1a815859447",
+              "approval_pack_architecture_blob": "a2285429b91f73de067807ababb0780a088d5e7a",
+              "approval_pack_template_blob": "5d7218a9bd2ecc5d4561fe6164a6864e50cadb16",
+              "consent_document_architecture_blob": "54d69775049d6f0af12fe6ace2bfc5a8cf66ad81",
+              "root_tests_tree": "2dbcb487bd27578a95d0db9a31c21ecde7032114",
+              "mobile_tree": "da39714a911ffbf02171d28348c88a39eab2d938",
+              "mobile_tests_tree": "d7143a733cf14e70851406dab8131ce7c69dd364",
+              "backend_tree": "62500035ef60d94ccc6333f25cb3aa79ff5c3f21",
+              "migration_tree": "253ecedebe58c31077a0baa7d2532adc46464f70",
+              "mobile_package_blob": "b4c26fea6a74ac9c1d3a442eb855cf63538fb5e2",
+              "mobile_lockfile_blob": "ace7192e4a749f61a011f8e4293ccd1e053d648a",
+              "root_package_blob": "6b8425f6ed81258388c4e6bba39c80af0afa7fef",
+              "root_lockfile_blob": "6a08d31b721b486950fd06df0ca3430fcbe8aabf",
+              "secret_baseline_blob": "71770a9e529e9af0c9ed5c72549b3a2f7ddcfb02",
+              "alembic_config_blob": "a2353502812251c10e36f8cd534de71c1dcca58b",
+              "python_version_blob": "ebe773d9eeab42ab1f896401f5b9c581f88d6709",
+              "source_record_count": "10", "source_field_count": "20", "lifecycle_state_count": "11",
+              "parent_question_count": "40", "question_domain_count": "8", "compound_parent_count": "34",
+              "atomic_child_count": "124", "regulator_question_count": "6",
+              "authoritative_evidence_store": "UNRESOLVED", "scanner_version": "1.5.0",
+              "normalized_comparison": "COMPLETE_LINE_SENSITIVE_INVENTORY",
+              "executable_tree_diff": "EMPTY", "dependency_blob_diff": "EMPTY",
+              "schema_migration_diff": "EMPTY", "executable_validation_reused": "NO",
+              "historical_evidence_relabelled": "NO", "architecture_validation": "PASS",
+          }
+          PASS_FIELDS = {
+              "event_authority", "ancestry_topology", "fixed_base_authority", "manifest_validation",
+              "committed_object_validation", "utf8_without_bom", "newline_contract", "cross_document_consistency",
+              "source_record_validation", "lifecycle_result_separation", "canonical_child_inventory", "derived_parent_completion",
+              "evidence_authenticity_custody", "confidential_evidence_exclusion", "separation_of_duties",
+              "founder_red_lines", "phone_first_handoff", "original_derived_separation", "nonimplementation_boundary",
+              "ethiopia_profile_only", "future_jurisdiction_separation", "external_authority_boundary", "ten_stage_roadmap",
+              "defensive_boundary_check", "raw_scanner_cleanup",
+              "workflow_structure_validation", "candidate_tree_cleanliness", "production_prohibition",
+          }
+          HEX40_FIELDS = {name for _, names in SECTION_FIELDS for name in names if name.endswith(("_blob", "_tree"))}
+          DECIMAL_FIELDS = {"manifest_count", "source_record_count", "source_field_count", "lifecycle_state_count", "parent_question_count", "question_domain_count", "compound_parent_count", "atomic_child_count", "regulator_question_count", "base_item_count", "candidate_item_count", "base_only_item_count", "candidate_only_item_count"}
+          HEX64_FIELDS = {"manifest_fingerprint", "base_inventory_digest", "candidate_inventory_digest"}
+
+          def verify(raw):
+              if len(raw) not in range(1, 16385) or raw.startswith(b"\xef\xbb\xbf") or b"\r" in raw or b"\x00" in raw or not raw.endswith(b"\n"):
+                  raise ValueError("evidence byte contract")
+              text = raw.decode("utf-8")
+              if re.search(r"https?://|traceback|environment dump|raw scanner|source excerpt|legal correspondence|credential", text, re.I):
+                  raise ValueError("unsafe evidence content")
+              lines = text.splitlines()
+              if len(lines) > 160 or lines[0] != MAGIC or lines[-1] != END:
+                  raise ValueError("evidence envelope")
+              cursor = 1; values = {}; order = []
+              def field(line, expected):
+                  if line.count("=") != 1:
+                      raise ValueError("malformed field")
+                  key, value = line.split("=", 1)
+                  if key != expected or key in values:
+                      raise ValueError("field inventory/order")
+                  values[key] = value; order.append(key)
+              for name in ENVELOPE:
+                  field(lines[cursor], name); cursor += 1
+              for marker, names in SECTION_FIELDS:
+                  if lines[cursor] != marker:
+                      raise ValueError("section start/order")
+                  cursor += 1
+                  for name in names:
+                      field(lines[cursor], name); cursor += 1
+                  if lines[cursor] != f"END_{marker}":
+                      raise ValueError("section end/pairing")
+                  cursor += 1
+              if cursor != len(lines) - 1:
+                  raise ValueError("unknown trailing content")
+              if values["candidate_sha"] != os.environ["CANDIDATE_SHA"] or not re.fullmatch(r"[0-9a-f]{40}", values["candidate_sha"]):
+                  raise ValueError("runtime candidate identity")
+              for key, expected in FIXED_VALUES.items():
+                  if values.get(key) != expected:
+                      raise ValueError(f"fixed value: {key}")
+              for key in PASS_FIELDS:
+                  if values.get(key) != "PASS": raise ValueError(f"PASS field: {key}")
+              for key in DECIMAL_FIELDS:
+                  if not re.fullmatch(r"0|[1-9][0-9]*", values.get(key, "")): raise ValueError(f"decimal: {key}")
+              for key in HEX40_FIELDS:
+                  if not re.fullmatch(r"[0-9a-f]{40}", values.get(key, "")): raise ValueError(f"hex40: {key}")
+              for key in HEX64_FIELDS:
+                  if not re.fullmatch(r"[0-9a-f]{64}", values.get(key, "")): raise ValueError(f"hex64: {key}")
+              if (
+                  int(values["base_only_item_count"]) > int(values["base_item_count"])
+                  or int(values["candidate_only_item_count"]) > int(values["candidate_item_count"])
+                  or int(values["base_item_count"]) - int(values["base_only_item_count"])
+                     + int(values["candidate_only_item_count"]) != int(values["candidate_item_count"])
+              ):
+                  raise ValueError("secret inventory arithmetic")
+              normalized = re.sub(rb"(?m)^candidate_sha=[0-9a-f]{40}$", b"candidate_sha=" + b"0" * 40, raw)
+              if normalized == raw or len(re.findall(rb"(?m)^candidate_sha=[0-9a-f]{40}$", raw)) != 1:
+                  raise ValueError("candidate normalization")
+              return hashlib.sha256(normalized).digest()
+
+          path = Path(os.environ["EVIDENCE_PATH"]); raw = path.read_bytes()
+          if path.is_symlink() or not path.is_file() or path.stat().st_nlink != 1 or path.stat().st_size != len(raw):
+              raise SystemExit("ethiopia-written-cycle evidence file is unsafe")
+          try: commitment = verify(raw)
+          except (UnicodeError, ValueError) as error: raise SystemExit(f"ethiopia-written-cycle evidence verification failed: {error}") from error
+          if ADMISSION_STATE == ACTIVE_STATE:
+              if REVIEWED_COMMITMENT == bytes(32) or commitment != REVIEWED_COMMITMENT:
+                  raise SystemExit("ethiopia-written-cycle active commitment mismatch")
+              result = "ADMITTED"
+          elif ADMISSION_STATE == CAPTURE_STATE:
+              if REVIEWED_COMMITMENT != bytes(32):
+                  raise SystemExit("ethiopia-written-cycle capture commitment must be neutral")
+              result = "CAPTURE_ONLY"
+          else:
+              raise SystemExit("ethiopia-written-cycle admission state unknown")
+
+          mutation_lines = raw.decode().splitlines()
+          governed_indices = [1, 2, 4, 6]
+          for marker, _ in SECTION_FIELDS:
+              governed_indices.append(mutation_lines.index(marker) + 1)
+          for index in governed_indices:
+              altered = mutation_lines.copy(); altered[index] += "x"
+              altered_raw = ("\n".join(altered) + "\n").encode()
+              if altered_raw == raw: raise SystemExit("evidence mutation was a no-op")
+              try: verify(altered_raw)
+              except ValueError: continue
+              raise SystemExit(f"ethiopia-written-cycle evidence mutation accepted at line {index}")
+
+          def reject_schema_mutation(case, altered):
+              altered_raw = ("\n".join(altered) + "\n").encode()
+              if altered_raw == raw:
+                  raise SystemExit(f"ethiopia-written-cycle schema mutation was a no-op: {case}")
+              try: verify(altered_raw)
+              except (ValueError, UnicodeError): return
+              raise SystemExit(f"ethiopia-written-cycle schema mutation accepted: {case}")
+
+          section_blocks = []
+          for marker, names in SECTION_FIELDS:
+              start = mutation_lines.index(marker)
+              end = mutation_lines.index("END_" + marker) + 1
+              section_blocks.append((marker, names, start, end, mutation_lines[start:end]))
+          for marker, names, start, end, block in section_blocks:
+              reject_schema_mutation(f"delete-section:{marker}", mutation_lines[:start] + mutation_lines[end:])
+              reject_schema_mutation(f"duplicate-section:{marker}", mutation_lines[:end] + block + mutation_lines[end:])
+              reject_schema_mutation(f"alter-start:{marker}", mutation_lines[:start] + [marker + "_ALTERED"] + mutation_lines[start + 1:])
+              reject_schema_mutation(f"alter-end:{marker}", mutation_lines[:end - 1] + ["END_" + marker + "_ALTERED"] + mutation_lines[end:])
+              reject_schema_mutation(f"misplace-end:{marker}", mutation_lines[:start + 1] + ["END_" + marker] + mutation_lines[start + 1:end - 1] + mutation_lines[end:])
+              reject_schema_mutation(f"between-content:{marker}", mutation_lines[:end] + ["unexpected=content"] + mutation_lines[end:])
+              first_field = start + 1
+              reject_schema_mutation(f"remove-field:{marker}", mutation_lines[:first_field] + mutation_lines[first_field + 1:])
+              reject_schema_mutation(f"duplicate-field:{marker}", mutation_lines[:first_field + 1] + [mutation_lines[first_field]] + mutation_lines[first_field + 1:])
+              changed = mutation_lines.copy(); changed[first_field] += "x"
+              reject_schema_mutation(f"mutate-field:{marker}", changed)
+              if len(names) > 1:
+                  changed = mutation_lines.copy()
+                  changed[first_field], changed[first_field + 1] = changed[first_field + 1], changed[first_field]
+                  reject_schema_mutation(f"reorder-field:{marker}", changed)
+          for left in range(len(section_blocks) - 1):
+              _, _, left_start, left_end, left_block = section_blocks[left]
+              _, _, right_start, right_end, right_block = section_blocks[left + 1]
+              reject_schema_mutation(
+                  f"reorder-adjacent:{left}",
+                  mutation_lines[:left_start] + right_block + left_block + mutation_lines[right_end:],
+              )
+          first = section_blocks[0]; last = section_blocks[-1]
+          reject_schema_mutation(
+              "reorder-non-adjacent",
+              mutation_lines[:first[2]] + last[4] + mutation_lines[first[3]:last[2]] + first[4] + mutation_lines[last[3]:],
+          )
+          reject_schema_mutation("unknown-section", mutation_lines[:-1] + ["UNKNOWN_V1", "END_UNKNOWN_V1", mutation_lines[-1]])
+          reject_schema_mutation("trailing-content", mutation_lines + ["unexpected=trailing"])
+
+          def replace_field(name, value):
+              prefix = name + "="
+              matches = [index for index, line in enumerate(mutation_lines) if line.startswith(prefix)]
+              if len(matches) != 1: raise SystemExit(f"secret mutation field inventory drift: {name}")
+              changed = mutation_lines.copy(); changed[matches[0]] = prefix + value
+              return changed
+          counts = {name: int(next(line.split("=", 1)[1] for line in mutation_lines if line.startswith(name + "="))) for name in ("base_item_count", "candidate_item_count", "base_only_item_count", "candidate_only_item_count")}
+          for name in counts:
+              reject_schema_mutation("secret-count:" + name, replace_field(name, str(counts[name] + 1)))
+          reject_schema_mutation("secret-underflow", replace_field("base_only_item_count", str(counts["base_item_count"] + 1)))
+          reject_schema_mutation("secret-oversized-candidate-only", replace_field("candidate_only_item_count", str(counts["candidate_item_count"] + 1)))
+          for value in ("-1", "+1", "01", "", "one"):
+              reject_schema_mutation("secret-decimal:" + repr(value), replace_field("base_item_count", value))
+          reject_schema_mutation("defensive-boundary", replace_field("defensive_boundary_check", "FAIL"))
+          reject_schema_mutation("cleanup", replace_field("raw_scanner_cleanup", "FAIL"))
+          digest_changed = replace_field("base_inventory_digest", "f" * 64)
+          digest_commitment = verify(("\n".join(digest_changed) + "\n").encode())
+          if digest_commitment == commitment: raise SystemExit("secret digest mutation did not change commitment")
+          consistent = mutation_lines.copy()
+          for name in ("base_item_count", "candidate_item_count"):
+              prefix = name + "="; index = next(i for i, line in enumerate(consistent) if line.startswith(prefix))
+              consistent[index] = prefix + str(counts[name] + 1)
+          consistent_commitment = verify(("\n".join(consistent) + "\n").encode())
+          if consistent_commitment == commitment: raise SystemExit("arithmetic-consistent mutation did not change commitment")
+
+          workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
+          def step_block(name, source=workflow):
+              matches = list(re.finditer(rf"(?m)^      - name: {re.escape(name)}$", source))
+              if len(matches) != 1:
+                  raise SystemExit(f"ethiopia-written-cycle required step authority drift: {name}")
+              match = matches[0]
+              following = re.search(r"(?m)^      - name: ", source[match.end():])
+              end = match.end() + following.start() if following else len(source)
+              return source[match.start():end]
+          def validate_capture_authority(source):
+              verifier_owner = step_block("Verify Ethiopia written decision cycle architecture capture state", source)
+              state_bindings = re.findall(r'(?m)^          ETHIOPIA_WRITTEN_CYCLE_ADMISSION_STATE="\$ETHIOPIA_WRITTEN_CYCLE_CAPTURE_STATE" uv run --locked python - <<\x27PY\x27$', verifier_owner)
+              commitment_definitions = re.findall(r"(?m)^          REVIEWED_COMMITMENT = bytes\(32\)$", verifier_owner)
+              active_definitions = re.findall(r'(?m)^          ACTIVE_STATE = "ADMITTED_PREPRODUCTION_ETHIOPIA_WRITTEN_DECISION_CYCLE_EVIDENCE"$', verifier_owner)
+              all_state_bindings = re.findall(r"(?m)^          ETHIOPIA_WRITTEN_CYCLE_ADMISSION_STATE=.*$", source)
+              all_commitment_definitions = re.findall(r"(?m)^          REVIEWED_COMMITMENT = bytes\(32\)$", source)
+              all_active_definitions = re.findall(r"(?m)^          ACTIVE_STATE\s*=.*ETHIOPIA_WRITTEN_DECISION_CYCLE.*$", source)
+              if (
+                  source.count(CAPTURE_STATE) != 1
+                  or len(state_bindings) != 1 or len(all_state_bindings) != 1
+                  or len(commitment_definitions) != 1 or len(all_commitment_definitions) != 1
+                  or len(active_definitions) != 1 or len(all_active_definitions) != 1
+              ):
+                  raise ValueError("ethiopia-written-cycle capture sentinel authority drift")
+              return True
+          try: validate_capture_authority(workflow)
+          except ValueError as error: raise SystemExit(str(error)) from error
+          owner_name = "Verify Ethiopia written decision cycle architecture capture state"
+          owner_start = workflow.index("      - name: " + owner_name)
+          state_line = '          ETHIOPIA_WRITTEN_CYCLE_ADMISSION_STATE="$ETHIOPIA_WRITTEN_CYCLE_CAPTURE_STATE" uv run --locked python - <<\x27PY\x27'
+          commitment_line = "          REVIEWED_COMMITMENT = bytes(32)"
+          active_line = '          ACTIVE_STATE = "ADMITTED_PREPRODUCTION_ETHIOPIA_WRITTEN_DECISION_CYCLE_EVIDENCE"'
+          authority_mutations = {
+              "missing-state": workflow.replace(state_line + "\n", "", 1),
+              "duplicate-state": workflow.replace(state_line, state_line + "\n" + state_line, 1),
+              "moved-state": workflow.replace(state_line + "\n", "", 1) + "\n" + state_line + "\n",
+              "alternate-environment": workflow.replace("$ETHIOPIA_WRITTEN_CYCLE_CAPTURE_STATE", "$ALTERNATE_CAPTURE_STATE", 1),
+              "alternate-variable": workflow.replace("ETHIOPIA_WRITTEN_CYCLE_ADMISSION_STATE=", "ALTERNATE_ADMISSION_STATE=", 1),
+              "additional-active-authority": workflow.replace(active_line, active_line + "\n" + active_line, 1),
+              "commitment-outside-owner": workflow.replace(commitment_line + "\n", "", 1)[:owner_start] + commitment_line + "\n" + workflow.replace(commitment_line + "\n", "", 1)[owner_start:],
+              "multiple-commitment": workflow.replace(commitment_line, commitment_line + "\n" + commitment_line, 1),
+          }
+          for case, altered_workflow in authority_mutations.items():
+              if altered_workflow == workflow: raise SystemExit(f"authority mutation was a no-op: {case}")
+              try: validate_capture_authority(altered_workflow)
+              except (ValueError, SystemExit): continue
+              raise SystemExit(f"authority mutation accepted: {case}")
+          def authority(state, reviewed, calculated):
+              if state == CAPTURE_STATE and reviewed == bytes(32): return "CAPTURE_ONLY"
+              if state == ACTIVE_STATE and reviewed != bytes(32) and reviewed == calculated: return "ADMITTED"
+              raise ValueError("invalid state/commitment authority")
+          probe = bytes(range(32))
+          if authority(CAPTURE_STATE, bytes(32), probe) != "CAPTURE_ONLY" or authority(ACTIVE_STATE, probe, probe) != "ADMITTED":
+              raise SystemExit("capture/active simulation drift")
+          for state, reviewed in ((CAPTURE_STATE, probe), (ACTIVE_STATE, bytes(32)), ("UNKNOWN", probe), ("", probe), (None, probe)):
+              try: authority(state, reviewed, probe)
+              except ValueError: continue
+              raise SystemExit("invalid admission state simulation accepted")
+          action_pins = (
+              "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
+              "actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065",
+              "actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020",
+              "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+          )
+          if any(workflow.count(pin) < 1 for pin in action_pins): raise SystemExit("action pin drift")
+          upload_name = "Upload Ethiopia written decision cycle architecture capture evidence"
+          stop_name = "Stop Ethiopia written decision cycle architecture pending CTO admission"
+          upload_match = re.search(rf"(?m)^      - name: {re.escape(upload_name)}$", workflow)
+          stop_match = re.search(rf"(?m)^      - name: {re.escape(stop_name)}$", workflow)
+          if not upload_match or not stop_match or upload_match.start() >= stop_match.start():
+              raise SystemExit("ethiopia-written-cycle artifact ordering drift")
+          condition = "steps.ethiopia_written_cycle_admission.outputs.state == 'CAPTURE_ONLY'"
+          upload = workflow[upload_match.start():stop_match.start()]
+          stop = workflow[stop_match.start():]
+          if condition not in upload or condition not in stop:
+              raise SystemExit("ethiopia-written-cycle capture predicate drift")
+          selector = step_block("Select exact governed evidence contract")
+          preflight = step_block("Preflight Ethiopia written decision cycle architecture authority before tooling")
+          identity = step_block("Bind exact Ethiopia written decision cycle architecture candidate identity")
+          scanner = step_block("Capture Ethiopia written decision cycle neutral secret inventory")
+          reviewed_chain = (
+              "8a1a64111c8feac8deb4d9bbde0e3485356884f4",
+              "aa123b9fc34a53a21dc80518bc777787f9aff313",
+              "2761439c34caebc7598948d6aeb70ed8eb431932",
+              "cc61b625f6a46b3db9214c1fd1d30e16a9ac647a",
+              "fbdf876638f9d8666e2144d0b9431fd36c734575",
+              "a62c3394111c14d93f787b7b319faa0a9b13293d",
+          )
+          def parse_reviewed_chain(block):
+              parent_matches = re.findall(r"(?m)^          reviewed_parent=([0-9a-f]{40})$", block)
+              history_matches = re.findall(
+                  r"(?ms)^          reviewed_history=\(\n((?:            [0-9a-f]{40}\n)+)          \)$",
+                  block,
+              )
+              if len(parent_matches) != 1 or len(history_matches) != 1:
+                  raise ValueError("Ethiopia written-cycle reviewed-chain authority inventory drift")
+              history = tuple(re.findall(r"(?m)^            ([0-9a-f]{40})$", history_matches[0]))
+              if parent_matches[0] != reviewed_chain[0] or history != reviewed_chain:
+                  raise ValueError("Ethiopia written-cycle reviewed-chain authority drift")
+              if block.count('history_cursor="$reviewed_parent"') != 1 or block.count('for expected in "${reviewed_history[@]}"; do') != 1:
+                  raise ValueError("Ethiopia written-cycle reviewed-chain consumer drift")
+              if "expected_history=" in block or "reviewed_head=" in block:
+                  raise ValueError("Ethiopia written-cycle alternate reviewed-chain authority")
+              return parent_matches[0], history
+          try:
+              preflight_chain = parse_reviewed_chain(preflight)
+              identity_chain = parse_reviewed_chain(identity)
+          except ValueError as error:
+              raise SystemExit(str(error)) from error
+          if preflight_chain != identity_chain:
+              raise SystemExit("Ethiopia written-cycle production gates disagree on reviewed chain")
+          chain_mutations = {
+              "old-parent-authority": preflight.replace(reviewed_chain[0], reviewed_chain[1], 1),
+              "old-capture-parent-authority": preflight.replace(reviewed_chain[0], reviewed_chain[2], 1),
+              "missing-reviewed-commit": preflight.replace("            " + reviewed_chain[1] + "\n", "", 1),
+              "reordered-reviewed-commits": preflight.replace(
+                  "            " + reviewed_chain[1] + "\n            " + reviewed_chain[2],
+                  "            " + reviewed_chain[2] + "\n            " + reviewed_chain[1],
+                  1,
+              ),
+              "duplicated-reviewed-commit": preflight.replace(reviewed_chain[2], reviewed_chain[1], 1),
+              "substituted-reviewed-commit": preflight.replace(reviewed_chain[2], "f" * 40, 1),
+              "unexpected-reviewed-commit": preflight.replace(
+                  "            " + reviewed_chain[1] + "\n",
+                  "            " + reviewed_chain[1] + "\n            " + "e" * 40 + "\n",
+                  1,
+              ),
+              "candidate-parented-by-base": preflight.replace(reviewed_chain[0], reviewed_chain[-1], 1),
+              "duplicate-chain-authority": preflight.replace(
+                  "          reviewed_history=(\n", "          reviewed_history=(\n", 1
+              ) + "\n          reviewed_history=(\n" + "".join(f"            {sha}\n" for sha in reviewed_chain) + "          )\n",
+          }
+          for case, altered_block in chain_mutations.items():
+              if altered_block == preflight:
+                  raise SystemExit(f"Ethiopia written-cycle reviewed-chain mutation was a no-op: {case}")
+              try:
+                  parse_reviewed_chain(altered_block)
+              except ValueError:
+                  continue
+              raise SystemExit(f"Ethiopia written-cycle reviewed-chain mutation accepted: {case}")
+          divergent_identity = identity.replace(reviewed_chain[1], "d" * 40, 1)
+          if divergent_identity == identity:
+              raise SystemExit("Ethiopia written-cycle gate-divergence mutation was a no-op")
+          try:
+              divergent_chain = parse_reviewed_chain(divergent_identity)
+          except ValueError:
+              divergent_chain = None
+          if divergent_chain is not None and divergent_chain == preflight_chain:
+              raise SystemExit("Ethiopia written-cycle divergent production chains accepted")
+          refresh_fetch = (
+              "            git fetch --no-tags origin \\\n"
+              "              \"+refs/heads/agent/booking-consent-ethiopia-written-decision-pack:$destination\""
+          )
+          refresh_resolution = '            authorized_feature="$(git rev-parse "$destination")"'
+          refresh_invalidation = '            git update-ref -d "$destination"'
+          second_parent_check = '[[ "${parents[1]}" == "$authorized_feature" ]]'
+          def validate_feature_refresh(block):
+              required = (
+                  "          refresh_authorized_feature() {",
+                  "            local destination=refs/remotes/origin/ethiopia-written-cycle-feature",
+                  refresh_invalidation,
+                  refresh_fetch,
+                  refresh_resolution,
+                  '[[ "$authorized_feature" =~ ^[0-9a-f]{40}$ && "$authorized_feature" != "$zero" ]]',
+                  'git cat-file -e "$authorized_feature^{commit}"',
+                  second_parent_check,
+              )
+              if any(block.count(item) != 1 for item in required):
+                  raise ValueError("Ethiopia written-cycle fresh feature authority inventory drift")
+              if len(re.findall(r"(?m)^                (?:  )?refresh_authorized_feature$", block)) != 2:
+                  raise ValueError("Ethiopia written-cycle fresh feature authority consumer drift")
+              invalidation_at = block.index(refresh_invalidation)
+              fetch_at = block.index(refresh_fetch)
+              resolution_at = block.index(refresh_resolution)
+              if not invalidation_at < fetch_at < resolution_at:
+                  raise ValueError("Ethiopia written-cycle feature authority ordering drift")
+              if "|| true" in block or "git fetch --tags" in block or "refs/heads/*" in block:
+                  raise ValueError("Ethiopia written-cycle feature fetch failure bypass")
+              if re.search(r'git rev-parse refs/remotes/origin/ethiopia-written-cycle-feature', block):
+                  raise ValueError("Ethiopia written-cycle cached feature authority")
+              return True
+          for owner, owner_block in (("preflight", preflight), ("identity", identity)):
+              try: validate_feature_refresh(owner_block)
+              except ValueError as error: raise SystemExit(f"{owner}: {error}") from error
+          fetch_mutations = {
+              "fetch-removed": identity.replace(refresh_fetch + "\n", "", 1),
+              "fetch-after-resolution": identity.replace(refresh_fetch + "\n", "", 1).replace(
+                  refresh_resolution, refresh_resolution + "\n" + refresh_fetch, 1),
+              "invalidation-removed": identity.replace(refresh_invalidation + "\n", "", 1),
+              "wrong-source": identity.replace(
+                  "refs/heads/agent/booking-consent-ethiopia-written-decision-pack:$destination",
+                  "refs/heads/agent/wrong-branch:$destination", 1),
+              "wrong-destination": identity.replace(
+                  "local destination=refs/remotes/origin/ethiopia-written-cycle-feature",
+                  "local destination=refs/remotes/origin/unreviewed-feature", 1),
+              "non-forced-fetch": identity.replace('"+refs/heads/', '"refs/heads/', 1),
+              "ignored-fetch-failure": identity.replace(refresh_fetch, refresh_fetch + " || true", 1),
+              "wildcard-refspec": identity.replace(
+                  "+refs/heads/agent/booking-consent-ethiopia-written-decision-pack:$destination",
+                  "+refs/heads/*:refs/remotes/origin/*", 1),
+              "tag-enabled-fetch": identity.replace("git fetch --no-tags origin", "git fetch --tags origin", 1),
+              "cached-ref-resolution": identity.replace(
+                  'git rev-parse "$destination"',
+                  "git rev-parse refs/remotes/origin/ethiopia-written-cycle-feature", 1),
+              "alternate-remote": identity.replace("git fetch --no-tags origin", "git fetch --no-tags upstream", 1),
+              "stale-second-parent": identity.replace(
+                  second_parent_check, '[[ "${parents[1]}" == "$reviewed_parent" ]]', 1),
+              "duplicate-feature-authority": identity.replace(refresh_fetch, refresh_fetch + "\n" + refresh_fetch, 1),
+              "authority-outside-owner": identity.replace(
+                  "          refresh_authorized_feature() {", "          moved_refresh_authority() {", 1),
+          }
+          for case, altered_block in fetch_mutations.items():
+              if altered_block == identity:
+                  raise SystemExit(f"Ethiopia written-cycle feature-authority mutation was a no-op: {case}")
+              try: validate_feature_refresh(altered_block)
+              except ValueError: continue
+              raise SystemExit(f"Ethiopia written-cycle feature-authority mutation accepted: {case}")
+          selector_tokens = (
+              "mode=booking-consent-ethiopia-written-decision-cycle-architecture",
+              "cce6d8e81285cdd8fd1d52ea0537a2f7f66faba3",
+              "6ff612676ba86f421980df59a2a96ad8f551e881",
+              "0bc7c9e0999ee6a54473c5448fec6f448037f0cf",
+              "43301996e1d6f867fd25dc9366c1c1a815859447",
+              "Missing Ethiopia written decision cycle identity",
+              "Unreviewed Ethiopia written decision cycle identity",
+          )
+          if any(token not in selector for token in selector_tokens):
+              raise SystemExit("ethiopia-written-cycle selector predicate drift")
+          authority_tokens = (
+              "a62c3394111c14d93f787b7b319faa0a9b13293d",
+              "525a851db159c27cdeefae89015c4b21fb57fd9d57348b75a35c501b3233e423",
+              "workflow_dispatch", "pull_request", "EVENT_BEFORE", "EVENT_REF", "PR_BASE_REF",
+              "refs/heads/agent/booking-consent-ethiopia-written-decision-pack", "refs/heads/main",
+              "merge-base --is-ancestor",
+              ".github/workflows/ci.yml", "docs/AYO_BOOKING_CONSENT_ETHIOPIA_WRITTEN_DECISION_CYCLE_ARCHITECTURE.md",
+              "docs/AYO_BOOKING_CONSENT_ETHIOPIA_COUNSEL_QUESTION_PACK_TEMPLATE.md",
+          )
+          if any(token not in preflight or token not in identity for token in authority_tokens[:1]):
+              raise SystemExit("ethiopia-written-cycle fixed-base predicate drift")
+          if any(token not in preflight for token in authority_tokens[1:]):
+              raise SystemExit("ethiopia-written-cycle event or manifest predicate drift")
+          identity_tokens = (
+              "TRUSTED_COMPARISON_BASE_SHA", "PR_HEAD_SHA", "PR_BASE_SHA", "PR_BASE_REF",
+              "EVENT_REF", "feature_ref", "main_ref", "authorized_feature",
+              "${#parents[@]}", "${parents[0]}", "candidate^{tree}",
+              "dispatch prohibited",
+          )
+          if any(token not in identity for token in identity_tokens):
+              raise SystemExit("ethiopia-written-cycle topology predicate drift")
+          trap_index = scanner.index("trap cleanup_ethiopia_written_cycle_scan EXIT")
+          first_fallible_index = min(
+              scanner.index("mkdir -- \"$candidate_root\""),
+              scanner.index("rm -f -- \"$ETHIOPIA_WRITTEN_CYCLE_SECRET_EVIDENCE_PATH\""),
+              scanner.index("git archive"),
+          )
+          if trap_index >= first_fallible_index:
+              raise SystemExit("ethiopia-written-cycle scanner trap ordering drift")
+          scanner_tokens = (
+              "detect-secrets==1.5.0", "COMPLETE_LINE_SENSITIVE_INVENTORY",
+              "raw_scanner_cleanup=PASS", "candidate.json", "base.json", "baseline.json",
+              "rm -rf -- \"$scan_dir\"", "defensive scanner boundary drift",
+          )
+          if any(token not in scanner for token in scanner_tokens):
+              raise SystemExit("ethiopia-written-cycle scanner cleanup or inventory drift")
+          historical = (
+              "booking-consent-document-delivery-architecture", "mobile-booking-intent-foundation",
+              "booking consent document delivery architecture evidence awaiting CTO admission",
+              "mobile booking intent foundation evidence awaiting CTO admission",
+              "booking-consent-policy-authority", "courier-pickup-idempotency-v1",
+              "uv run --locked pytest -m audit --no-cov -q",
+              "ADMISSION_STATE = ACTIVE_STATE", "production_release_block=PASS",
+          )
+          if any(token not in workflow for token in historical): raise SystemExit("historical route drift")
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8", newline="\n") as output:
+              output.write(f"state={result}\n")
+          print("Ethiopia written decision cycle architecture verifier:", result)
+          PY
+
+      - name: Upload Ethiopia written decision cycle architecture capture evidence
+        if: success() && steps.evidence_contract.outputs.mode == 'booking-consent-ethiopia-written-decision-cycle-architecture' && steps.ethiopia_written_cycle_admission.outputs.state == 'CAPTURE_ONLY'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: booking-consent-ethiopia-written-decision-cycle-architecture-evidence-${{ github.event_name }}-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ${{ runner.temp }}/booking-consent-ethiopia-written-decision-cycle-architecture-evidence-v1.txt
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+      - name: Stop Ethiopia written decision cycle architecture pending CTO admission
+        if: success() && steps.evidence_contract.outputs.mode == 'booking-consent-ethiopia-written-decision-cycle-architecture' && steps.ethiopia_written_cycle_admission.outputs.state == 'CAPTURE_ONLY'
+        run: |
+          echo "booking consent Ethiopia written decision cycle architecture evidence awaiting CTO admission" >&2
+          exit 1
       - name: Assemble Booking consent authority evidence
         if: success() && steps.evidence_contract.outputs.mode == 'booking-consent-policy-authority'
         env:
