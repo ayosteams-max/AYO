@@ -4544,9 +4544,9 @@ jobs:
               raise SystemExit("external admission selector routing drift")
           scanner_owner = step_block("Capture Ethiopia written decision cycle neutral secret inventory")
           assembler_owner = step_block("Assemble Ethiopia written decision cycle architecture evidence")
-          if "CANDIDATE_SHA: ${{ steps.select_governed_evidence_contract.outputs.evidence_target_sha }}" not in scanner_owner or "CANDIDATE_SHA: ${{ steps.select_governed_evidence_contract.outputs.evidence_target_sha }}" not in assembler_owner:
+          if "CANDIDATE_SHA: $" "{{ steps.select_governed_evidence_contract.outputs.evidence_target_sha }}" not in scanner_owner or "CANDIDATE_SHA: $" "{{ steps.select_governed_evidence_contract.outputs.evidence_target_sha }}" not in assembler_owner:
               raise SystemExit("scanner or assembler evidence target drift")
-          if "EXECUTION_SHA: ${{ steps.select_governed_evidence_contract.outputs.execution_sha }}" not in verifier or "EVIDENCE_TARGET_SHA: ${{ steps.select_governed_evidence_contract.outputs.evidence_target_sha }}" not in verifier:
+          if "EXECUTION_SHA: $" "{{ steps.select_governed_evidence_contract.outputs.execution_sha }}" not in verifier or "EVIDENCE_TARGET_SHA: $" "{{ steps.select_governed_evidence_contract.outputs.evidence_target_sha }}" not in verifier:
               raise SystemExit("verifier execution/evidence identity routing drift")
           if hashlib.sha256(actual_region1.encode()).hexdigest() != actual_region1_digest:
               raise SystemExit("actual Region-1 mutation")
@@ -4589,7 +4589,7 @@ jobs:
               (10452, 32788, "e7872687e5180f8d4018b95b9bef08b6d0e60af579b0c02ca563693a1855953c"),
               (32788, 32990, "0416d65e4c972d79ef2167bd12d426e04d3469605a731da47acc14f8645ea5eb"),
           )
-          VERIFIER_PROVENANCE_EXPECTED = (24, 4733, "45b1b2ccca9e201c98d7f349a1c9a200d3d8a04cc3f1a5f781ea487153547006")
+          VERIFIER_PROVENANCE_EXPECTED = (24, 4733, "e2bfccbdbda805eecb8fbbefcc19c5a0da8e851d72e477b5cdfb2c27f3489a8f")
           VERIFIER_PROVENANCE_NEGATIVE_ROLES = (
               "wrong-source-owner", "wrong-destination-owner", "owner-boundary-drift", "old-overlap-restored",
               "region-missing", "region-reordered", "region-overlap", "production-authority-misclassified",
@@ -4767,10 +4767,10 @@ jobs:
 
           # VERIFIER_NONOVERLAPPING_REGION_BOUNDARY_AUTHORITY_BEGIN
           VERIFIER_BOUNDARY_PROGRAM_ID = "CURRENT_VERIFIER_EMBEDDED_PROGRAM_COMPLETE_HALF_OPEN_COVERAGE"
-          VERIFIER_BOUNDARY_PROGRAM_LENGTH = 334480
+          VERIFIER_BOUNDARY_PROGRAM_LENGTH = 334504
           VERIFIER_BOUNDARY_REGION1_SHA256 = "c8ea25c94730369899d31722a847fda5a07bb1633305763c77691050a77c75c3"
           VERIFIER_BOUNDARY_REGION3_SHA256 = "0416d65e4c972d79ef2167bd12d426e04d3469605a731da47acc14f8645ea5eb"
-          VERIFIER_BOUNDARY_EXPECTED = (3, 735, "ba065dbe293fdd681bc6798221831e4ca3fc5fb34ba144ce4b5e8e931d2a73b1")
+          VERIFIER_BOUNDARY_EXPECTED = (3, 719, "28e55f7ce7c3827a054e7f9dca50518d85c1160887a583b196a07a606db3e2fd")
           VERIFIER_BOUNDARY_NEGATIVE_ROLES = (
               "restore-old-46-byte-overlap", "region1-enters-marker", "marker-owned-by-region1",
               "region2-start-after-marker", "region2-end-before-harness-end", "region2-includes-region3-writer",
@@ -5721,8 +5721,8 @@ jobs:
               ("Upload Ethiopia written decision cycle architecture capture evidence", "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02", "# v4.6.2"),
           )
           workflow_structure_artifact_authority = (
-              ("name", "booking-consent-ethiopia-written-decision-cycle-architecture-evidence-${{ github.event_name }}-${{ github.event.pull_request.head.sha || github.sha }}"),
-              ("path", "${{ runner.temp }}/booking-consent-ethiopia-written-decision-cycle-architecture-evidence-v1.txt"),
+              ("name", "booking-consent-ethiopia-written-decision-cycle-architecture-evidence-$" "{{ github.event_name }}-$" "{{ github.event.pull_request.head.sha || github.sha }}"),
+              ("path", "$" "{{ runner.temp }}/booking-consent-ethiopia-written-decision-cycle-architecture-evidence-v1.txt"),
               ("if-no-files-found", "error"),
               ("retention-days", "1"),
               ("compression-level", "0"),
