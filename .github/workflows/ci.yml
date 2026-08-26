@@ -299,7 +299,7 @@ jobs:
               dependency_pyproject_blob="$(git rev-parse "$dependency_candidate:pyproject.toml")"
               dependency_lock_blob="$(git rev-parse "$dependency_candidate:uv.lock")"
               dependency_decision_blob="$(git rev-parse "$dependency_candidate:docs/AYO_DECISION_LOG.md")"
-              expected_ci_normalized_sha256="01dd923f9629113ac396aacf431cecd5""d52a4ff0985ed52a5f6920e1ef0c4733"
+              expected_ci_normalized_sha256="2dca82590df45f60a9d274f69de285e0""f0c6d441b0cbf50f15b02e4df49e9a93"
               ci_normalized_sha256="$(python - <<'PY'
           import hashlib
           import re
@@ -432,16 +432,18 @@ jobs:
           fixed=a62c3394111c14d93f787b7b319faa0a9b13293d
           first=cc2310d390289b6168eb7a3baf714248f7235657
           second=dbe039bf87e1f95f1e85a62b4e7a9e328b0ee101
-          subject='ci: finalize pip remediation admission contract'
+          third=82111561741e341055976e640f9656b94a5de259
+          subject='ci: isolate pip remediation MyPy fingerprint'
           [[ "$candidate" =~ ^[0-9a-f]{40}$ \
             && "$(git merge-base "$candidate" "$fixed")" == "$fixed" \
-            && "$(git rev-list --count "$fixed..$candidate")" == 3 \
-            && "$(git rev-parse "$candidate^")" == "$second" \
+            && "$(git rev-list --count "$fixed..$candidate")" == 4 \
+            && "$(git rev-parse "$candidate^")" == "$third" \
+            && "$(git rev-parse "$third^")" == "$second" \
             && "$(git rev-parse "$second^")" == "$first" \
             && "$(git rev-parse "$first^")" == "$fixed" \
             && "$(git show -s --format=%s "$candidate")" == "$subject" ]] || {
             echo "pip-remediation ancestry drift" >&2; exit 1; }
-          mapfile -t correction_changed < <(git diff --name-only "$second" "$candidate")
+          mapfile -t correction_changed < <(git diff --name-only "$third" "$candidate")
           [[ "${#correction_changed[@]}" -eq 1 \
             && "${correction_changed[0]}" == .github/workflows/ci.yml ]] || {
             echo "pip-remediation correction path drift" >&2; exit 1; }
@@ -3953,6 +3955,7 @@ jobs:
               "booking-complete-replay-equivalence",
               "booking-consent-policy-authority",
               "mobile-booking-intent-foundation",
+              "pip-audit-toolchain-remediation",
           }:
               strict_fingerprint = fingerprint(candidate_strict)
               if strict_fingerprint != "6257a24b9c057c822e45a041519a849c471f6c48":
