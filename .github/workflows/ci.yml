@@ -3903,6 +3903,7 @@ jobs:
           if mode in {
               "immediate-standard-public-contract",
               "booking-complete-replay-equivalence",
+              "pip-audit-toolchain-remediation",
           }:
               if len(candidate_strict) != 383 or len(strict_files) != 54:
                   raise SystemExit("Immediate Standard strict MyPy count drift")
