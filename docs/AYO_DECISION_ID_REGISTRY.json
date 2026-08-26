@@ -6,7 +6,7 @@
     "cutover_id": "AYO_AP_REGISTRY_V1",
     "approved_date": "2026-08-26",
     "activation": "ON_REGISTRY_INCLUSION_IN_MAIN",
-    "status": "READY_FOR_MAIN_ACTIVATION",
+    "status": "ACTIVE",
     "founder_approval": "APPROVED",
     "cto_approval": "APPROVED"
   },
