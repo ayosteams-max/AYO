@@ -299,7 +299,7 @@ jobs:
               dependency_pyproject_blob="$(git rev-parse "$dependency_candidate:pyproject.toml")"
               dependency_lock_blob="$(git rev-parse "$dependency_candidate:uv.lock")"
               dependency_decision_blob="$(git rev-parse "$dependency_candidate:docs/AYO_DECISION_LOG.md")"
-              expected_ci_normalized_sha256="8cb20b3fb8963c63fae018ef6c285910""79bc8ca9c9c60c90b3dc6fbada32bf8d"
+              expected_ci_normalized_sha256="01dd923f9629113ac396aacf431cecd5""d52a4ff0985ed52a5f6920e1ef0c4733"
               ci_normalized_sha256="$(python - <<'PY'
           import hashlib
           import re
@@ -322,8 +322,9 @@ jobs:
               )"
               if [[ "$dependency_pyproject_blob" == a9eebc6ce34459318b3b58a7a0217dba571e8e1a \
                 && "$dependency_lock_blob" == b340334a94f1479199d7e3784474e9a16020a121 \
-                && "$dependency_decision_blob" == a071b48fcb1e08938893788abcfbc4e6067e05f9 \
-                && "$ci_normalized_sha256" == "$expected_ci_normalized_sha256" ]]; then
+                && "$dependency_decision_blob" == a071b48fcb1e08938893788abcfbc4e6067e05f9 ]]; then
+                [[ "$ci_normalized_sha256" == "$expected_ci_normalized_sha256" ]] || {
+                  echo "Unreviewed pip-remediation workflow identity" >&2; exit 1; }
                 mode=pip-audit-toolchain-remediation
               else
               mobile_candidate="$TESTED_COMMIT_SHA"
@@ -429,8 +430,21 @@ jobs:
           set -euo pipefail
           candidate="$CANDIDATE_SHA"
           fixed=a62c3394111c14d93f787b7b319faa0a9b13293d
-          [[ "$candidate" =~ ^[0-9a-f]{40}$ && "$(git rev-parse "$candidate^")" == "$fixed" ]] || {
+          first=cc2310d390289b6168eb7a3baf714248f7235657
+          second=dbe039bf87e1f95f1e85a62b4e7a9e328b0ee101
+          subject='ci: finalize pip remediation admission contract'
+          [[ "$candidate" =~ ^[0-9a-f]{40}$ \
+            && "$(git merge-base "$candidate" "$fixed")" == "$fixed" \
+            && "$(git rev-list --count "$fixed..$candidate")" == 3 \
+            && "$(git rev-parse "$candidate^")" == "$second" \
+            && "$(git rev-parse "$second^")" == "$first" \
+            && "$(git rev-parse "$first^")" == "$fixed" \
+            && "$(git show -s --format=%s "$candidate")" == "$subject" ]] || {
             echo "pip-remediation ancestry drift" >&2; exit 1; }
+          mapfile -t correction_changed < <(git diff --name-only "$second" "$candidate")
+          [[ "${#correction_changed[@]}" -eq 1 \
+            && "${correction_changed[0]}" == .github/workflows/ci.yml ]] || {
+            echo "pip-remediation correction path drift" >&2; exit 1; }
           expected=(
             .github/workflows/ci.yml
             docs/AYO_DECISION_LOG.md
@@ -3628,7 +3642,7 @@ jobs:
           PY
 
       - name: Verify Batch 1 typing evidence equivalence
-        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-document-delivery-architecture' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outcome == 'success' && steps.evidence_contract.outputs.mode != 'booking-consent-document-delivery-architecture' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
         env:
           EVIDENCE_MODE: ${{ steps.evidence_contract.outputs.mode }}
           BOOKING_CONSENT_MYPY_EVIDENCE_PATH: ${{ runner.temp }}/booking-consent-mypy-v1.txt
@@ -4064,7 +4078,7 @@ jobs:
             source-configured.txt candidate-configured.txt
 
       - name: Scan exact candidate for secrets
-        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outcome == 'success' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
         env:
           BOOKING_CONSENT_SECRET_EVIDENCE_PATH: ${{ runner.temp }}/booking-consent-secrets-v1.txt
           MOBILE_SECRET_EVIDENCE_PATH: ${{ runner.temp }}/mobile-booking-evidence-sections/MOBILE_SECRET_INVENTORY_V1.txt
