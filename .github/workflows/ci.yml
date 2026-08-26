@@ -300,7 +300,7 @@ jobs:
               registry_decision_blob="$(git rev-parse "$registry_candidate:docs/AYO_DECISION_LOG.md")"
               registry_test_blob="$(git rev-parse "$registry_candidate:tests/governance/test_ap_decision_registry.py")"
               registry_validator_blob="$(git rev-parse "$registry_candidate:tools/validate_ap_decision_registry.py")"
-              expected_ap_registry_ci_normalized_sha256="d85116830601ab2f""559db0284d48de5a""184a70e279f231ab""72359c3cf0c9c480"
+              expected_ap_registry_ci_normalized_sha256="78da9ff556e15c0b""c1fb7208487daf65""c1753c09cb4688ab""950eafc642d11bfc"
               ap_registry_ci_normalized_sha256="$(python - <<'PY'
           import hashlib
           import re
@@ -338,7 +338,7 @@ jobs:
               dependency_pyproject_blob="$(git rev-parse "$dependency_candidate:pyproject.toml")"
               dependency_lock_blob="$(git rev-parse "$dependency_candidate:uv.lock")"
               dependency_decision_blob="$(git rev-parse "$dependency_candidate:docs/AYO_DECISION_LOG.md")"
-              expected_ci_normalized_sha256="ea0173ce4d42a15f7b341125885b3196""a62cb779ea633d42e241e05794513423"
+              expected_ci_normalized_sha256="880173abbe5869ea269a4eefb28fa033""4fd27f29d7b4568caad765aac2a49558"
               ci_normalized_sha256="$(python - <<'PY'
           import hashlib
           import re
@@ -531,22 +531,26 @@ jobs:
           original=3ca5a2519addfa9473ccd0d41a45ca7f39fa06d5
           merge=5e5ac4e04b97f5f67daf47216d360e3cb5fe39cd
           previous=f59446b0e62def155e5e60765f407ce8706bbd6a
+          current=d1bbd592a999cce5e8016fd0b696c42bf5c6a52d
           historical_base=a62c3394111c14d93f787b7b319faa0a9b13293d
           previous_subject='ci: admit AP decision registry evidence'
-          subject='ci: bound secret scan expressions via env'
+          current_subject='ci: bound secret scan expressions via env'
+          subject='ci: bind AP registry commitments to Git bytes'
           mapfile -t merge_parents < <(git show -s --format=%P "$merge")
           [[ "$candidate" =~ ^[0-9a-f]{40}$ \
             && "$(git merge-base "$candidate" "$base")" == "$base" \
-            && "$(git rev-list --count "$base..$candidate")" == 4 \
-            && "$(git rev-parse "$candidate^")" == "$previous" \
+            && "$(git rev-list --count "$base..$candidate")" == 5 \
+            && "$(git rev-parse "$candidate^")" == "$current" \
+            && "$(git rev-parse "$current^")" == "$previous" \
             && "$(git rev-parse "$previous^")" == "$merge" \
             && "${#merge_parents[@]}" -eq 1 \
             && "${merge_parents[0]}" == "$original $base" \
             && "$(git rev-parse "$original^")" == "$historical_base" \
             && "$(git show -s --format=%s "$previous")" == "$previous_subject" \
+            && "$(git show -s --format=%s "$current")" == "$current_subject" \
             && "$(git show -s --format=%s "$candidate")" == "$subject" ]] || {
             echo "AP-registry ancestry drift" >&2; exit 1; }
-          mapfile -t correction_changed < <(git diff --name-only "$previous" "$candidate")
+          mapfile -t correction_changed < <(git diff --name-only "$current" "$candidate")
           [[ "${#correction_changed[@]}" -eq 1 \
             && "${correction_changed[0]}" == .github/workflows/ci.yml ]] || {
             echo "AP-registry CI-admission commit path drift" >&2; exit 1; }
