@@ -300,7 +300,7 @@ jobs:
               registry_decision_blob="$(git rev-parse "$registry_candidate:docs/AYO_DECISION_LOG.md")"
               registry_test_blob="$(git rev-parse "$registry_candidate:tests/governance/test_ap_decision_registry.py")"
               registry_validator_blob="$(git rev-parse "$registry_candidate:tools/validate_ap_decision_registry.py")"
-              expected_ap_registry_ci_normalized_sha256="343576c79c261284""f8611c5fb005e0df""d5cfd2397cc57d9f""40c453c663cb3ea5"
+              expected_ap_registry_ci_normalized_sha256="d85116830601ab2f""559db0284d48de5a""184a70e279f231ab""72359c3cf0c9c480"
               ap_registry_ci_normalized_sha256="$(python - <<'PY'
           import hashlib
           import re
@@ -338,7 +338,7 @@ jobs:
               dependency_pyproject_blob="$(git rev-parse "$dependency_candidate:pyproject.toml")"
               dependency_lock_blob="$(git rev-parse "$dependency_candidate:uv.lock")"
               dependency_decision_blob="$(git rev-parse "$dependency_candidate:docs/AYO_DECISION_LOG.md")"
-              expected_ci_normalized_sha256="3af6f321fe59ee2ad986f04e3ac95e0b""f6ac8eae0460f28ee2220adfc100d354"
+              expected_ci_normalized_sha256="ea0173ce4d42a15f7b341125885b3196""a62cb779ea633d42e241e05794513423"
               ci_normalized_sha256="$(python - <<'PY'
           import hashlib
           import re
@@ -530,19 +530,23 @@ jobs:
           base=9fcdbd66b4136850b366e076fde1971e9ead98ba
           original=3ca5a2519addfa9473ccd0d41a45ca7f39fa06d5
           merge=5e5ac4e04b97f5f67daf47216d360e3cb5fe39cd
+          previous=f59446b0e62def155e5e60765f407ce8706bbd6a
           historical_base=a62c3394111c14d93f787b7b319faa0a9b13293d
-          subject='ci: admit AP decision registry evidence'
+          previous_subject='ci: admit AP decision registry evidence'
+          subject='ci: bound secret scan expressions via env'
           mapfile -t merge_parents < <(git show -s --format=%P "$merge")
           [[ "$candidate" =~ ^[0-9a-f]{40}$ \
             && "$(git merge-base "$candidate" "$base")" == "$base" \
-            && "$(git rev-list --count "$base..$candidate")" == 3 \
-            && "$(git rev-parse "$candidate^")" == "$merge" \
+            && "$(git rev-list --count "$base..$candidate")" == 4 \
+            && "$(git rev-parse "$candidate^")" == "$previous" \
+            && "$(git rev-parse "$previous^")" == "$merge" \
             && "${#merge_parents[@]}" -eq 1 \
             && "${merge_parents[0]}" == "$original $base" \
             && "$(git rev-parse "$original^")" == "$historical_base" \
+            && "$(git show -s --format=%s "$previous")" == "$previous_subject" \
             && "$(git show -s --format=%s "$candidate")" == "$subject" ]] || {
             echo "AP-registry ancestry drift" >&2; exit 1; }
-          mapfile -t correction_changed < <(git diff --name-only "$merge" "$candidate")
+          mapfile -t correction_changed < <(git diff --name-only "$previous" "$candidate")
           [[ "${#correction_changed[@]}" -eq 1 \
             && "${correction_changed[0]}" == .github/workflows/ci.yml ]] || {
             echo "AP-registry CI-admission commit path drift" >&2; exit 1; }
@@ -4208,9 +4212,11 @@ jobs:
           MOBILE_SECRET_EVIDENCE_PATH: ${{ runner.temp }}/mobile-booking-evidence-sections/MOBILE_SECRET_INVENTORY_V1.txt
           CONSENT_ARCHITECTURE_SECRET_EVIDENCE_PATH: ${{ runner.temp }}/consent-document-architecture-secret-inventory-v1.txt
           CONSENT_ARCHITECTURE_SECRET_CLEANUP_PATH: ${{ runner.temp }}/consent-document-architecture-secret-cleanup-v1.txt
+          EVIDENCE_MODE: ${{ steps.evidence_contract.outputs.mode }}
+          WORKFLOW_EVENT_NAME: ${{ github.event_name }}
         run: |
           set -euo pipefail
-          evidence_mode="${{ steps.evidence_contract.outputs.mode }}"
+          evidence_mode="$EVIDENCE_MODE"
           candidate_json=candidate-secrets.json
           base_json=base-secrets.json
           baseline_json=reviewed-secrets-baseline.json
@@ -4283,23 +4289,23 @@ jobs:
           ) > "$candidate_json"
           rm -rf "$scan_root"
           scan_root=""
-          if [[ "${{ steps.evidence_contract.outputs.mode }}" == "booking-consent-policy-authority" \
-            || "${{ steps.evidence_contract.outputs.mode }}" == "mobile-booking-intent-foundation" \
-            || "${{ steps.evidence_contract.outputs.mode }}" == "booking-consent-document-delivery-architecture" \
-            || "${{ steps.evidence_contract.outputs.mode }}" == "pip-audit-toolchain-remediation" \
-            || "${{ steps.evidence_contract.outputs.mode }}" == "ap-decision-registry-main-landing" ]]; then
+          if [[ "$evidence_mode" == "booking-consent-policy-authority" \
+            || "$evidence_mode" == "mobile-booking-intent-foundation" \
+            || "$evidence_mode" == "booking-consent-document-delivery-architecture" \
+            || "$evidence_mode" == "pip-audit-toolchain-remediation" \
+            || "$evidence_mode" == "ap-decision-registry-main-landing" ]]; then
             if [[ "$evidence_mode" == "booking-consent-document-delivery-architecture" ]]; then
               base_root="$(mktemp -d "$architecture_scan_dir/base-tree.XXXXXX")"
             else
               base_root="$(mktemp -d)"
             fi
-            if [[ "${{ steps.evidence_contract.outputs.mode }}" == "booking-consent-document-delivery-architecture" ]]; then
+            if [[ "$evidence_mode" == "booking-consent-document-delivery-architecture" ]]; then
               secret_base=cadaa30c47ccbb849bf428c14576298b26ee6323
-            elif [[ "${{ steps.evidence_contract.outputs.mode }}" == "mobile-booking-intent-foundation" ]]; then
+            elif [[ "$evidence_mode" == "mobile-booking-intent-foundation" ]]; then
               secret_base=ee6650d7f6304e73c31aee8a1ab709cd3be1fbf0
-            elif [[ "${{ steps.evidence_contract.outputs.mode }}" == "pip-audit-toolchain-remediation" ]]; then
+            elif [[ "$evidence_mode" == "pip-audit-toolchain-remediation" ]]; then
               secret_base=a62c3394111c14d93f787b7b319faa0a9b13293d
-            elif [[ "${{ steps.evidence_contract.outputs.mode }}" == "ap-decision-registry-main-landing" ]]; then
+            elif [[ "$evidence_mode" == "ap-decision-registry-main-landing" ]]; then
               secret_base=9fcdbd66b4136850b366e076fde1971e9ead98ba
             else
               secret_base=6613a936b0fe896308682c8fe038708876a06c02
@@ -4309,7 +4315,7 @@ jobs:
             rm -rf "$base_root"
             base_root=""
           fi
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+          if [[ "$WORKFLOW_EVENT_NAME" == "workflow_dispatch" ]]; then
             git show "$GITHUB_SHA:.secrets.baseline" > "$baseline_json"
           else
             cp .secrets.baseline "$baseline_json"
