@@ -294,13 +294,15 @@ jobs:
             382a299236787d20a567cc5934a8f82d0147e7ad)
               mode=booking-complete-replay-equivalence
               ;;
-            efd4172d0ff7e790e36af9c7fecddafb426b0b67)
+            efd4172d0ff7e790e36af9c7fecddafb426b0b67|cf01f4061000f081cf8fe54fbc29e168f4b6f127)
               registry_candidate="$TESTED_COMMIT_SHA"
               registry_blob="$(git rev-parse "$registry_candidate:docs/AYO_DECISION_ID_REGISTRY.json")"
               registry_decision_blob="$(git rev-parse "$registry_candidate:docs/AYO_DECISION_LOG.md")"
               registry_test_blob="$(git rev-parse "$registry_candidate:tests/governance/test_ap_decision_registry.py")"
+              registry_trusted_base_test_blob="$(git rev-parse "$registry_candidate:tests/governance/test_ci_trusted_comparison_base.py" 2>/dev/null || true)"
               registry_validator_blob="$(git rev-parse "$registry_candidate:tools/validate_ap_decision_registry.py")"
-              expected_ap_registry_ci_normalized_sha256="78da9ff556e15c0b""c1fb7208487daf65""c1753c09cb4688ab""950eafc642d11bfc"
+              expected_ap_registry_ci_normalized_sha256="c3cbfa04eeba9beb""f4bcf318c73d85da""8c2ed87af9ddf9d6""bfcae9e7fbd6873e"
+              expected_ap_registry_active_state_ci_normalized_sha256="c3cbfa04eeba9beb""f4bcf318c73d85da""8c2ed87af9ddf9d6""bfcae9e7fbd6873e"
               ap_registry_ci_normalized_sha256="$(python - <<'PY'
           import hashlib
           import re
@@ -310,11 +312,14 @@ jobs:
           markers = (
               rb'expected_ci_normalized_sha256="[0-9a-f]{32}""[0-9a-f]{32}"',
               rb'expected_ap_registry_ci_normalized_sha256="[0-9a-f]{16}""[0-9a-f]{16}""[0-9a-f]{16}""[0-9a-f]{16}"',
+              rb'expected_ap_registry_active_state_ci_normalized_sha256="[0-9a-f]{16}""[0-9a-f]{16}""[0-9a-f]{16}""[0-9a-f]{16}"',
           )
           replacements = (
               b'expected_ci_normalized_sha256="00000000000000000000000000000000"'
               b'"00000000000000000000000000000000"',
               b'expected_ap_registry_ci_normalized_sha256="0000000000000000"'
+              b'"0000000000000000""0000000000000000""0000000000000000"',
+              b'expected_ap_registry_active_state_ci_normalized_sha256="0000000000000000"'
               b'"0000000000000000""0000000000000000""0000000000000000"',
           )
           normalized = data
@@ -325,20 +330,30 @@ jobs:
           print(hashlib.sha256(normalized).hexdigest())
           PY
               )"
-              [[ "$registry_blob" == d0d84754a49e9f87f370ed0e7d49de026d8fc5bc \
+              if [[ "$registry_blob" == d0d84754a49e9f87f370ed0e7d49de026d8fc5bc \
                 && "$registry_decision_blob" == 8533182c326e3d625f96bdac1410dbdb2f774158 \
                 && "$registry_test_blob" == 9f15b8c5e8591c7f72730c20431a88a4aa932144 \
                 && "$registry_validator_blob" == 0206e15654a0d4d57275476bfa452bee15c2e2bf \
-                && "$ap_registry_ci_normalized_sha256" == "$expected_ap_registry_ci_normalized_sha256" ]] || {
-                echo "Unreviewed AP-registry candidate identity" >&2; exit 1; }
-              mode=ap-decision-registry-main-landing
+                && "$ap_registry_ci_normalized_sha256" == "$expected_ap_registry_ci_normalized_sha256" ]]; then
+                mode=ap-decision-registry-main-landing
+              elif [[ "$registry_blob" == 2ffb2cfb9f6ac410cf4f75a7b4460ea95fc117c2 \
+                && "$registry_decision_blob" == 8533182c326e3d625f96bdac1410dbdb2f774158 \
+                && "$registry_test_blob" == 9f15b8c5e8591c7f72730c20431a88a4aa932144 \
+                && "$registry_trusted_base_test_blob" == 0fd58b8d7deecc09372068c9763c1b21a06ab4e5 \
+                && "$registry_validator_blob" == 0206e15654a0d4d57275476bfa452bee15c2e2bf \
+                && "$ap_registry_ci_normalized_sha256" == "$expected_ap_registry_active_state_ci_normalized_sha256" ]]; then
+                mode=ap-registry-active-state-correction
+              else
+                echo "Unreviewed AP-registry candidate identity" >&2
+                exit 1
+              fi
               ;;
             2dbcb487bd27578a95d0db9a31c21ecde7032114)
               dependency_candidate="$TESTED_COMMIT_SHA"
               dependency_pyproject_blob="$(git rev-parse "$dependency_candidate:pyproject.toml")"
               dependency_lock_blob="$(git rev-parse "$dependency_candidate:uv.lock")"
               dependency_decision_blob="$(git rev-parse "$dependency_candidate:docs/AYO_DECISION_LOG.md")"
-              expected_ci_normalized_sha256="880173abbe5869ea269a4eefb28fa033""4fd27f29d7b4568caad765aac2a49558"
+              expected_ci_normalized_sha256="1b771ba73c0343ef5d1b18856bfbbb0e""6cafe0bade6b78668a9eeefee9dd07b2"
               ci_normalized_sha256="$(python - <<'PY'
           import hashlib
           import re
@@ -346,10 +361,14 @@ jobs:
 
           path = Path(".github/workflows/ci.yml")
           data = path.read_bytes()
-          pattern = re.compile(
-              rb'expected_ci_normalized_sha256="[0-9a-f]{32}""[0-9a-f]{32}"'
+          patterns = (
+              re.compile(rb'expected_ci_normalized_sha256="[0-9a-f]{32}""[0-9a-f]{32}"'),
+              re.compile(rb'expected_ap_registry_ci_normalized_sha256="[0-9a-f]{16}""[0-9a-f]{16}""[0-9a-f]{16}""[0-9a-f]{16}"'),
+              re.compile(rb'expected_ap_registry_active_state_ci_normalized_sha256="[0-9a-f]{16}""[0-9a-f]{16}""[0-9a-f]{16}""[0-9a-f]{16}"'),
           )
-          normalized, count = pattern.subn(
+          if any(len(pattern.findall(data)) != 1 for pattern in patterns):
+              raise SystemExit("pip-remediation workflow normalization marker drift")
+          normalized, count = patterns[0].subn(
               b'expected_ci_normalized_sha256="00000000000000000000000000000000"'
               b'"00000000000000000000000000000000"',
               data,
@@ -591,8 +610,120 @@ jobs:
             echo "AP-registry activation state drift" >&2; exit 1; }
           echo "Exact AP decision-registry landing identity: PASS"
 
+      - name: Bind exact AP registry active-state correction identity
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'ap-registry-active-state-correction'
+        env:
+          CANDIDATE_SHA: ${{ env.TESTED_COMMIT_SHA }}
+        run: |
+          set -euo pipefail
+          candidate="$CANDIDATE_SHA"
+          base=6b94c45187af70f176d6a98d40742187ceaf43c8
+          state_commit=3277510460b5af71773dda62a4db69cd739433f3
+          admission_commit=8aa0664a904384d3697ab12cd306a2f02f6fa8ea
+          comparison_commit=5fe9b401ae1ca4218c40f1a27a8f18270fa7b461
+          state_subject='governance: record active AP registry state'
+          admission_subject='ci: admit AP registry active-state correction'
+          comparison_subject='ci: bind AP registry state push comparison base'
+          subject='ci: extract trusted-base controls from workflow'
+          [[ "$candidate" =~ ^[0-9a-f]{40}$ \
+            && "$(git merge-base "$candidate" "$base")" == "$base" \
+            && "$(git rev-list --count "$base..$candidate")" == 4 \
+            && "$(git rev-parse "$candidate^")" == "$comparison_commit" \
+            && "$(git rev-parse "$comparison_commit^")" == "$admission_commit" \
+            && "$(git rev-parse "$admission_commit^")" == "$state_commit" \
+            && "$(git rev-parse "$state_commit^")" == "$base" \
+            && "$(git show -s --format=%s "$state_commit")" == "$state_subject" \
+            && "$(git show -s --format=%s "$admission_commit")" == "$admission_subject" \
+            && "$(git show -s --format=%s "$comparison_commit")" == "$comparison_subject" \
+            && "$(git show -s --format=%s "$candidate")" == "$subject" ]] || {
+            echo "AP-registry active-state ancestry drift" >&2; exit 1; }
+          mapfile -t state_changed < <(git diff-tree --no-commit-id --name-only -r "$state_commit")
+          [[ "${#state_changed[@]}" -eq 1 \
+            && "${state_changed[0]}" == docs/AYO_DECISION_ID_REGISTRY.json ]] || {
+            echo "AP-registry active-state commit path drift" >&2; exit 1; }
+          for workflow_commit in "$admission_commit" "$comparison_commit"; do
+            mapfile -t workflow_changed < <(git diff-tree --no-commit-id --name-only -r "$workflow_commit")
+            [[ "${#workflow_changed[@]}" -eq 1 \
+              && "${workflow_changed[0]}" == .github/workflows/ci.yml ]] || {
+              echo "AP-registry active-state CI commit path drift" >&2; exit 1; }
+          done
+          mapfile -t extraction_changed < <(git diff-tree --no-commit-id --name-only -r "$candidate")
+          expected_extraction=(.github/workflows/ci.yml tests/governance/test_ci_trusted_comparison_base.py)
+          [[ "${#extraction_changed[@]}" -eq 2 \
+            && "${extraction_changed[*]}" == "${expected_extraction[*]}" ]] || {
+            echo "AP-registry active-state extraction commit path drift" >&2; exit 1; }
+          expected=(.github/workflows/ci.yml docs/AYO_DECISION_ID_REGISTRY.json tests/governance/test_ci_trusted_comparison_base.py)
+          mapfile -t changed < <(git diff --name-only "$base" "$candidate")
+          [[ "${#changed[@]}" -eq 3 && "${changed[*]}" == "${expected[*]}" ]] || {
+            echo "AP-registry active-state exact three-path manifest drift" >&2; exit 1; }
+          [[ "$(git rev-parse "$base:docs/AYO_DECISION_ID_REGISTRY.json")" == d0d84754a49e9f87f370ed0e7d49de026d8fc5bc \
+            && "$(git rev-parse "$candidate:docs/AYO_DECISION_ID_REGISTRY.json")" == 2ffb2cfb9f6ac410cf4f75a7b4460ea95fc117c2 \
+            && "$(git rev-parse "$candidate:docs/AYO_DECISION_LOG.md")" == 8533182c326e3d625f96bdac1410dbdb2f774158 \
+            && "$(git rev-parse "$candidate:tests")" == cf01f4061000f081cf8fe54fbc29e168f4b6f127 \
+            && "$(git rev-parse "$candidate:tests/governance/test_ap_decision_registry.py")" == 9f15b8c5e8591c7f72730c20431a88a4aa932144 \
+            && "$(git rev-parse "$candidate:tests/governance/test_ci_trusted_comparison_base.py")" == 0fd58b8d7deecc09372068c9763c1b21a06ab4e5 \
+            && "$(git rev-parse "$candidate:tools/validate_ap_decision_registry.py")" == 0206e15654a0d4d57275476bfa452bee15c2e2bf \
+            && "$(git rev-parse "$candidate:BACKEND")" == 62500035ef60d94ccc6333f25cb3aa79ff5c3f21 \
+            && "$(git rev-parse "$candidate:database/migrations")" == 253ecedebe58c31077a0baa7d2532adc46464f70 \
+            && "$(git rev-parse "$candidate:AYO-Mobile")" == da39714a911ffbf02171d28348c88a39eab2d938 \
+            && "$(git rev-parse "$candidate:AYO-Mobile/tests")" == d7143a733cf14e70851406dab8131ce7c69dd364 \
+            && "$(git rev-parse "$candidate:.secrets.baseline")" == 71770a9e529e9af0c9ed5c72549b3a2f7ddcfb02 \
+            && "$(git rev-parse "$candidate:alembic.ini")" == a2353502812251c10e36f8cd534de71c1dcca58b \
+            && "$(git rev-parse "$candidate:.python-version")" == ebe773d9eeab42ab1f896401f5b9c581f88d6709 \
+            && "$(git rev-parse "$candidate:pyproject.toml")" == a9eebc6ce34459318b3b58a7a0217dba571e8e1a \
+            && "$(git rev-parse "$candidate:uv.lock")" == b340334a94f1479199d7e3784474e9a16020a121 ]] || {
+            echo "AP-registry active-state immutable identity drift" >&2; exit 1; }
+          BASE_SHA="$base" CANDIDATE_SHA="$candidate" python - <<'PY'
+          import copy
+          import json
+          import os
+          import subprocess
+
+          def load(commit: str) -> dict:
+              content = subprocess.run(
+                  ["git", "show", f"{commit}:docs/AYO_DECISION_ID_REGISTRY.json"],
+                  check=True,
+                  capture_output=True,
+                  text=True,
+                  encoding="utf-8",
+              ).stdout
+              value = json.loads(content)
+              if not isinstance(value, dict):
+                  raise SystemExit("AP registry root must be an object")
+              return value
+
+          base = load(os.environ["BASE_SHA"])
+          candidate = load(os.environ["CANDIDATE_SHA"])
+          if base.get("cutover", {}).get("status") != "READY_FOR_MAIN_ACTIVATION":
+              raise SystemExit("AP registry base activation state drift")
+          if candidate.get("cutover", {}).get("status") != "ACTIVE":
+              raise SystemExit("AP registry candidate activation state drift")
+          normalized = copy.deepcopy(base)
+          normalized["cutover"]["status"] = "ACTIVE"
+          if normalized != candidate:
+              raise SystemExit("AP registry changed beyond approved activation state")
+          allocations = candidate.get("allocations")
+          if not isinstance(allocations, list):
+              raise SystemExit("AP registry allocations are malformed")
+          if any(item.get("ap_id") == "AP-099" for item in allocations):
+              raise SystemExit("AP-099 entered active-state correction")
+          by_id = {}
+          for item in allocations:
+              by_id.setdefault(item.get("ap_id"), []).append(item)
+          if len([records for records in by_id.values() if len(records) > 1]) != 13:
+              raise SystemExit("AP registry collision inventory drift")
+          print("AP registry structured active-state-only transition: PASS")
+          PY
+          git ls-tree -r --name-only "$candidate" | grep -q '^institutional/founder-discovery/phase-5/' && {
+            echo "Phase 5 material entered AP-registry active-state scope" >&2; exit 1; }
+          git diff --quiet "$base" "$candidate" -- BACKEND database/migrations AYO-Mobile \
+            alembic.ini .python-version .secrets.baseline pyproject.toml uv.lock \
+            docs/AYO_DECISION_LOG.md tools/validate_ap_decision_registry.py || {
+            echo "AP-registry active-state controlled-surface drift" >&2; exit 1; }
+          echo "Exact AP registry active-state correction identity: PASS"
+
       - name: Validate AP decision registry candidate
-        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'ap-decision-registry-main-landing'
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && (steps.evidence_contract.outputs.mode == 'ap-decision-registry-main-landing' || steps.evidence_contract.outputs.mode == 'ap-registry-active-state-correction')
         run: |
           set -euo pipefail
           uv run --locked python tools/validate_ap_decision_registry.py
@@ -1503,7 +1634,54 @@ jobs:
                 echo "checked-out head does not equal the pushed head" >&2
                 exit 1
               fi
-              if [[ -n "$EVENT_BEFORE" && "$EVENT_BEFORE" != "$zero" ]]; then
+              if [[ "$EVIDENCE_MODE" == "ap-registry-active-state-correction" ]]; then
+                expected_base=6b94c45187af70f176d6a98d40742187ceaf43c8
+                state_commit=3277510460b5af71773dda62a4db69cd739433f3
+                admission_commit=8aa0664a904384d3697ab12cd306a2f02f6fa8ea
+                comparison_commit=5fe9b401ae1ca4218c40f1a27a8f18270fa7b461
+                state_subject='governance: record active AP registry state'
+                admission_subject='ci: admit AP registry active-state correction'
+                correction_subject='ci: bind AP registry state push comparison base'
+                extraction_subject='ci: extract trusted-base controls from workflow'
+                git fetch --no-tags origin \
+                  refs/heads/main:refs/remotes/origin/coverage-main
+                authoritative_main="$(git rev-parse refs/remotes/origin/coverage-main)"
+                require_commit "$authoritative_main" "authoritative remote main SHA"
+                [[ "$authoritative_main" == "$expected_base" \
+                  && "$(git merge-base "$EVENT_HEAD_SHA" "$authoritative_main")" == "$expected_base" \
+                  && "$(git rev-list --count "$expected_base..$EVENT_HEAD_SHA")" == 4 \
+                  && "$(git rev-parse "$EVENT_HEAD_SHA^")" == "$comparison_commit" \
+                  && "$(git rev-parse "$comparison_commit^")" == "$admission_commit" \
+                  && "$(git rev-parse "$admission_commit^")" == "$state_commit" \
+                  && "$(git rev-parse "$state_commit^")" == "$expected_base" \
+                  && "$(git show -s --format=%s "$state_commit")" == "$state_subject" \
+                  && "$(git show -s --format=%s "$admission_commit")" == "$admission_subject" \
+                  && "$(git show -s --format=%s "$comparison_commit")" == "$correction_subject" \
+                  && "$(git show -s --format=%s "$EVENT_HEAD_SHA")" == "$extraction_subject" ]] || {
+                  echo "AP-registry active-state trusted topology drift" >&2; exit 1; }
+                mapfile -t state_paths < <(git diff-tree --no-commit-id --name-only -r "$state_commit")
+                [[ "${#state_paths[@]}" -eq 1 \
+                  && "${state_paths[0]}" == docs/AYO_DECISION_ID_REGISTRY.json ]] || {
+                  echo "AP-registry active-state state-commit path drift" >&2; exit 1; }
+                for workflow_commit in "$admission_commit" "$comparison_commit"; do
+                  mapfile -t workflow_paths < <(git diff-tree --no-commit-id --name-only -r "$workflow_commit")
+                  [[ "${#workflow_paths[@]}" -eq 1 \
+                    && "${workflow_paths[0]}" == .github/workflows/ci.yml ]] || {
+                    echo "AP-registry active-state workflow-commit path drift" >&2; exit 1; }
+                done
+                mapfile -t extraction_paths < <(git diff-tree --no-commit-id --name-only -r "$EVENT_HEAD_SHA")
+                expected_extraction_paths=(.github/workflows/ci.yml tests/governance/test_ci_trusted_comparison_base.py)
+                [[ "${#extraction_paths[@]}" -eq 2 \
+                  && "${extraction_paths[*]}" == "${expected_extraction_paths[*]}" ]] || {
+                  echo "AP-registry active-state extraction path drift" >&2; exit 1; }
+                expected_paths=(.github/workflows/ci.yml docs/AYO_DECISION_ID_REGISTRY.json tests/governance/test_ci_trusted_comparison_base.py)
+                mapfile -t aggregate_paths < <(git diff --name-only "$expected_base" "$EVENT_HEAD_SHA")
+                [[ "${#aggregate_paths[@]}" -eq 3 \
+                  && "${aggregate_paths[*]}" == "${expected_paths[*]}" ]] || {
+                  echo "AP-registry active-state aggregate path drift" >&2; exit 1; }
+                comparison_sha="$expected_base"
+                mode=verified-ap-registry-active-state-base
+              elif [[ -n "$EVENT_BEFORE" && "$EVENT_BEFORE" != "$zero" ]]; then
                 require_commit "$EVENT_BEFORE" "push before SHA"
                 git merge-base --is-ancestor "$EVENT_BEFORE" "$EVENT_HEAD_SHA" || {
                   echo "push before SHA is not an ancestor of the pushed head" >&2
@@ -3788,6 +3966,8 @@ jobs:
             source_sha=a62c3394111c14d93f787b7b319faa0a9b13293d
           elif [[ "$EVIDENCE_MODE" == "ap-decision-registry-main-landing" ]]; then
             source_sha=9fcdbd66b4136850b366e076fde1971e9ead98ba
+          elif [[ "$EVIDENCE_MODE" == "ap-registry-active-state-correction" ]]; then
+            source_sha=6b94c45187af70f176d6a98d40742187ceaf43c8
           fi
           git archive "$source_sha" | tar -x -C "$source_dir"
           UV_PROJECT_ENVIRONMENT="$mypy_environment" uv sync --locked --all-groups
@@ -4042,6 +4222,7 @@ jobs:
               "booking-complete-replay-equivalence",
               "pip-audit-toolchain-remediation",
               "ap-decision-registry-main-landing",
+              "ap-registry-active-state-correction",
           }:
               if len(candidate_strict) != 383 or len(strict_files) != 54:
                   raise SystemExit("Immediate Standard strict MyPy count drift")
@@ -4079,6 +4260,7 @@ jobs:
               "mobile-booking-intent-foundation",
               "pip-audit-toolchain-remediation",
               "ap-decision-registry-main-landing",
+              "ap-registry-active-state-correction",
           }:
               strict_fingerprint = fingerprint(candidate_strict)
               if strict_fingerprint != "6257a24b9c057c822e45a041519a849c471f6c48":
@@ -4120,6 +4302,7 @@ jobs:
               "mobile-booking-intent-foundation",
               "pip-audit-toolchain-remediation",
               "ap-decision-registry-main-landing",
+              "ap-registry-active-state-correction",
           }:
               compare("configured", source_configured, candidate_configured)
               configured_files = {item.path for item in candidate_configured}
@@ -4137,6 +4320,7 @@ jobs:
                           "booking-complete-replay-equivalence",
                           "pip-audit-toolchain-remediation",
                           "ap-decision-registry-main-landing",
+                          "ap-registry-active-state-correction",
                       }
                       and fingerprint(candidate_configured)
                       != "b50c53ef9a3bb574f36a8f6b489ec2b0c5285d08"
@@ -4297,7 +4481,8 @@ jobs:
             || "$evidence_mode" == "mobile-booking-intent-foundation" \
             || "$evidence_mode" == "booking-consent-document-delivery-architecture" \
             || "$evidence_mode" == "pip-audit-toolchain-remediation" \
-            || "$evidence_mode" == "ap-decision-registry-main-landing" ]]; then
+            || "$evidence_mode" == "ap-decision-registry-main-landing" \
+            || "$evidence_mode" == "ap-registry-active-state-correction" ]]; then
             if [[ "$evidence_mode" == "booking-consent-document-delivery-architecture" ]]; then
               base_root="$(mktemp -d "$architecture_scan_dir/base-tree.XXXXXX")"
             else
@@ -4311,6 +4496,8 @@ jobs:
               secret_base=a62c3394111c14d93f787b7b319faa0a9b13293d
             elif [[ "$evidence_mode" == "ap-decision-registry-main-landing" ]]; then
               secret_base=9fcdbd66b4136850b366e076fde1971e9ead98ba
+            elif [[ "$evidence_mode" == "ap-registry-active-state-correction" ]]; then
+              secret_base=6b94c45187af70f176d6a98d40742187ceaf43c8
             else
               secret_base=6613a936b0fe896308682c8fe038708876a06c02
             fi
@@ -4655,6 +4842,31 @@ jobs:
                       "AP-registry introduced unreviewed secret-finding semantics"
                   )
               selected = "AP-registry exact governed commit-SHA false-positive inventory"
+          elif mode == "ap-registry-active-state-correction":
+              base = scan_inventory(load(os.environ["BASE_JSON"]).get("results"))
+              base_semantics = Counter(
+                  (path, detector, digest, verified)
+                  for path, _, detector, digest, verified in base
+              )
+              candidate_semantics = Counter(
+                  (path, detector, digest, verified)
+                  for path, _, detector, digest, verified in actual
+              )
+              candidate_only = sorted((candidate_semantics - base_semantics).elements())
+              payload = "\n".join(
+                  f"{path}|{detector}|{digest}|{str(verified).lower()}"
+                  for path, detector, digest, verified in candidate_only
+              )
+              candidate_only_fingerprint = hashlib.sha256(payload.encode()).hexdigest()
+              if (
+                  len(candidate_only) != 0
+                  or candidate_only_fingerprint
+                  != "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ):
+                  raise SystemExit(
+                      "AP-registry active-state introduced unreviewed secret semantics"
+                  )
+              selected = "AP-registry active-state no-new-secret semantic inventory"
           elif mode == "booking-consent-document-delivery-architecture":
               base = scan_inventory(load(os.environ["BASE_JSON"]).get("results"))
               base_only = sorted(set(base) - set(actual))
@@ -5184,332 +5396,7 @@ jobs:
 
       - name: Verify single-source trusted comparison base controls
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true'
-        run: |
-          uv run --locked python - <<'PY'
-          import re
-          from pathlib import Path
-
-          workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
-          authoritative_mapping = (
-              "TRUSTED_COMPARISON_BASE_SHA: " + "$" +
-              "{{ steps.trusted_comparison_base.outputs.sha }}"
-          )
-          predecessor_mapping = (
-              "PUBLISHED_PREDECESSOR_SHA: " + "$" +
-              "{{ steps.trusted_comparison_base.outputs.sha }}"
-          )
-          resolver_id = "id: trusted_" + "comparison_base"
-          step_headers = list(re.finditer(r"(?m)^      - name: (.+)$", workflow))
-          resolver_steps = []
-          for index, match in enumerate(step_headers):
-              end = step_headers[index + 1].start() if index + 1 < len(step_headers) else len(workflow)
-              if resolver_id in workflow[match.start():end]:
-                  resolver_steps.append(match.group(1))
-          if (
-              workflow.count(resolver_id) != 1
-              or tuple(resolver_steps) != ("Resolve trusted comparison base",)
-          ):
-              raise SystemExit("trusted comparison base resolver is not unique")
-          expected_consumer_steps = (
-              "Bind exact Booking replay-equivalence candidate identity",
-              "Bind exact Booking consent-policy-authority candidate identity",
-              "Bind exact Mobile Booking intent foundation candidate identity",
-              "Bind exact consent document architecture candidate identity",
-              "Bind exact Booking consent approval-pack architecture candidate identity",
-              "Test all admitted non-PostgreSQL behavior with coverage",
-              "Verify exact Batch 2 test and coverage contract",
-          )
-          expected_predecessor_steps = (
-              "Bind tested Courier Pickup tree to trusted authoritative base",
-              "Bind tested Courier Pickup authorization-ordering tree to trusted base",
-          )
-          consumer_steps = []
-          predecessor_steps = []
-          approval_pack_consumer_block = ""
-          for index, match in enumerate(step_headers):
-              end = step_headers[index + 1].start() if index + 1 < len(step_headers) else len(workflow)
-              step_block = workflow[match.start():end]
-              if authoritative_mapping in step_block:
-                  consumer_steps.append(match.group(1))
-              if predecessor_mapping in step_block:
-                  predecessor_steps.append(match.group(1))
-              if match.group(1) == "Bind exact Booking consent approval-pack architecture candidate identity":
-                  approval_pack_consumer_block = step_block
-          if (
-              workflow.count(authoritative_mapping) != len(expected_consumer_steps)
-              or tuple(consumer_steps) != expected_consumer_steps
-              or workflow.count(predecessor_mapping) != len(expected_predecessor_steps)
-              or tuple(predecessor_steps) != expected_predecessor_steps
-          ):
-              raise SystemExit("comparison-dependent gates do not share one resolver output")
-          if (
-              consumer_steps.count(
-                  "Bind exact Booking consent approval-pack architecture candidate identity"
-              ) != 1
-              or approval_pack_consumer_block.count(authoritative_mapping) != 1
-              or approval_pack_consumer_block.count("TRUSTED_COMPARISON_BASE_SHA:") != 1
-              or re.findall(
-                  r"steps\.([A-Za-z0-9_-]+)\.outputs\.sha",
-                  approval_pack_consumer_block,
-              ) != ["trusted_comparison_base"]
-          ):
-              raise SystemExit("approval-pack trusted comparison-base consumer drift")
-          forbidden = (
-              "COVERAGE_" + "COMPARE_SHA",
-              "steps.coverage_" + "base.outputs.sha",
-              'if compare_sha ' + '!= "4eda7c5e80907eba9b60c20d64561087ef50c84b"',
-              'comparison_sha=' + '""',
-              "dispatch Batch 2 target lacks " + "an exact first-parent base",
-          )
-          for stale in forbidden:
-              if stale in workflow:
-                  raise SystemExit(f"duplicated or stale comparison-base mechanism: {stale}")
-
-          zero = "0" * 40
-          prior_base = "a" * 40
-          authoritative_base = "b" * 40
-          head = "c" * 40
-          commits = {prior_base, authoritative_base, head}
-
-          def require_commit(value):
-              if not re.fullmatch(r"[0-9a-f]{40}", value or "") or value == zero:
-                  raise ValueError("invalid comparison base")
-              if value not in commits:
-                  raise ValueError("unavailable comparison base")
-
-          def resolve(*, event, event_base, expected_base, first_parent, merge_base, ancestor=True):
-              require_commit(event_base)
-              if not ancestor:
-                  raise ValueError("comparison base is not an ancestor")
-              if event == "first-push" and not (
-                  event_base == expected_base == first_parent == merge_base
-              ):
-                  raise ValueError("first-push base mismatch")
-              if event == "pull-request" and event_base != expected_base:
-                  raise ValueError("pull-request base mismatch")
-              if event == "subsequent-push" and event_base != first_parent:
-                  raise ValueError("push predecessor mismatch")
-              if event == "dispatch" and event_base != first_parent:
-                  raise ValueError("dispatch first-parent mismatch")
-              return event_base
-
-          def consume(resolved, supplied):
-              if supplied != resolved:
-                  raise ValueError("downstream trusted-base replacement")
-              require_commit(supplied)
-              return supplied
-
-          valid = (
-              ("first-push", authoritative_base, authoritative_base, authoritative_base, authoritative_base),
-              ("pull-request", authoritative_base, authoritative_base, authoritative_base, authoritative_base),
-              ("subsequent-push", authoritative_base, authoritative_base, authoritative_base, authoritative_base),
-              ("dispatch", prior_base, prior_base, prior_base, prior_base),
-          )
-          for event, event_base, expected_base, first_parent, merge_base in valid:
-              resolved = resolve(
-                  event=event, event_base=event_base, expected_base=expected_base,
-                  first_parent=first_parent, merge_base=merge_base,
-              )
-              assert consume(resolved, resolved) == event_base
-
-          invalid = (
-              ("missing trusted-base output", dict(event="pull-request", event_base="", expected_base=authoritative_base, first_parent=authoritative_base, merge_base=authoritative_base)),
-              ("malformed trusted base", dict(event="pull-request", event_base="not-a-sha", expected_base=authoritative_base, first_parent=authoritative_base, merge_base=authoritative_base)),
-              ("all-zero trusted base", dict(event="pull-request", event_base=zero, expected_base=authoritative_base, first_parent=authoritative_base, merge_base=authoritative_base)),
-              ("forged trusted base", dict(event="pull-request", event_base="f" * 40, expected_base=authoritative_base, first_parent=authoritative_base, merge_base=authoritative_base)),
-              ("wrong first-push parent", dict(event="first-push", event_base=prior_base, expected_base=authoritative_base, first_parent=prior_base, merge_base=authoritative_base)),
-              ("pull-request base mismatch", dict(event="pull-request", event_base=prior_base, expected_base=authoritative_base, first_parent=authoritative_base, merge_base=authoritative_base)),
-              ("force-pushed ancestry", dict(event="subsequent-push", event_base=authoritative_base, expected_base=authoritative_base, first_parent=authoritative_base, merge_base=authoritative_base, ancestor=False)),
-              ("ambiguous push predecessor", dict(event="subsequent-push", event_base=prior_base, expected_base=authoritative_base, first_parent=authoritative_base, merge_base=authoritative_base)),
-          )
-          for label, arguments in invalid:
-              try:
-                  resolve(**arguments)
-              except ValueError:
-                  print("NEGATIVE PASS:", label)
-              else:
-                  raise SystemExit(f"trusted-base negative control admitted: {label}")
-          try:
-              consume(authoritative_base, prior_base)
-          except ValueError:
-              print("NEGATIVE PASS: downstream trusted-base replacement")
-          else:
-              raise SystemExit("downstream replacement of trusted base was admitted")
-
-          w16 = "65ff78430315c2d10bc40a0f3edafced6cec3ad2"
-          commits.add(w16)
-
-          def classify(*, predecessor, content_base, predecessor_is_ancestor,
-                       predecessor_descends_from_w16, head_descends_from_w16,
-                       changed_paths, protected_unchanged, reviewed_feature):
-              require_commit(predecessor)
-              require_commit(content_base)
-              if not predecessor_is_ancestor:
-                  raise ValueError("published predecessor is not an ancestor")
-              workflow_authority = (
-                  content_base == w16
-                  and predecessor_descends_from_w16
-                  and head_descends_from_w16
-                  and changed_paths == [".github/workflows/ci.yml"]
-                  and protected_unchanged
-              )
-              if workflow_authority and reviewed_feature:
-                  raise ValueError("ambiguous trusted content classification")
-              if workflow_authority:
-                  return "workflow-only-authority", content_base
-              if reviewed_feature:
-                  return "reviewed-feature-content", content_base
-              raise ValueError("unknown trusted content classification")
-
-          workflow_evidence = dict(
-              predecessor=authoritative_base,
-              content_base=w16,
-              predecessor_is_ancestor=True,
-              predecessor_descends_from_w16=True,
-              head_descends_from_w16=True,
-              changed_paths=[".github/workflows/ci.yml"],
-              protected_unchanged=True,
-              reviewed_feature=False,
-          )
-          if classify(**workflow_evidence) != ("workflow-only-authority", w16):
-              raise SystemExit("exact workflow-only authority was not classified")
-          feature_evidence = dict(
-              predecessor=prior_base,
-              content_base=prior_base,
-              predecessor_is_ancestor=True,
-              predecessor_descends_from_w16=False,
-              head_descends_from_w16=False,
-              changed_paths=["exact-reviewed-feature-content"],
-              protected_unchanged=False,
-              reviewed_feature=True,
-          )
-          if classify(**feature_evidence) != ("reviewed-feature-content", prior_base):
-              raise SystemExit("exact reviewed feature was not classified")
-          invalid_classifications = (
-              ("valid predecessor with wrong authoritative content base", {
-                  **workflow_evidence, "content_base": prior_base,
-              }),
-              ("correct W16 base with unrelated predecessor", {
-                  **workflow_evidence, "predecessor": prior_base,
-                  "predecessor_descends_from_w16": False,
-              }),
-              ("non-ancestor predecessor", {
-                  **workflow_evidence, "predecessor_is_ancestor": False,
-              }),
-              ("all-zero predecessor", {
-                  **workflow_evidence, "predecessor": zero,
-              }),
-              ("predecessor not descended from W16", {
-                  **workflow_evidence, "predecessor_descends_from_w16": False,
-              }),
-              ("workflow authority with production change", {
-                  **workflow_evidence,
-                  "changed_paths": [".github/workflows/ci.yml", "BACKEND/main.py"],
-              }),
-              ("workflow authority with tests change", {
-                  **workflow_evidence,
-                  "changed_paths": [".github/workflows/ci.yml", "tests/test_app.py"],
-              }),
-              ("workflow authority with migration change", {
-                  **workflow_evidence,
-                  "changed_paths": [
-                      ".github/workflows/ci.yml",
-                      "database/migrations/versions/changed.py",
-                  ],
-              }),
-              ("workflow authority claiming reviewed feature", {
-                  **workflow_evidence,
-                  "reviewed_feature": True,
-              }),
-              ("empty or unknown classification", {
-                  **workflow_evidence,
-                  "changed_paths": [],
-              }),
-          )
-          for label, evidence in invalid_classifications:
-              try:
-                  classify(**evidence)
-              except ValueError:
-                  print("NEGATIVE PASS:", label)
-              else:
-                  raise SystemExit(f"trusted classification negative admitted: {label}")
-
-          coverage_contract = {
-              "workflow-only-authority": (0, 0),
-              "reviewed-feature-content": (106, 0),
-              "courier-pickup-authorization-ordering": (11, 0),
-          }
-          comparison_base_contract = {
-              "workflow-only-authority": w16,
-              "reviewed-feature-content": prior_base,
-              "courier-pickup-authorization-ordering": authoritative_base,
-          }
-          def verify_pair(classification, comparison_base):
-              require_commit(comparison_base)
-              if comparison_base_contract.get(classification) != comparison_base:
-                  raise ValueError("classification/comparison-base pair mismatch")
-
-          for classification, comparison_base in comparison_base_contract.items():
-              verify_pair(classification, comparison_base)
-          for classification, comparison_base in (
-              ("workflow-only-authority", prior_base),
-              ("reviewed-feature-content", ""),
-              ("courier-pickup-authorization-ordering", prior_base),
-              ("", w16), ("unknown", w16),
-          ):
-              try:
-                  verify_pair(classification, comparison_base)
-              except ValueError:
-                  print("NEGATIVE PASS: trusted output pair", classification, comparison_base)
-              else:
-                  raise SystemExit(
-                      f"invalid classification/comparison-base pair admitted: "
-                      f"{classification!r} {comparison_base!r}"
-                  )
-          for classification, expected in coverage_contract.items():
-              if expected not in {(0, 0), (106, 0), (11, 0)}:
-                  raise SystemExit(f"unexpected coverage classification: {classification}")
-          for classification, actual in (
-              ("", (0, 0)), ("unknown", (0, 0)),
-              ("reviewed-feature-content", (105, 0)),
-              ("reviewed-feature-content", (106, 1)),
-              ("courier-pickup-authorization-ordering", (10, 0)),
-              ("courier-pickup-authorization-ordering", (11, 1)),
-          ):
-              if coverage_contract.get(classification) == actual:
-                  raise SystemExit(
-                      f"invalid trusted coverage classification admitted: {classification!r} {actual!r}"
-                  )
-              print("NEGATIVE PASS: trusted coverage contract", classification, actual)
-
-          binding_start = workflow.index("id: courier_pickup_v1_content")
-          binding_end = workflow.index("- name: Test all admitted non-PostgreSQL behavior")
-          binding = workflow[binding_start:binding_end]
-          for mutable_authority in (
-              "github.ref", "github.event_name", "github.event.pull_request.number",
-              "CONTENT_CLASSIFICATION",
-          ):
-              if mutable_authority in binding:
-                  raise SystemExit(
-                      f"mutable or candidate-controlled classification authority: {mutable_authority}"
-                  )
-          coverage_start = workflow.index(
-              "- name: Verify exact Courier Pickup Idempotency V1 test and coverage contract"
-          )
-          coverage_end = workflow.index(
-              "- name: Verify PostgreSQL 17/PostGIS integration tests without skips"
-          )
-          coverage_steps = workflow[coverage_start:coverage_end]
-          if "steps.trusted_comparison_base.outputs.sha" in coverage_steps:
-              raise SystemExit("coverage independently consumes the push predecessor")
-          required_outputs = (
-              "outputs.content_classification",
-              "outputs.content_comparison_base_sha",
-          )
-          if any(coverage_steps.count(value) != 2 for value in required_outputs):
-              raise SystemExit("coverage does not consume both trusted binding outputs")
-          print("Single-source trusted comparison base controls: PASS")
-          PY
+        run: uv run --locked pytest -q --no-cov tests/governance/test_ci_trusted_comparison_base.py
 
       - name: Verify Courier Pickup authorization-ordering admission negative controls
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true'
@@ -5879,7 +5766,7 @@ jobs:
           BACKEND ayo.py database/certify_restore.py
 
       - name: Verify remediated pip audit-toolchain version
-        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && (steps.evidence_contract.outputs.mode == 'pip-audit-toolchain-remediation' || steps.evidence_contract.outputs.mode == 'ap-decision-registry-main-landing')
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && (steps.evidence_contract.outputs.mode == 'pip-audit-toolchain-remediation' || steps.evidence_contract.outputs.mode == 'ap-decision-registry-main-landing' || steps.evidence_contract.outputs.mode == 'ap-registry-active-state-correction')
         run: |
           uv run --locked python - <<'PY'
           from importlib.metadata import version
