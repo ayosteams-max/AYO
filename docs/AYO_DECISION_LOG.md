@@ -960,3 +960,11 @@ Supersedes / superseded by:
 - **Historical identity boundary:** Off-main AP allocations remain attributable through their introducing commits and exact titles. Recording them in the registry neither imports their substantive architecture into main nor makes any unresolved collision repository-wide authority. Permanent repair remains separately gated.
 - **Cutover:** This tree is `READY_FOR_MAIN_ACTIVATION`; serialization authority becomes active only when the exact registry is incorporated into authoritative `main`. After activation, a new permanent AP decision must match a prior registry reservation on `main`; a feature branch may not manufacture both an unlanded reservation and an unrelated permanent allocation as if serialization had occurred. Historical collision-repair identities may not be expanded, rewritten or silently reused.
 - **Boundary:** No Constitution, product behavior, production configuration, historical commit or decision substance changes. No AP identifier is allocated, renumbered, resolved, superseded or selected as a collision winner. No separate institutional architecture is imported by this main-based governance cutover.
+
+### Operational security correction — deterministic pip audit-toolchain remediation
+
+- **Date:** 2026-08-26
+- **Approval:** Founder approved; CTO architecture and implementation approval granted. This operational security correction is intentionally unnumbered and allocates no AP identity.
+- **Problem:** The locked development environment resolved `pip==26.1.2`, which `pip-audit==2.10.1` identified as affected by `PYSEC-2026-3721` / `CVE-2026-13346`. The finding concerns CI/development tooling and does not establish an AYO application-runtime vulnerability.
+- **Decision:** Constrain the development-tooling environment to `pip>=26.2,<27`, regenerate only the necessary lock resolution, and admit the exact remediation through a mission-specific fail-closed CI evidence contract. The dependency audit remains active and no advisory is ignored or suppressed.
+- **Boundary:** No application, backend, mobile, migration, production dependency, runtime behavior, AP identity, historical collision, Phase 5 material or production authority changes. The correction does not activate the pending AP registry or modify PR #90.
