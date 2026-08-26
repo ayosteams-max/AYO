@@ -300,8 +300,8 @@ jobs:
               registry_decision_blob="$(git rev-parse "$registry_candidate:docs/AYO_DECISION_LOG.md")"
               registry_test_blob="$(git rev-parse "$registry_candidate:tests/governance/test_ap_decision_registry.py")"
               registry_validator_blob="$(git rev-parse "$registry_candidate:tools/validate_ap_decision_registry.py")"
-              expected_ap_registry_ci_normalized_sha256="8361eb88e354fe16""0c3ed99332b117dc""126f1b3e15ce933d""493ad06c5e00eca5"
-              expected_ap_registry_active_state_ci_normalized_sha256="8361eb88e354fe16""0c3ed99332b117dc""126f1b3e15ce933d""493ad06c5e00eca5"
+              expected_ap_registry_ci_normalized_sha256="9781599925e795b9""5c5324332afff1b3""f2f48112e7638449""b70231045009b9b6"
+              expected_ap_registry_active_state_ci_normalized_sha256="9781599925e795b9""5c5324332afff1b3""f2f48112e7638449""b70231045009b9b6"
               ap_registry_ci_normalized_sha256="$(python - <<'PY'
           import hashlib
           import re
@@ -351,7 +351,7 @@ jobs:
               dependency_pyproject_blob="$(git rev-parse "$dependency_candidate:pyproject.toml")"
               dependency_lock_blob="$(git rev-parse "$dependency_candidate:uv.lock")"
               dependency_decision_blob="$(git rev-parse "$dependency_candidate:docs/AYO_DECISION_LOG.md")"
-              expected_ci_normalized_sha256="369067635e16a063ef4fd847ae1e587d""8b56fc95550733c5d05e70eb5ac5bafe"
+              expected_ci_normalized_sha256="0d195c5e2901026d8aefd42e1e11df45""77caa0fcfb785a8de65c316e63247dc8"
               ci_normalized_sha256="$(python - <<'PY'
           import hashlib
           import re
@@ -617,24 +617,30 @@ jobs:
           candidate="$CANDIDATE_SHA"
           base=6b94c45187af70f176d6a98d40742187ceaf43c8
           state_commit=3277510460b5af71773dda62a4db69cd739433f3
+          admission_commit=8aa0664a904384d3697ab12cd306a2f02f6fa8ea
           state_subject='governance: record active AP registry state'
-          subject='ci: admit AP registry active-state correction'
+          admission_subject='ci: admit AP registry active-state correction'
+          subject='ci: bind AP registry state push comparison base'
           [[ "$candidate" =~ ^[0-9a-f]{40}$ \
             && "$(git merge-base "$candidate" "$base")" == "$base" \
-            && "$(git rev-list --count "$base..$candidate")" == 2 \
-            && "$(git rev-parse "$candidate^")" == "$state_commit" \
+            && "$(git rev-list --count "$base..$candidate")" == 3 \
+            && "$(git rev-parse "$candidate^")" == "$admission_commit" \
+            && "$(git rev-parse "$admission_commit^")" == "$state_commit" \
             && "$(git rev-parse "$state_commit^")" == "$base" \
             && "$(git show -s --format=%s "$state_commit")" == "$state_subject" \
+            && "$(git show -s --format=%s "$admission_commit")" == "$admission_subject" \
             && "$(git show -s --format=%s "$candidate")" == "$subject" ]] || {
             echo "AP-registry active-state ancestry drift" >&2; exit 1; }
           mapfile -t state_changed < <(git diff-tree --no-commit-id --name-only -r "$state_commit")
           [[ "${#state_changed[@]}" -eq 1 \
             && "${state_changed[0]}" == docs/AYO_DECISION_ID_REGISTRY.json ]] || {
             echo "AP-registry active-state commit path drift" >&2; exit 1; }
-          mapfile -t workflow_changed < <(git diff-tree --no-commit-id --name-only -r "$candidate")
-          [[ "${#workflow_changed[@]}" -eq 1 \
-            && "${workflow_changed[0]}" == .github/workflows/ci.yml ]] || {
-            echo "AP-registry active-state CI commit path drift" >&2; exit 1; }
+          for workflow_commit in "$admission_commit" "$candidate"; do
+            mapfile -t workflow_changed < <(git diff-tree --no-commit-id --name-only -r "$workflow_commit")
+            [[ "${#workflow_changed[@]}" -eq 1 \
+              && "${workflow_changed[0]}" == .github/workflows/ci.yml ]] || {
+              echo "AP-registry active-state CI commit path drift" >&2; exit 1; }
+          done
           expected=(.github/workflows/ci.yml docs/AYO_DECISION_ID_REGISTRY.json)
           mapfile -t changed < <(git diff --name-only "$base" "$candidate")
           [[ "${#changed[@]}" -eq 2 && "${changed[*]}" == "${expected[*]}" ]] || {
@@ -1616,7 +1622,45 @@ jobs:
                 echo "checked-out head does not equal the pushed head" >&2
                 exit 1
               fi
-              if [[ -n "$EVENT_BEFORE" && "$EVENT_BEFORE" != "$zero" ]]; then
+              if [[ "$EVIDENCE_MODE" == "ap-registry-active-state-correction" ]]; then
+                expected_base=6b94c45187af70f176d6a98d40742187ceaf43c8
+                state_commit=3277510460b5af71773dda62a4db69cd739433f3
+                admission_commit=8aa0664a904384d3697ab12cd306a2f02f6fa8ea
+                state_subject='governance: record active AP registry state'
+                admission_subject='ci: admit AP registry active-state correction'
+                correction_subject='ci: bind AP registry state push comparison base'
+                git fetch --no-tags origin \
+                  refs/heads/main:refs/remotes/origin/coverage-main
+                authoritative_main="$(git rev-parse refs/remotes/origin/coverage-main)"
+                require_commit "$authoritative_main" "authoritative remote main SHA"
+                [[ "$authoritative_main" == "$expected_base" \
+                  && "$(git merge-base "$EVENT_HEAD_SHA" "$authoritative_main")" == "$expected_base" \
+                  && "$(git rev-list --count "$expected_base..$EVENT_HEAD_SHA")" == 3 \
+                  && "$(git rev-parse "$EVENT_HEAD_SHA^")" == "$admission_commit" \
+                  && "$(git rev-parse "$admission_commit^")" == "$state_commit" \
+                  && "$(git rev-parse "$state_commit^")" == "$expected_base" \
+                  && "$(git show -s --format=%s "$state_commit")" == "$state_subject" \
+                  && "$(git show -s --format=%s "$admission_commit")" == "$admission_subject" \
+                  && "$(git show -s --format=%s "$EVENT_HEAD_SHA")" == "$correction_subject" ]] || {
+                  echo "AP-registry active-state trusted topology drift" >&2; exit 1; }
+                mapfile -t state_paths < <(git diff-tree --no-commit-id --name-only -r "$state_commit")
+                [[ "${#state_paths[@]}" -eq 1 \
+                  && "${state_paths[0]}" == docs/AYO_DECISION_ID_REGISTRY.json ]] || {
+                  echo "AP-registry active-state state-commit path drift" >&2; exit 1; }
+                for workflow_commit in "$admission_commit" "$EVENT_HEAD_SHA"; do
+                  mapfile -t workflow_paths < <(git diff-tree --no-commit-id --name-only -r "$workflow_commit")
+                  [[ "${#workflow_paths[@]}" -eq 1 \
+                    && "${workflow_paths[0]}" == .github/workflows/ci.yml ]] || {
+                    echo "AP-registry active-state workflow-commit path drift" >&2; exit 1; }
+                done
+                expected_paths=(.github/workflows/ci.yml docs/AYO_DECISION_ID_REGISTRY.json)
+                mapfile -t aggregate_paths < <(git diff --name-only "$expected_base" "$EVENT_HEAD_SHA")
+                [[ "${#aggregate_paths[@]}" -eq 2 \
+                  && "${aggregate_paths[*]}" == "${expected_paths[*]}" ]] || {
+                  echo "AP-registry active-state aggregate path drift" >&2; exit 1; }
+                comparison_sha="$expected_base"
+                mode=verified-ap-registry-active-state-base
+              elif [[ -n "$EVENT_BEFORE" && "$EVENT_BEFORE" != "$zero" ]]; then
                 require_commit "$EVENT_BEFORE" "push before SHA"
                 git merge-base --is-ancestor "$EVENT_BEFORE" "$EVENT_HEAD_SHA" || {
                   echo "push before SHA is not an ancestor of the pushed head" >&2
@@ -5482,6 +5526,76 @@ jobs:
               print("NEGATIVE PASS: downstream trusted-base replacement")
           else:
               raise SystemExit("downstream replacement of trusted base was admitted")
+
+          active_mode = "ap-registry-active-state-correction"
+          active_base = "6b94c45187af70f176d6a98d40742187ceaf43c8"
+          active_state = "3277510460b5af71773dda62a4db69cd739433f3"
+          active_admission = "8aa0664a904384d3697ab12cd306a2f02f6fa8ea"
+          active_subjects = (
+              "governance: record active AP registry state",
+              "ci: admit AP registry active-state correction",
+              "ci: bind AP registry state push comparison base",
+          )
+          active_paths = (
+              ("docs/AYO_DECISION_ID_REGISTRY.json",),
+              (".github/workflows/ci.yml",),
+              (".github/workflows/ci.yml",),
+          )
+
+          def resolve_active_state(*, evidence_mode, base, merge_base, chain,
+                                   subjects, commit_paths, aggregate_paths,
+                                   linear=True):
+              if evidence_mode != active_mode:
+                  raise ValueError("unknown active-state evidence mode")
+              if base != active_base or merge_base != active_base:
+                  raise ValueError("active-state authoritative base drift")
+              if not linear or chain[:2] != (active_state, active_admission):
+                  raise ValueError("active-state reviewed chain drift")
+              if len(chain) != 3:
+                  raise ValueError("active-state commit count drift")
+              if subjects != active_subjects or commit_paths != active_paths:
+                  raise ValueError("active-state commit contract drift")
+              if aggregate_paths != (
+                  ".github/workflows/ci.yml",
+                  "docs/AYO_DECISION_ID_REGISTRY.json",
+              ):
+                  raise ValueError("active-state aggregate path drift")
+              return active_base
+
+          correction = "d" * 40
+          active_arguments = dict(
+              evidence_mode=active_mode,
+              base=active_base,
+              merge_base=active_base,
+              chain=(active_state, active_admission, correction),
+              subjects=active_subjects,
+              commit_paths=active_paths,
+              aggregate_paths=(
+                  ".github/workflows/ci.yml",
+                  "docs/AYO_DECISION_ID_REGISTRY.json",
+              ),
+          )
+          if resolve_active_state(**active_arguments) != active_base:
+              raise SystemExit("active-state trusted-base positive control failed")
+          active_invalid = (
+              ("hidden commit before state", {**active_arguments, "chain": ("e" * 40,) + active_arguments["chain"]}),
+              ("inserted intermediate commit", {**active_arguments, "chain": (active_state, "e" * 40, active_admission, correction)}),
+              ("wrong state commit", {**active_arguments, "chain": ("e" * 40, active_admission, correction)}),
+              ("wrong admission commit", {**active_arguments, "chain": (active_state, "e" * 40, correction)}),
+              ("nonlinear ancestry", {**active_arguments, "linear": False}),
+              ("wrong authoritative main", {**active_arguments, "base": "e" * 40}),
+              ("wrong merge base", {**active_arguments, "merge_base": "e" * 40}),
+              ("extra aggregate path", {**active_arguments, "aggregate_paths": active_arguments["aggregate_paths"] + ("unexpected",)}),
+              ("non-workflow correction", {**active_arguments, "commit_paths": active_paths[:2] + (("unexpected",),)}),
+              ("generic multi-commit mode", {**active_arguments, "evidence_mode": "unknown"}),
+          )
+          for label, arguments in active_invalid:
+              try:
+                  resolve_active_state(**arguments)
+              except ValueError:
+                  print("NEGATIVE PASS:", label)
+              else:
+                  raise SystemExit(f"active-state trusted-base negative admitted: {label}")
 
           w16 = "65ff78430315c2d10bc40a0f3edafced6cec3ad2"
           commits.add(w16)
