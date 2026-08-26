@@ -294,12 +294,51 @@ jobs:
             382a299236787d20a567cc5934a8f82d0147e7ad)
               mode=booking-complete-replay-equivalence
               ;;
+            efd4172d0ff7e790e36af9c7fecddafb426b0b67)
+              registry_candidate="$TESTED_COMMIT_SHA"
+              registry_blob="$(git rev-parse "$registry_candidate:docs/AYO_DECISION_ID_REGISTRY.json")"
+              registry_decision_blob="$(git rev-parse "$registry_candidate:docs/AYO_DECISION_LOG.md")"
+              registry_test_blob="$(git rev-parse "$registry_candidate:tests/governance/test_ap_decision_registry.py")"
+              registry_validator_blob="$(git rev-parse "$registry_candidate:tools/validate_ap_decision_registry.py")"
+              expected_ap_registry_ci_normalized_sha256="343576c79c261284""f8611c5fb005e0df""d5cfd2397cc57d9f""40c453c663cb3ea5"
+              ap_registry_ci_normalized_sha256="$(python - <<'PY'
+          import hashlib
+          import re
+          from pathlib import Path
+
+          data = Path(".github/workflows/ci.yml").read_bytes()
+          markers = (
+              rb'expected_ci_normalized_sha256="[0-9a-f]{32}""[0-9a-f]{32}"',
+              rb'expected_ap_registry_ci_normalized_sha256="[0-9a-f]{16}""[0-9a-f]{16}""[0-9a-f]{16}""[0-9a-f]{16}"',
+          )
+          replacements = (
+              b'expected_ci_normalized_sha256="00000000000000000000000000000000"'
+              b'"00000000000000000000000000000000"',
+              b'expected_ap_registry_ci_normalized_sha256="0000000000000000"'
+              b'"0000000000000000""0000000000000000""0000000000000000"',
+          )
+          normalized = data
+          for marker, replacement in zip(markers, replacements, strict=True):
+              normalized, count = re.subn(marker, replacement, normalized)
+              if count != 1:
+                  raise SystemExit("AP-registry workflow normalization marker drift")
+          print(hashlib.sha256(normalized).hexdigest())
+          PY
+              )"
+              [[ "$registry_blob" == d0d84754a49e9f87f370ed0e7d49de026d8fc5bc \
+                && "$registry_decision_blob" == 8533182c326e3d625f96bdac1410dbdb2f774158 \
+                && "$registry_test_blob" == 9f15b8c5e8591c7f72730c20431a88a4aa932144 \
+                && "$registry_validator_blob" == 0206e15654a0d4d57275476bfa452bee15c2e2bf \
+                && "$ap_registry_ci_normalized_sha256" == "$expected_ap_registry_ci_normalized_sha256" ]] || {
+                echo "Unreviewed AP-registry candidate identity" >&2; exit 1; }
+              mode=ap-decision-registry-main-landing
+              ;;
             2dbcb487bd27578a95d0db9a31c21ecde7032114)
               dependency_candidate="$TESTED_COMMIT_SHA"
               dependency_pyproject_blob="$(git rev-parse "$dependency_candidate:pyproject.toml")"
               dependency_lock_blob="$(git rev-parse "$dependency_candidate:uv.lock")"
               dependency_decision_blob="$(git rev-parse "$dependency_candidate:docs/AYO_DECISION_LOG.md")"
-              expected_ci_normalized_sha256="88088b9cd034359a41da579faba5c2ed""08313a3347a4f20733c560f6477d63de"
+              expected_ci_normalized_sha256="3af6f321fe59ee2ad986f04e3ac95e0b""f6ac8eae0460f28ee2220adfc100d354"
               ci_normalized_sha256="$(python - <<'PY'
           import hashlib
           import re
@@ -480,6 +519,76 @@ jobs:
             alembic.ini .python-version .secrets.baseline tests || {
             echo "pip-remediation executable or controlled-tree drift" >&2; exit 1; }
           echo "Exact pip audit-toolchain remediation identity: PASS"
+
+      - name: Bind exact AP decision-registry landing identity
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'ap-decision-registry-main-landing'
+        env:
+          CANDIDATE_SHA: ${{ env.TESTED_COMMIT_SHA }}
+        run: |
+          set -euo pipefail
+          candidate="$CANDIDATE_SHA"
+          base=9fcdbd66b4136850b366e076fde1971e9ead98ba
+          original=3ca5a2519addfa9473ccd0d41a45ca7f39fa06d5
+          merge=5e5ac4e04b97f5f67daf47216d360e3cb5fe39cd
+          historical_base=a62c3394111c14d93f787b7b319faa0a9b13293d
+          subject='ci: admit AP decision registry evidence'
+          mapfile -t merge_parents < <(git show -s --format=%P "$merge")
+          [[ "$candidate" =~ ^[0-9a-f]{40}$ \
+            && "$(git merge-base "$candidate" "$base")" == "$base" \
+            && "$(git rev-list --count "$base..$candidate")" == 3 \
+            && "$(git rev-parse "$candidate^")" == "$merge" \
+            && "${#merge_parents[@]}" -eq 1 \
+            && "${merge_parents[0]}" == "$original $base" \
+            && "$(git rev-parse "$original^")" == "$historical_base" \
+            && "$(git show -s --format=%s "$candidate")" == "$subject" ]] || {
+            echo "AP-registry ancestry drift" >&2; exit 1; }
+          mapfile -t correction_changed < <(git diff --name-only "$merge" "$candidate")
+          [[ "${#correction_changed[@]}" -eq 1 \
+            && "${correction_changed[0]}" == .github/workflows/ci.yml ]] || {
+            echo "AP-registry CI-admission commit path drift" >&2; exit 1; }
+          expected=(
+            .github/workflows/ci.yml
+            docs/AYO_DECISION_ID_REGISTRY.json
+            docs/AYO_DECISION_LOG.md
+            tests/governance/test_ap_decision_registry.py
+            tools/validate_ap_decision_registry.py
+          )
+          mapfile -t changed < <(git diff --name-only "$base" "$candidate")
+          [[ "${#changed[@]}" -eq 5 && "${changed[*]}" == "${expected[*]}" ]] || {
+            echo "AP-registry exact five-path manifest drift" >&2; exit 1; }
+          [[ "$(git rev-parse "$candidate:docs/AYO_DECISION_ID_REGISTRY.json")" == d0d84754a49e9f87f370ed0e7d49de026d8fc5bc \
+            && "$(git rev-parse "$candidate:docs/AYO_DECISION_LOG.md")" == 8533182c326e3d625f96bdac1410dbdb2f774158 \
+            && "$(git rev-parse "$candidate:tests")" == efd4172d0ff7e790e36af9c7fecddafb426b0b67 \
+            && "$(git rev-parse "$candidate:tests/governance/test_ap_decision_registry.py")" == 9f15b8c5e8591c7f72730c20431a88a4aa932144 \
+            && "$(git rev-parse "$candidate:tools/validate_ap_decision_registry.py")" == 0206e15654a0d4d57275476bfa452bee15c2e2bf \
+            && "$(git rev-parse "$candidate:BACKEND")" == 62500035ef60d94ccc6333f25cb3aa79ff5c3f21 \
+            && "$(git rev-parse "$candidate:database/migrations")" == 253ecedebe58c31077a0baa7d2532adc46464f70 \
+            && "$(git rev-parse "$candidate:AYO-Mobile")" == da39714a911ffbf02171d28348c88a39eab2d938 \
+            && "$(git rev-parse "$candidate:AYO-Mobile/tests")" == d7143a733cf14e70851406dab8131ce7c69dd364 \
+            && "$(git rev-parse "$candidate:.secrets.baseline")" == 71770a9e529e9af0c9ed5c72549b3a2f7ddcfb02 \
+            && "$(git rev-parse "$candidate:alembic.ini")" == a2353502812251c10e36f8cd534de71c1dcca58b \
+            && "$(git rev-parse "$candidate:.python-version")" == ebe773d9eeab42ab1f896401f5b9c581f88d6709 \
+            && "$(git rev-parse "$candidate:pyproject.toml")" == a9eebc6ce34459318b3b58a7a0217dba571e8e1a \
+            && "$(git rev-parse "$candidate:uv.lock")" == b340334a94f1479199d7e3784474e9a16020a121 ]] || {
+            echo "AP-registry immutable identity drift" >&2; exit 1; }
+          git show "$candidate:docs/AYO_DECISION_LOG.md" | grep -Eq '^### AP-099([[:space:]]|$)' && {
+            echo "AP-099 allocation entered AP-registry scope" >&2; exit 1; }
+          git ls-tree -r --name-only "$candidate" | grep -q '^institutional/founder-discovery/phase-5/' && {
+            echo "Phase 5 material entered AP-registry scope" >&2; exit 1; }
+          git diff --quiet "$base" "$candidate" -- BACKEND database/migrations AYO-Mobile \
+            alembic.ini .python-version .secrets.baseline pyproject.toml uv.lock || {
+            echo "AP-registry executable, dependency, or controlled-tree drift" >&2; exit 1; }
+          grep -Fq '"status": "READY_FOR_MAIN_ACTIVATION"' \
+            docs/AYO_DECISION_ID_REGISTRY.json || {
+            echo "AP-registry activation state drift" >&2; exit 1; }
+          echo "Exact AP decision-registry landing identity: PASS"
+
+      - name: Validate AP decision registry candidate
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'ap-decision-registry-main-landing'
+        run: |
+          set -euo pipefail
+          uv run --locked python tools/validate_ap_decision_registry.py
+          uv run --locked pytest -q --no-cov tests/governance/test_ap_decision_registry.py
 
       - name: Bind exact Courier Pickup Idempotency V1 candidate identity
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'courier-pickup-idempotency-v1'
@@ -3669,6 +3778,8 @@ jobs:
             source_sha=ee6650d7f6304e73c31aee8a1ab709cd3be1fbf0
           elif [[ "$EVIDENCE_MODE" == "pip-audit-toolchain-remediation" ]]; then
             source_sha=a62c3394111c14d93f787b7b319faa0a9b13293d
+          elif [[ "$EVIDENCE_MODE" == "ap-decision-registry-main-landing" ]]; then
+            source_sha=9fcdbd66b4136850b366e076fde1971e9ead98ba
           fi
           git archive "$source_sha" | tar -x -C "$source_dir"
           UV_PROJECT_ENVIRONMENT="$mypy_environment" uv sync --locked --all-groups
@@ -3922,6 +4033,7 @@ jobs:
               "immediate-standard-public-contract",
               "booking-complete-replay-equivalence",
               "pip-audit-toolchain-remediation",
+              "ap-decision-registry-main-landing",
           }:
               if len(candidate_strict) != 383 or len(strict_files) != 54:
                   raise SystemExit("Immediate Standard strict MyPy count drift")
@@ -3958,6 +4070,7 @@ jobs:
               "booking-consent-policy-authority",
               "mobile-booking-intent-foundation",
               "pip-audit-toolchain-remediation",
+              "ap-decision-registry-main-landing",
           }:
               strict_fingerprint = fingerprint(candidate_strict)
               if strict_fingerprint != "6257a24b9c057c822e45a041519a849c471f6c48":
@@ -3998,6 +4111,7 @@ jobs:
               "booking-consent-policy-authority",
               "mobile-booking-intent-foundation",
               "pip-audit-toolchain-remediation",
+              "ap-decision-registry-main-landing",
           }:
               compare("configured", source_configured, candidate_configured)
               configured_files = {item.path for item in candidate_configured}
@@ -4014,6 +4128,7 @@ jobs:
                       mode in {
                           "booking-complete-replay-equivalence",
                           "pip-audit-toolchain-remediation",
+                          "ap-decision-registry-main-landing",
                       }
                       and fingerprint(candidate_configured)
                       != "b50c53ef9a3bb574f36a8f6b489ec2b0c5285d08"
@@ -4171,7 +4286,8 @@ jobs:
           if [[ "${{ steps.evidence_contract.outputs.mode }}" == "booking-consent-policy-authority" \
             || "${{ steps.evidence_contract.outputs.mode }}" == "mobile-booking-intent-foundation" \
             || "${{ steps.evidence_contract.outputs.mode }}" == "booking-consent-document-delivery-architecture" \
-            || "${{ steps.evidence_contract.outputs.mode }}" == "pip-audit-toolchain-remediation" ]]; then
+            || "${{ steps.evidence_contract.outputs.mode }}" == "pip-audit-toolchain-remediation" \
+            || "${{ steps.evidence_contract.outputs.mode }}" == "ap-decision-registry-main-landing" ]]; then
             if [[ "$evidence_mode" == "booking-consent-document-delivery-architecture" ]]; then
               base_root="$(mktemp -d "$architecture_scan_dir/base-tree.XXXXXX")"
             else
@@ -4183,6 +4299,8 @@ jobs:
               secret_base=ee6650d7f6304e73c31aee8a1ab709cd3be1fbf0
             elif [[ "${{ steps.evidence_contract.outputs.mode }}" == "pip-audit-toolchain-remediation" ]]; then
               secret_base=a62c3394111c14d93f787b7b319faa0a9b13293d
+            elif [[ "${{ steps.evidence_contract.outputs.mode }}" == "ap-decision-registry-main-landing" ]]; then
+              secret_base=9fcdbd66b4136850b366e076fde1971e9ead98ba
             else
               secret_base=6613a936b0fe896308682c8fe038708876a06c02
             fi
@@ -4489,6 +4607,44 @@ jobs:
                       "pip-remediation introduced unreviewed secret-finding semantics"
                   )
               selected = "pip-remediation no-new-secret semantic inventory"
+          elif mode == "ap-decision-registry-main-landing":
+              base = scan_inventory(load(os.environ["BASE_JSON"]).get("results"))
+              base_semantics = Counter(
+                  (path, detector, digest, verified)
+                  for path, _, detector, digest, verified in base
+              )
+              candidate_semantics = Counter(
+                  (path, detector, digest, verified)
+                  for path, _, detector, digest, verified in actual
+              )
+              candidate_only = candidate_semantics - base_semantics
+              candidate_only_items = sorted(candidate_only.elements())
+              candidate_only_payload = "\n".join(
+                  f"{path}|{detector}|{digest}|{str(verified).lower()}"
+                  for path, detector, digest, verified in candidate_only_items
+              )
+              candidate_only_fingerprint = hashlib.sha256(
+                  candidate_only_payload.encode()
+              ).hexdigest()
+              expected_candidate_only_fingerprint = (
+                  "5a50357ecbb41d03" "943ffc1a86508cf5"
+                  "3eaa8cad7fee45ff" "f7570498315b467c"
+              )
+              if (
+                  len(candidate_only_items) != 34
+                  or any(
+                      path != "docs/AYO_DECISION_ID_REGISTRY.json"
+                      or detector != "Hex High Entropy String"
+                      or verified
+                      for path, detector, _, verified in candidate_only_items
+                  )
+                  or candidate_only_fingerprint
+                  != expected_candidate_only_fingerprint
+              ):
+                  raise SystemExit(
+                      "AP-registry introduced unreviewed secret-finding semantics"
+                  )
+              selected = "AP-registry exact governed commit-SHA false-positive inventory"
           elif mode == "booking-consent-document-delivery-architecture":
               base = scan_inventory(load(os.environ["BASE_JSON"]).get("results"))
               base_only = sorted(set(base) - set(actual))
@@ -5713,7 +5869,7 @@ jobs:
           BACKEND ayo.py database/certify_restore.py
 
       - name: Verify remediated pip audit-toolchain version
-        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'pip-audit-toolchain-remediation'
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && (steps.evidence_contract.outputs.mode == 'pip-audit-toolchain-remediation' || steps.evidence_contract.outputs.mode == 'ap-decision-registry-main-landing')
         run: |
           uv run --locked python - <<'PY'
           from importlib.metadata import version
