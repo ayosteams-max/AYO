@@ -299,7 +299,7 @@ jobs:
               dependency_pyproject_blob="$(git rev-parse "$dependency_candidate:pyproject.toml")"
               dependency_lock_blob="$(git rev-parse "$dependency_candidate:uv.lock")"
               dependency_decision_blob="$(git rev-parse "$dependency_candidate:docs/AYO_DECISION_LOG.md")"
-              expected_ci_normalized_sha256="2dca82590df45f60a9d274f69de285e0""f0c6d441b0cbf50f15b02e4df49e9a93"
+              expected_ci_normalized_sha256="88088b9cd034359a41da579faba5c2ed""08313a3347a4f20733c560f6477d63de"
               ci_normalized_sha256="$(python - <<'PY'
           import hashlib
           import re
@@ -433,17 +433,19 @@ jobs:
           first=cc2310d390289b6168eb7a3baf714248f7235657
           second=dbe039bf87e1f95f1e85a62b4e7a9e328b0ee101
           third=82111561741e341055976e640f9656b94a5de259
-          subject='ci: isolate pip remediation MyPy fingerprint'
+          fourth=cf7b8c7a31250b90c32fd38a6952ce1a98d432fe
+          subject='ci: admit pip remediation configured MyPy evidence'
           [[ "$candidate" =~ ^[0-9a-f]{40}$ \
             && "$(git merge-base "$candidate" "$fixed")" == "$fixed" \
-            && "$(git rev-list --count "$fixed..$candidate")" == 4 \
-            && "$(git rev-parse "$candidate^")" == "$third" \
+            && "$(git rev-list --count "$fixed..$candidate")" == 5 \
+            && "$(git rev-parse "$candidate^")" == "$fourth" \
+            && "$(git rev-parse "$fourth^")" == "$third" \
             && "$(git rev-parse "$third^")" == "$second" \
             && "$(git rev-parse "$second^")" == "$first" \
             && "$(git rev-parse "$first^")" == "$fixed" \
             && "$(git show -s --format=%s "$candidate")" == "$subject" ]] || {
             echo "pip-remediation ancestry drift" >&2; exit 1; }
-          mapfile -t correction_changed < <(git diff --name-only "$third" "$candidate")
+          mapfile -t correction_changed < <(git diff --name-only "$fourth" "$candidate")
           [[ "${#correction_changed[@]}" -eq 1 \
             && "${correction_changed[0]}" == .github/workflows/ci.yml ]] || {
             echo "pip-remediation correction path drift" >&2; exit 1; }
@@ -3995,6 +3997,7 @@ jobs:
               "booking-complete-replay-equivalence",
               "booking-consent-policy-authority",
               "mobile-booking-intent-foundation",
+              "pip-audit-toolchain-remediation",
           }:
               compare("configured", source_configured, candidate_configured)
               configured_files = {item.path for item in candidate_configured}
@@ -4008,7 +4011,10 @@ jobs:
                   }:
                       raise SystemExit("configured MyPy governed error-code drift")
                   if (
-                      mode == "booking-complete-replay-equivalence"
+                      mode in {
+                          "booking-complete-replay-equivalence",
+                          "pip-audit-toolchain-remediation",
+                      }
                       and fingerprint(candidate_configured)
                       != "b50c53ef9a3bb574f36a8f6b489ec2b0c5285d08"
                   ):
