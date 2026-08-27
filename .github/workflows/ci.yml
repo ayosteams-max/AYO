@@ -272,6 +272,12 @@ jobs:
         id: evidence_contract
         run: |
           set -euo pipefail
+          expected_helper_blob=287462f26399bdeb4964030fa5aac6170fb1a607
+          expected_ci_normalized_sha256="d7b6433f783ecca9f6d7462c6946cb6a""67c24d40cef07f40861bf7b874add735"
+          p="$expected_ci_normalized_sha256"
+          helper_blob="$(git rev-parse "$TESTED_COMMIT_SHA:tools/validate_ci_governance_evidence.py" 2>/dev/null || true)"
+          [[ "$helper_blob" == "$expected_helper_blob" ]] || {
+            echo "Unreviewed governance evidence helper" >&2; exit 1; }
           tests_tree="$(git rev-parse HEAD:tests)"
           mobile_tests_tree=""
           mobile_tree=""
@@ -301,39 +307,10 @@ jobs:
               registry_test_blob="$(git rev-parse "$registry_candidate:tests/governance/test_ap_decision_registry.py")"
               registry_trusted_base_test_blob="$(git rev-parse "$registry_candidate:tests/governance/test_ci_trusted_comparison_base.py" 2>/dev/null || true)"
               registry_validator_blob="$(git rev-parse "$registry_candidate:tools/validate_ap_decision_registry.py")"
-              expected_ap_registry_ci_normalized_sha256="19f5666ca6eb7968""e6dd00c95c26114b""52813516a8f1c5ff""db7d025ba81c9509"
-              expected_ap_registry_active_state_ci_normalized_sha256="19f5666ca6eb7968""e6dd00c95c26114b""52813516a8f1c5ff""db7d025ba81c9509"
-              expected_ap_main_ci_sha256="19f5666ca6eb7968e6dd00c95c26114b""52813516a8f1c5ffdb7d025ba81c9509"
-              ap_registry_ci_normalized_sha256="$(python - <<'PY'
-          import hashlib
-          import re
-          from pathlib import Path
-
-          data = Path(".github/workflows/ci.yml").read_bytes()
-          markers = (
-              rb'expected_ci_normalized_sha256="[0-9a-f]{32}""[0-9a-f]{32}"',
-              rb'expected_ap_registry_ci_normalized_sha256="[0-9a-f]{16}""[0-9a-f]{16}""[0-9a-f]{16}""[0-9a-f]{16}"',
-                rb'expected_ap_registry_active_state_ci_normalized_sha256="[0-9a-f]{16}""[0-9a-f]{16}""[0-9a-f]{16}""[0-9a-f]{16}"',
-                rb'expected_ap_main_ci_sha256="[0-9a-f]{32}""[0-9a-f]{32}"',
-          )
-          replacements = (
-              b'expected_ci_normalized_sha256="00000000000000000000000000000000"'
-              b'"00000000000000000000000000000000"',
-              b'expected_ap_registry_ci_normalized_sha256="0000000000000000"'
-              b'"0000000000000000""0000000000000000""0000000000000000"',
-                b'expected_ap_registry_active_state_ci_normalized_sha256="0000000000000000"'
-                b'"0000000000000000""0000000000000000""0000000000000000"',
-                b'expected_ap_main_ci_sha256="00000000000000000000000000000000"'
-                b'"00000000000000000000000000000000"',
-          )
-          normalized = data
-          for marker, replacement in zip(markers, replacements, strict=True):
-              normalized, count = re.subn(marker, replacement, normalized)
-              if count != 1:
-                  raise SystemExit("AP-registry workflow normalization marker drift")
-          print(hashlib.sha256(normalized).hexdigest())
-          PY
-              )"
+              expected_ap_registry_ci_normalized_sha256="534a66f34986acc9""69bd8d5e740426cb""3d9475cc038c8fd0""33a1f55f1ee4e9dd"
+              expected_ap_registry_active_state_ci_normalized_sha256="534a66f34986acc9""69bd8d5e740426cb""3d9475cc038c8fd0""33a1f55f1ee4e9dd"
+              expected_ap_main_ci_sha256="534a66f34986acc969bd8d5e740426cb""3d9475cc038c8fd033a1f55f1ee4e9dd"
+              ap_registry_ci_normalized_sha256="$(python tools/validate_ci_governance_evidence.py workflow-commitment --scope ap --workflow .github/workflows/ci.yml)"
               if [[ "$registry_blob" == d0d84754a49e9f87f370ed0e7d49de026d8fc5bc \
                 && "$registry_decision_blob" == 8533182c326e3d625f96bdac1410dbdb2f774158 \
                 && "$registry_test_blob" == 9f15b8c5e8591c7f72730c20431a88a4aa932144 \
@@ -359,36 +336,11 @@ jobs:
               dependency_pyproject_blob="$(git rev-parse "$dependency_candidate:pyproject.toml")"
               dependency_lock_blob="$(git rev-parse "$dependency_candidate:uv.lock")"
               dependency_decision_blob="$(git rev-parse "$dependency_candidate:docs/AYO_DECISION_LOG.md")"
-              expected_ci_normalized_sha256="64b2eb8bcbed99102af98599a98ccac5""1a9c92c836bd508ff5cf9ebb83171889"
-              ci_normalized_sha256="$(python - <<'PY'
-          import hashlib
-          import re
-          from pathlib import Path
-
-          path = Path(".github/workflows/ci.yml")
-          data = path.read_bytes()
-          patterns = (
-              re.compile(rb'expected_ci_normalized_sha256="[0-9a-f]{32}""[0-9a-f]{32}"'),
-              re.compile(rb'expected_ap_registry_ci_normalized_sha256="[0-9a-f]{16}""[0-9a-f]{16}""[0-9a-f]{16}""[0-9a-f]{16}"'),
-              re.compile(rb'expected_ap_registry_active_state_ci_normalized_sha256="[0-9a-f]{16}""[0-9a-f]{16}""[0-9a-f]{16}""[0-9a-f]{16}"'),
-              re.compile(rb'expected_ap_main_ci_sha256="[0-9a-f]{32}""[0-9a-f]{32}"'),
-          )
-          if any(len(pattern.findall(data)) != 1 for pattern in patterns):
-              raise SystemExit("pip-remediation workflow normalization marker drift")
-          normalized, count = patterns[0].subn(
-              b'expected_ci_normalized_sha256="00000000000000000000000000000000"'
-              b'"00000000000000000000000000000000"',
-              data,
-          )
-          if count != 1:
-              raise SystemExit("pip-remediation workflow normalization marker drift")
-          print(hashlib.sha256(normalized).hexdigest())
-          PY
-              )"
+              ci_normalized_sha256="$(python tools/validate_ci_governance_evidence.py workflow-commitment --scope pip --workflow .github/workflows/ci.yml)"
               if [[ "$dependency_pyproject_blob" == a9eebc6ce34459318b3b58a7a0217dba571e8e1a \
                 && "$dependency_lock_blob" == b340334a94f1479199d7e3784474e9a16020a121 \
                 && "$dependency_decision_blob" == a071b48fcb1e08938893788abcfbc4e6067e05f9 ]]; then
-                [[ "$ci_normalized_sha256" == "$expected_ci_normalized_sha256" ]] || {
+                [[ "$ci_normalized_sha256" == "$p" ]] || {
                   echo "Unreviewed pip-remediation workflow identity" >&2; exit 1; }
                 mode=pip-audit-toolchain-remediation
               else
@@ -476,8 +428,28 @@ jobs:
               fi
               ;;
             *)
-              echo "Unreviewed tests tree: $tests_tree" >&2
-              exit 1
+              candidate="$TESTED_COMMIT_SHA"
+              fixed=fee08725153496edb2020d543c8cf24c317b48f6
+              expected_ci_governance_extraction_sha256="534a66f34986acc969bd8d5e740426cb""3d9475cc038c8fd033a1f55f1ee4e9dd"
+              expected_registry_reconciliation_enablement_sha256="534a66f34986acc969bd8d5e740426cb""3d9475cc038c8fd033a1f55f1ee4e9dd"
+              normalized="$(python tools/validate_ci_governance_evidence.py workflow-commitment --scope ap --workflow .github/workflows/ci.yml)"
+              [[ "$(python tools/validate_ci_governance_evidence.py workflow-commitment --scope pip --workflow .github/workflows/ci.yml)" == "$p" ]] || exit 1
+              mapfile -t governed_paths < <(git diff --name-only "$fixed" "$candidate")
+              enablement_base="$(git merge-base "$candidate" refs/remotes/origin/main)"
+              [[ "$(git show -s --format=%P "$candidate" | wc -w)" == 2 ]] && enablement_base="$(git rev-parse "$candidate^1")"
+              mapfile -t enablement_paths < <(git diff --name-only "$enablement_base" "$candidate")
+              helper_test="$(git rev-parse "$candidate:tests/governance/test_ci_governance_evidence.py" 2>/dev/null || true)"
+              if [[ "${governed_paths[*]}" == '.github/workflows/ci.yml tests/governance/test_ci_governance_evidence.py tools/validate_ci_governance_evidence.py' \
+                && "$helper_test" == 39a019a6ceb79f08c3c532003c64104fbdb7fa89 \
+                && "$normalized" == "$expected_ci_governance_extraction_sha256" ]]; then
+                mode=ci-governance-evidence-extraction
+              elif [[ "${enablement_paths[*]}" == '.github/workflows/ci.yml docs/AYO_DECISION_ID_REGISTRY.json docs/AYO_DECISION_LOG.md tests/governance/test_ap_decision_registry.py tools/validate_ap_decision_registry.py' \
+                && "$normalized" == "$expected_registry_reconciliation_enablement_sha256" ]]; then
+                mode=ap-decision-registry-reconciliation-enablement
+              else
+                echo "Unreviewed tests tree or governance-enablement identity: $tests_tree" >&2
+                exit 1
+              fi
               ;;
           esac
           echo "mode=$mode" >> "$GITHUB_OUTPUT"
@@ -486,6 +458,77 @@ jobs:
           echo "mobile_tree=$mobile_tree" >> "$GITHUB_OUTPUT"
           echo "Governed evidence mode: $mode"
           echo "Governed tests tree: $tests_tree"
+
+      - name: Bind exact CI governance enablement identity
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && (steps.evidence_contract.outputs.mode == 'ci-governance-evidence-extraction' || steps.evidence_contract.outputs.mode == 'ap-decision-registry-reconciliation-enablement')
+        env:
+          CANDIDATE_SHA: ${{ env.TESTED_COMMIT_SHA }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_REF: ${{ github.ref }}
+          EVENT_BEFORE: ${{ github.event.before || '' }}
+          EVIDENCE_MODE: ${{ steps.evidence_contract.outputs.mode }}
+        run: |
+          set -euo pipefail
+          candidate="$CANDIDATE_SHA"
+          fixed=fee08725153496edb2020d543c8cf24c317b48f6
+          head="$candidate"
+          mapfile -t parents < <(git show -s --format=%P "$candidate" | tr ' ' '\n')
+          if [[ "${#parents[@]}" -eq 2 ]]; then
+            head="${parents[1]}"
+            [[ "$EVENT_NAME" == push && "$EVENT_REF" == refs/heads/main \
+              && "$EVENT_BEFORE" == "${parents[0]}" \
+              && "$(git rev-parse "$candidate^{tree}")" == "$(git rev-parse "$head^{tree}")" ]] || {
+              echo GOV_MERGE_DRIFT >&2; exit 1; }
+          elif [[ "${#parents[@]}" -ne 1 ]]; then
+            echo GOV_PARENT_DRIFT >&2; exit 1
+          fi
+          if [[ "$EVIDENCE_MODE" == ci-governance-evidence-extraction ]]; then
+            base="$fixed"
+            subject='ci: remove synthetic secret detector noise'
+            expected=(.github/workflows/ci.yml tests/governance/test_ci_governance_evidence.py tools/validate_ci_governance_evidence.py)
+            head_expected=("${expected[@]:0:2}")
+            mapfile -t chain < <(git rev-list --reverse "$base..$head")
+            [[ "${chain[*]}" == "62baef5cb7dad6e5250d81194f4b2c1cfbf35776 3fad19fcfa975ed8998620fa56358e8f367bddf2 4cc7b4c0e93a934b6bd936c58edc20492a338c14 0a71314e1d3b1a71062e03298194bf1d3e732ccc $head" ]] || {
+              echo GOV_CHAIN_DRIFT >&2; exit 1; }
+          else
+            base="$(git merge-base "$head" refs/remotes/origin/main)"
+            [[ "${#parents[@]}" -eq 2 ]] && base="${parents[0]}"
+            subject='governance: enable AP registry reconciliation'
+            expected=(.github/workflows/ci.yml docs/AYO_DECISION_ID_REGISTRY.json docs/AYO_DECISION_LOG.md tests/governance/test_ap_decision_registry.py tools/validate_ap_decision_registry.py)
+            head_expected=("${expected[@]}")
+            [[ "$(git rev-parse "$base:docs/AYO_DECISION_ID_REGISTRY.json")" == 2ffb2cfb9f6ac410cf4f75a7b4460ea95fc117c2 ]] || {
+              echo REGISTRY_ENABLEMENT_BASE_DRIFT >&2; exit 1; }
+          fi
+          [[ "$(git merge-base "$head" "$base")" == "$base" \
+            && "$(git show -s --format=%s "$head")" == "$subject" ]] || {
+            echo GOV_ANCESTRY_DRIFT >&2; exit 1; }
+          [[ "$EVIDENCE_MODE" == ci-governance-evidence-extraction \
+            || "$(git rev-list --count "$base..$head")" == 1 && "$(git rev-parse "$head^")" == "$base" ]] || {
+            echo GOV_ANCESTRY_DRIFT >&2; exit 1; }
+          mapfile -t head_paths < <(git diff-tree --no-commit-id --name-only -r "$head")
+          mapfile -t aggregate < <(git diff --name-only "$base" "$candidate")
+          [[ "${head_paths[*]}" == "${head_expected[*]}" \
+            && "${aggregate[*]}" == "${expected[*]}" ]] || {
+            echo GOV_PATH_DRIFT >&2; exit 1; }
+          git diff --quiet "$base" "$candidate" -- BACKEND database/migrations AYO-Mobile \
+            .secrets.baseline pyproject.toml uv.lock || {
+            echo GOV_SURFACE_DRIFT >&2; exit 1; }
+          BASE_SHA="$base" CANDIDATE_SHA="$candidate" EVIDENCE_MODE="$EVIDENCE_MODE" python - <<'PY'
+          import json,os,subprocess
+          from collections import Counter
+          def load(x):return json.loads(subprocess.check_output(["git","show",f"{x}:docs/AYO_DECISION_ID_REGISTRY.json"]))
+          b,c=map(load,(os.environ["BASE_SHA"],os.environ["CANDIDATE_SHA"]));a=c.get("allocations");e=os.environ["EVIDENCE_MODE"].startswith("ci-")
+          if c.get("cutover",{}).get("status")!="ACTIVE" or not isinstance(a,list):raise SystemExit("state drift")
+          if any(x.get("ap_id") in {"AP-099","AP-100"} for x in a):raise SystemExit("AP drift")
+          if c.get("forward_identity_events") or c.get("collision_reconciliations"):raise SystemExit("event drift")
+          if (e and c!=b) or (not e and a!=b.get("allocations")):raise SystemExit("registry drift")
+          n=Counter(x.get("ap_id") for x in a)
+          if (len(a),len(n),sum(x>1 for x in n.values()))!=(66,51,13):raise SystemExit("inventory drift")
+          PY
+          git ls-tree -r --name-only "$candidate" | grep -q '^institutional/founder-discovery/phase-5/' && {
+            echo PHASE5_ENTERED_GOVERNANCE_ENABLEMENT >&2; exit 1; }
+          uv run --locked pytest -q --no-cov tests/governance/test_ci_governance_evidence.py
+          echo "Exact CI governance enablement identity: PASS"
 
       - name: Bind exact pip audit-toolchain remediation identity
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'pip-audit-toolchain-remediation'
@@ -743,7 +786,7 @@ jobs:
           echo "Exact AP registry active-state correction identity: PASS"
 
       - name: Validate AP decision registry candidate
-        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && (steps.evidence_contract.outputs.mode == 'ap-decision-registry-main-landing' || steps.evidence_contract.outputs.mode == 'ap-registry-active-state-correction' || steps.evidence_contract.outputs.mode == 'ap-registry-active-state-main-ci-correction')
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && (steps.evidence_contract.outputs.mode == 'ap-decision-registry-main-landing' || steps.evidence_contract.outputs.mode == 'ap-registry-active-state-correction' || steps.evidence_contract.outputs.mode == 'ap-registry-active-state-main-ci-correction' || steps.evidence_contract.outputs.mode == 'ap-decision-registry-reconciliation-enablement')
         run: |
           set -euo pipefail
           uv run --locked python tools/validate_ap_decision_registry.py
@@ -1704,6 +1747,14 @@ jobs:
                   echo AP_MAIN_CI_ANCESTRY_DRIFT >&2; exit 1; }
                 comparison_sha="$expected_base"
                 mode=verified-ap-registry-main-ci-base
+              elif [[ "$EVIDENCE_MODE" == ci-governance-evidence-extraction ]]; then
+                b=fee08725153496edb2020d543c8cf24c317b48f6
+                git fetch --no-tags origin refs/heads/main:refs/remotes/origin/coverage-main
+                a="$(git rev-parse refs/remotes/origin/coverage-main)"
+                [[ "$EVENT_REF" == refs/heads/main && "$EVENT_BEFORE" == "$b" && "$a" == "$EVENT_HEAD_SHA" \
+                  || "$EVENT_REF" != refs/heads/main && "$a" == "$b" ]] || { echo CI_EXTRACTION_SOURCE_DRIFT >&2; exit 1; }
+                comparison_sha="$b"
+                mode=verified-ci-governance-extraction-base
               elif [[ -n "$EVENT_BEFORE" && "$EVENT_BEFORE" != "$zero" ]]; then
                 require_commit "$EVENT_BEFORE" "push before SHA"
                 git merge-base --is-ancestor "$EVENT_BEFORE" "$EVENT_HEAD_SHA" || {
@@ -3993,6 +4044,11 @@ jobs:
             source_sha=6b94c45187af70f176d6a98d40742187ceaf43c8
           elif [[ "$EVIDENCE_MODE" == "ap-registry-active-state-main-ci-correction" ]]; then
             source_sha=a765a3e6c4a4e9202fb4f1a770e5a5daf2dec0b1
+          elif [[ "$EVIDENCE_MODE" == "ci-governance-evidence-extraction" ]]; then
+            source_sha=fee08725153496edb2020d543c8cf24c317b48f6
+          elif [[ "$EVIDENCE_MODE" == "ap-decision-registry-reconciliation-enablement" ]]; then
+            source_sha="$(git merge-base "$TESTED_COMMIT_SHA" refs/remotes/origin/main)"
+            [[ "$(git show -s --format=%P "$TESTED_COMMIT_SHA" | wc -w)" == 2 ]] && source_sha="$(git rev-parse "$TESTED_COMMIT_SHA^1")"
           fi
           git archive "$source_sha" | tar -x -C "$source_dir"
           UV_PROJECT_ENVIRONMENT="$mypy_environment" uv sync --locked --all-groups
@@ -4017,389 +4073,75 @@ jobs:
           set -e
           SOURCE_DIR="$source_dir" CANDIDATE_CONFIGURED_STATUS="$candidate_configured_status" "$mypy_python" - <<'PY'
           from collections import Counter
-          from dataclasses import dataclass
-          import hashlib
-          import os
-          import re
+          import json, os
           from pathlib import Path
-
-          pattern = re.compile(
-              r"^(?P<path>(?:BACKEND|tests)/.*?):(?P<line>\d+):(?P<column>\d+): "
-              r"error: (?P<message>.+) \[(?P<code>[a-z0-9-]+)\]$"
+          from tools.validate_ci_governance_evidence import (
+              mypy_column_fingerprint, mypy_difference, mypy_inventory,
+              mypy_semantic_fingerprint, mypy_semantic_movement,
+              parse_mypy_diagnostics,
           )
 
-          @dataclass(frozen=True, order=True)
-          class Diagnostic:
-              path: str
-              line: int
-              column: int
-              code: str
-              message: str
+          roots = (os.environ["SOURCE_DIR"], str(Path.cwd()))
+          def read(path, *, empty=False, raw=False):
+              return list(parse_mypy_diagnostics(Path(path).read_text(encoding="utf-8"), roots=roots, allow_empty=empty, collapse_message_whitespace=not raw))
+          def equal(label, source, candidate):
+              difference = mypy_difference(source, candidate)
+              print("Source", label, mypy_inventory(source)); print("Candidate", label, mypy_inventory(candidate))
+              if not difference["equal"]:
+                  for item in difference["source_only"]: print("SOURCE_ONLY|" + item.render())
+                  for item in difference["candidate_only"]: print("CANDIDATE_ONLY|" + item.render())
+                  raise SystemExit(label + " MyPy diagnostic population changed")
 
-              def render(self):
-                  return (
-                      f"{self.path}:{self.line}:{self.column}: error: "
-                      f"{self.message} [{self.code}]"
-                  )
-
-          def normalized(path, *, allow_empty=False):
-              roots = {
-                  os.environ["SOURCE_DIR"].replace("\\", "/").rstrip("/") + "/",
-                  str(Path.cwd()).replace("\\", "/").rstrip("/") + "/",
-              }
-              diagnostics = []
-              for raw in Path(path).read_text(encoding="utf-8").splitlines():
-                  line = raw.replace("\\", "/")
-                  for root in roots:
-                      if line.startswith(root):
-                          line = line[len(root):]
-                          break
-                  match = pattern.fullmatch(line)
-                  if match:
-                      diagnostics.append(
-                          Diagnostic(
-                              match["path"],
-                              int(match["line"]),
-                              int(match["column"]),
-                              match["code"],
-                              " ".join(match["message"].split()),
-                          )
-                      )
-              if not diagnostics and not allow_empty:
-                  raise SystemExit(f"missing actionable MyPy diagnostics in {path}")
-              return sorted(diagnostics)
-
-          def fingerprint(diagnostics):
-              payload = "\n".join(item.render() for item in diagnostics)
-              return hashlib.sha1(payload.encode()).hexdigest()
-
-          def reviewed_v1_fingerprints(path):
-              diagnostics = []
-              for raw in Path(path).read_text(encoding="utf-8").splitlines():
-                  line = raw.replace("\\", "/")
-                  for root in {
-                      os.environ["SOURCE_DIR"].replace("\\", "/").rstrip("/") + "/",
-                      str(Path.cwd()).replace("\\", "/").rstrip("/") + "/",
-                  }:
-                      if line.startswith(root):
-                          line = line[len(root):]
-                          break
-                  match = pattern.fullmatch(line)
-                  if match:
-                      diagnostics.append(Diagnostic(
-                          match["path"], int(match["line"]), int(match["column"]),
-                          match["code"], match["message"],
-                      ))
-              diagnostics.sort()
-              column_payload = "\n".join(
-                  f"{item.path}|{item.line}|{item.column}|{item.code}|{item.message}"
-                  for item in diagnostics
-              )
-              semantic_payload = "\n".join(
-                  f"{item.path}|{item.code}|{item.message}" for item in diagnostics
-              )
-              return (
-                  diagnostics,
-                  hashlib.sha256(column_payload.encode()).hexdigest(),
-                  hashlib.sha256(semantic_payload.encode()).hexdigest(),
-              )
-
-          def report(label, diagnostics):
-              files = {item.path for item in diagnostics}
-              codes = Counter(item.code for item in diagnostics)
-              print(f"{label} errors/files: {len(diagnostics)} {len(files)}")
-              print(f"{label} error-code distribution: {dict(sorted(codes.items()))}")
-              print(f"{label} semantic fingerprint: {fingerprint(diagnostics)}")
-
-          def compare(label, source, candidate, *, allow_test_location_drift=False):
-              report(f"Source {label}", source)
-              report(f"Candidate {label}", candidate)
-              if source == candidate:
-                  return
-              source_set = set(source)
-              candidate_set = set(candidate)
-              source_only = sorted(source_set - candidate_set)
-              candidate_only = sorted(candidate_set - source_set)
-              print(f"{label} source-only diagnostics ({len(source_only)}):")
-              for item in source_only:
-                  print("SOURCE_ONLY|" + item.render())
-              print(f"{label} candidate-only diagnostics ({len(candidate_only)}):")
-              for item in candidate_only:
-                  print("CANDIDATE_ONLY|" + item.render())
-
-              source_locations = Counter(
-                  (item.path, item.line, item.column) for item in source
-              )
-              candidate_locations = Counter(
-                  (item.path, item.line, item.column) for item in candidate
-              )
-              source_codes = Counter((item.path, item.code) for item in source)
-              candidate_codes = Counter((item.path, item.code) for item in candidate)
-              print("Changed-location diagnostics:", sorted(
-                  (source_locations - candidate_locations).elements()
-              ), sorted((candidate_locations - source_locations).elements()))
-              print("Changed-code diagnostics:", sorted(
-                  (source_codes - candidate_codes).elements()
-              ), sorted((candidate_codes - source_codes).elements()))
-
-              if not allow_test_location_drift:
-                  raise SystemExit(f"{label} MyPy diagnostic population changed")
-              if any(not item.path.startswith("tests/") for item in source_only + candidate_only):
-                  raise SystemExit(
-                      "configured MyPy drift escaped the excluded historical test boundary"
-                  )
-              if (
-                  len(source) != len(candidate)
-                  or len({item.path for item in source})
-                  != len({item.path for item in candidate})
-              ):
-                  raise SystemExit("configured MyPy historical count drift")
-              if Counter(item.code for item in source) != Counter(item.code for item in candidate):
-                  raise SystemExit("configured MyPy historical error-code drift")
-              print(
-                  "Configured MyPy differences are confined to excluded historical "
-                  "test locations inherited from authoritative main"
-              )
-
-          source_strict = normalized("source-strict.txt")
-          candidate_strict = normalized("candidate-strict.txt")
           mode = os.environ["EVIDENCE_MODE"]
-          active_modes = {"ap-registry-active-state-correction", "ap-registry-active-state-main-ci-correction"}
-          if mode in {"booking-consent-policy-authority", "mobile-booking-intent-foundation"}:
-              report("Source strict backend", source_strict)
-              report("Candidate strict backend", candidate_strict)
-              source_only_strict = sorted(set(source_strict) - set(candidate_strict))
-              candidate_only_strict = sorted(set(candidate_strict) - set(source_strict))
-              for item in source_only_strict: print("SOURCE_ONLY_STRICT|" + item.render())
-              for item in candidate_only_strict: print("CANDIDATE_ONLY_STRICT|" + item.render())
-          if mode == "courier-pickup-idempotency-v1":
-              source_raw, source_column_fp, source_semantic_fp = reviewed_v1_fingerprints("source-strict.txt")
-              candidate_raw, candidate_column_fp, candidate_semantic_fp = reviewed_v1_fingerprints("candidate-strict.txt")
-              source_semantic = Counter((item.path, item.code, item.message) for item in source_raw)
-              candidate_semantic = Counter((item.path, item.code, item.message) for item in candidate_raw)
-              if source_semantic != candidate_semantic:
-                  print("SOURCE_ONLY_SEMANTIC|", sorted((source_semantic - candidate_semantic).elements()))
-                  print("CANDIDATE_ONLY_SEMANTIC|", sorted((candidate_semantic - source_semantic).elements()))
-                  raise SystemExit("Courier Pickup strict MyPy semantic drift")
-              moved = []
-              for semantic in sorted(source_semantic):
-                  old_locations = sorted(
-                      (item.line, item.column) for item in source_raw
-                      if (item.path, item.code, item.message) == semantic
-                  )
-                  new_locations = sorted(
-                      (item.line, item.column) for item in candidate_raw
-                      if (item.path, item.code, item.message) == semantic
-                  )
-                  if old_locations != new_locations:
-                      moved.append((semantic, old_locations, new_locations))
-              expected_moved = [(
-                  (
-                      "BACKEND/courier_pickup/application.py", "no-any-return",
-                      'Returning Any from function declared to return "CourierPickupView" ',
-                  ),
-                  [(32, 13), (48, 13), (59, 13), (217, 17), (246, 13)],
-                  [(33, 13), (49, 13), (60, 13), (231, 17), (268, 13)],
-              )]
-              if moved != expected_moved:
-                  raise SystemExit(f"Courier Pickup reviewed MyPy movement drift: {moved!r}")
-              if source_column_fp != "68f0923bd0210e03a348e98fd3171a522fb6d1d3a08e6c037f7edd4fbe3fc7c2":
-                  raise SystemExit(f"Courier Pickup strict source fingerprint drift: {source_column_fp}")
-              if candidate_column_fp != "04aa83367515fea79e35c40566050d168022308de12e93bb1a48d792d14074b8":
-                  raise SystemExit(f"Courier Pickup strict column fingerprint drift: {candidate_column_fp}")
-              if source_semantic_fp != candidate_semantic_fp or candidate_semantic_fp != "c40b3dff746b5e5b659b79d4dfa60ab9aa857b2964235f03778655327ed624bc":
-                  raise SystemExit(f"Courier Pickup strict semantic fingerprint drift: {candidate_semantic_fp}")
-              print("Courier Pickup strict source column fingerprint:", source_column_fp)
-              print("Courier Pickup strict candidate column fingerprint:", candidate_column_fp)
-              print("Courier Pickup strict location-insensitive fingerprint:", candidate_semantic_fp)
-              print("Courier Pickup strict source-only semantic diagnostics: []")
-              print("Courier Pickup strict candidate-only semantic diagnostics: []")
-              print("Courier Pickup strict moved diagnostics:", moved)
-          elif mode == "courier-pickup-authorization-ordering":
-              source_raw, source_column_fp, source_semantic_fp = reviewed_v1_fingerprints("source-strict.txt")
-              candidate_raw, candidate_column_fp, candidate_semantic_fp = reviewed_v1_fingerprints("candidate-strict.txt")
-              source_semantic = Counter((item.path, item.code, item.message) for item in source_raw)
-              candidate_semantic = Counter((item.path, item.code, item.message) for item in candidate_raw)
-              if source_semantic != candidate_semantic:
-                  print("SOURCE_ONLY_SEMANTIC|", sorted((source_semantic - candidate_semantic).elements()))
-                  print("CANDIDATE_ONLY_SEMANTIC|", sorted((candidate_semantic - source_semantic).elements()))
-                  raise SystemExit("authorization-ordering strict MyPy semantic drift")
-              if source_column_fp != "04aa83367515fea79e35c40566050d168022308de12e93bb1a48d792d14074b8":
-                  raise SystemExit(f"authorization-ordering strict source fingerprint drift: {source_column_fp}")
-              if candidate_column_fp != "dd2500cc517d85c23082df73782d09bee4ee5836ec33003a2393ac2adf55b000":
-                  raise SystemExit(f"authorization-ordering strict candidate fingerprint drift: {candidate_column_fp}")
-              if source_semantic_fp != candidate_semantic_fp or candidate_semantic_fp != "c40b3dff746b5e5b659b79d4dfa60ab9aa857b2964235f03778655327ed624bc":
-                  raise SystemExit(f"authorization-ordering strict semantic fingerprint drift: {candidate_semantic_fp}")
-              print("Authorization-ordering strict source column fingerprint:", source_column_fp)
-              print("Authorization-ordering strict candidate column fingerprint:", candidate_column_fp)
-              print("Authorization-ordering strict location-insensitive fingerprint:", candidate_semantic_fp)
-              print("Authorization-ordering strict source-only semantic diagnostics: []")
-              print("Authorization-ordering strict candidate-only semantic diagnostics: []")
-          elif mode in {
-              "immediate-standard-public-contract",
-              "booking-complete-replay-equivalence",
-          }:
-              compare("strict backend", source_strict, candidate_strict)
-          elif mode not in {"booking-consent-policy-authority", "mobile-booking-intent-foundation"}:
-              compare("strict backend", source_strict, candidate_strict)
-          strict_files = {item.path for item in candidate_strict}
-          if mode in {
-              "immediate-standard-public-contract",
-              "booking-complete-replay-equivalence",
-              "pip-audit-toolchain-remediation",
-              "ap-decision-registry-main-landing",
-              *active_modes,
-          }:
-              if len(candidate_strict) != 383 or len(strict_files) != 54:
-                  raise SystemExit("Immediate Standard strict MyPy count drift")
-              expected_strict_codes = {
-                  "no-any-return": 198,
-                  "no-untyped-call": 115,
-                  "no-untyped-def": 63,
-                  "redundant-cast": 4,
-                  "type-arg": 3,
-              }
-              if Counter(item.code for item in candidate_strict) != expected_strict_codes:
-                  raise SystemExit(
-                      "Immediate Standard strict MyPy error-code distribution drift"
-                  )
-              if fingerprint(candidate_strict) != "a7018245b4e9086aeca1d39d47903e5e98d0b62d":
-                  raise SystemExit("Immediate Standard strict MyPy fingerprint drift")
-          elif mode not in {"booking-consent-policy-authority", "mobile-booking-intent-foundation"}:
-              if len(candidate_strict) != 387 or len(strict_files) != 52:
-                  raise SystemExit("strict backend MyPy historical count drift")
-              expected_strict_codes = {
-                  "no-any-return": 199,
-                  "no-untyped-call": 120,
-                  "no-untyped-def": 61,
-                  "redundant-cast": 4,
-                  "type-arg": 3,
-              }
-              if Counter(item.code for item in candidate_strict) != expected_strict_codes:
-                  raise SystemExit("strict backend MyPy error-code distribution drift")
-          if mode not in {
-              "courier-pickup-idempotency-v1",
-              "courier-pickup-authorization-ordering",
-              "immediate-standard-public-contract",
-              "booking-complete-replay-equivalence",
-              "booking-consent-policy-authority",
-              "mobile-booking-intent-foundation",
-              "pip-audit-toolchain-remediation",
-              "ap-decision-registry-main-landing",
-              *active_modes,
-          }:
-              strict_fingerprint = fingerprint(candidate_strict)
-              if strict_fingerprint != "6257a24b9c057c822e45a041519a849c471f6c48":
-                  raise SystemExit("strict backend MyPy governed fingerprint drift")
+          active = {"ap-registry-active-state-correction", "ap-registry-active-state-main-ci-correction", "ci-governance-evidence-extraction", "ap-decision-registry-reconciliation-enablement"}
+          current = {"immediate-standard-public-contract", "booking-complete-replay-equivalence", "pip-audit-toolchain-remediation", "ap-decision-registry-main-landing", *active}
+          capture = {"booking-consent-policy-authority", "mobile-booking-intent-foundation"}
+          clean = {"batch2": 447, "courier-pickup-idempotency-v1": 450, "courier-pickup-authorization-ordering": 452}
+          if mode not in {"pre-batch2", *current, *capture, *clean}: raise SystemExit(f"unknown governed MyPy mode: {mode}")
 
-          source_configured = normalized(
-              "source-configured.txt",
-              allow_empty=mode == "courier-pickup-authorization-ordering",
-          )
-          candidate_configured = normalized(
-              "candidate-configured.txt",
-              allow_empty=mode in {
-                  "batch2", "courier-pickup-idempotency-v1",
-                  "courier-pickup-authorization-ordering",
-              },
-          )
-          if mode in {
-              "batch2", "courier-pickup-idempotency-v1",
-              "courier-pickup-authorization-ordering",
-          }:
-              if candidate_configured:
-                  report("Candidate configured", candidate_configured)
-                  raise SystemExit("Configured MyPy is not clean")
-              configured_output = Path("candidate-configured.txt").read_text(encoding="utf-8")
-              expected_files = {
-                  "batch2": 447,
-                  "courier-pickup-idempotency-v1": 450,
-                  "courier-pickup-authorization-ordering": 452,
-              }[mode]
-              if f"Success: no issues found in {expected_files} source files" not in configured_output:
-                  raise SystemExit(f"Configured MyPy {expected_files}-file contract drift")
-              if int(os.environ["CANDIDATE_CONFIGURED_STATUS"]) != 0:
-                  raise SystemExit("Configured MyPy did not exit successfully")
-              print(f"Configured MyPy: clean across {expected_files} files")
-          elif mode in {
-              "immediate-standard-public-contract",
-              "booking-complete-replay-equivalence",
-              "booking-consent-policy-authority",
-              "mobile-booking-intent-foundation",
-              "pip-audit-toolchain-remediation",
-              "ap-decision-registry-main-landing",
-              *active_modes,
-          }:
-              compare("configured", source_configured, candidate_configured)
-              configured_files = {item.path for item in candidate_configured}
-              if mode not in {"booking-consent-policy-authority", "mobile-booking-intent-foundation"}:
-                  if len(candidate_configured) != 12 or configured_files != {
-                      "tests/test_merchant_generative_provider_evaluation.py"
-                  }:
-                      raise SystemExit("configured MyPy governed diagnostic inventory drift")
-                  if Counter(item.code for item in candidate_configured) != {
-                      "arg-type": 12
-                  }:
-                      raise SystemExit("configured MyPy governed error-code drift")
-                  if (
-                      mode in {
-                          "booking-complete-replay-equivalence",
-                          "pip-audit-toolchain-remediation",
-                          "ap-decision-registry-main-landing",
-                          *active_modes,
-                      }
-                      and fingerprint(candidate_configured)
-                      != "b50c53ef9a3bb574f36a8f6b489ec2b0c5285d08"
-                  ):
-                      raise SystemExit("configured MyPy governed fingerprint drift")
-              else:
-                  import json
-                  strict_equal = source_strict == candidate_strict
-                  configured_equal = source_configured == candidate_configured
-                  mobile_capture = mode == "mobile-booking-intent-foundation"
-                  marker = "BACKEND_MYPY_EQUIVALENCE_V1" if mobile_capture else "BOOKING_CONSENT_MYPY_EVIDENCE_V1"
-                  lines = [
-                      marker,
-                      f"strict_base_count={len(source_strict)}",
-                      f"strict_candidate_count={len(candidate_strict)}",
-                      f"strict_base_files={len({item.path for item in source_strict})}",
-                      f"strict_candidate_files={len({item.path for item in candidate_strict})}",
-                      "strict_base_codes=" + json.dumps(dict(sorted(Counter(item.code for item in source_strict).items())), separators=(",", ":")),
-                      "strict_candidate_codes=" + json.dumps(dict(sorted(Counter(item.code for item in candidate_strict).items())), separators=(",", ":")),
-                      f"strict_base_fingerprint={fingerprint(source_strict)}",
-                      f"strict_candidate_fingerprint={fingerprint(candidate_strict)}",
-                      f"strict_base_only={len(source_only_strict)}",
-                      f"strict_candidate_only={len(candidate_only_strict)}",
-                      f"configured_base_count={len(source_configured)}",
-                      f"configured_candidate_count={len(candidate_configured)}",
-                      f"configured_base_files={len({item.path for item in source_configured})}",
-                      f"configured_candidate_files={len({item.path for item in candidate_configured})}",
-                      "configured_base_codes=" + json.dumps(dict(sorted(Counter(item.code for item in source_configured).items())), separators=(",", ":")),
-                      "configured_candidate_codes=" + json.dumps(dict(sorted(Counter(item.code for item in candidate_configured).items())), separators=(",", ":")),
-                      f"configured_base_fingerprint={fingerprint(source_configured)}",
-                      f"configured_candidate_fingerprint={fingerprint(candidate_configured)}",
-                      f"configured_base_only={len(set(source_configured)-set(candidate_configured))}",
-                      f"configured_candidate_only={len(set(candidate_configured)-set(source_configured))}",
-                      "END_" + marker,
-                  ]
-                  block = "\n".join(lines) + "\n"; path = os.environ[
-                      "MOBILE_MYPY_EVIDENCE_PATH" if mobile_capture else "BOOKING_CONSENT_MYPY_EVIDENCE_PATH"
-                  ]
-                  Path(path).parent.mkdir(parents=True, exist_ok=True)
-                  with open(path, "x", encoding="utf-8", newline="\n") as output: output.write(block); output.flush(); os.fsync(output.fileno())
-                  if open(path, encoding="utf-8", newline="").read() != block: raise SystemExit("MyPy evidence retention failed")
-                  if not strict_equal or not configured_equal:
-                      raise SystemExit("Governed MyPy evidence differs from fixed base")
-          elif mode == "pre-batch2":
-              compare(
-                  "configured", source_configured, candidate_configured,
-                  allow_test_location_drift=True,
-              )
-              configured_files = {item.path for item in candidate_configured}
-              if len(candidate_configured) != 203 or len(configured_files) != 18:
-                  raise SystemExit("configured MyPy historical count drift")
+          source_strict, candidate_strict = read("source-strict.txt"), read("candidate-strict.txt")
+          if mode in current or mode in {"pre-batch2", "batch2"}: equal("strict backend", source_strict, candidate_strict)
+          elif mode in capture:
+              print("Source strict", mypy_inventory(source_strict)); print("Candidate strict", mypy_inventory(candidate_strict))
           else:
-              raise SystemExit(f"unknown governed MyPy mode: {mode}")
+              source_raw, candidate_raw = read("source-strict.txt", raw=True), read("candidate-strict.txt", raw=True)
+              moved = mypy_semantic_movement(source_raw, candidate_raw)
+              values = (mypy_column_fingerprint(source_raw), mypy_column_fingerprint(candidate_raw), mypy_semantic_fingerprint(candidate_raw))
+              expected = {"courier-pickup-idempotency-v1": ("68f0923bd0210e03a348e98fd3171a522fb6d1d3a08e6c037f7edd4fbe3fc7c2", "04aa83367515fea79e35c40566050d168022308de12e93bb1a48d792d14074b8", "c40b3dff746b5e5b659b79d4dfa60ab9aa857b2964235f03778655327ed624bc"), "courier-pickup-authorization-ordering": ("04aa83367515fea79e35c40566050d168022308de12e93bb1a48d792d14074b8", "dd2500cc517d85c23082df73782d09bee4ee5836ec33003a2393ac2adf55b000", "c40b3dff746b5e5b659b79d4dfa60ab9aa857b2964235f03778655327ed624bc")}[mode]
+              if values != expected: raise SystemExit("Courier Pickup strict MyPy fingerprint drift")
+              expected_moved = ((("BACKEND/courier_pickup/application.py", "no-any-return", 'Returning Any from function declared to return "CourierPickupView" '), ((32, 13), (48, 13), (59, 13), (217, 17), (246, 13)), ((33, 13), (49, 13), (60, 13), (231, 17), (268, 13))),)
+              if moved != (expected_moved if mode == "courier-pickup-idempotency-v1" else ()): raise SystemExit("Courier Pickup reviewed MyPy movement drift")
+
+          strict = mypy_inventory(candidate_strict)
+          current_strict = {"diagnostics": 383, "files": 54, "codes": {"no-any-return": 198, "no-untyped-call": 115, "no-untyped-def": 63, "redundant-cast": 4, "type-arg": 3}, "fingerprint": "a7018245b4e9086aeca1d39d47903e5e98d0b62d"}
+          if mode in current and strict != current_strict: raise SystemExit("current-main strict MyPy evidence drift")
+          if mode not in current | capture:
+              if strict["diagnostics"] != 387 or strict["files"] != 52 or strict["codes"] != {"no-any-return": 199, "no-untyped-call": 120, "no-untyped-def": 61, "redundant-cast": 4, "type-arg": 3}: raise SystemExit("historical strict MyPy evidence drift")
+              if mode in {"pre-batch2", "batch2"} and strict["fingerprint"] != "6257a24b9c057c822e45a041519a849c471f6c48": raise SystemExit("historical strict MyPy fingerprint drift")
+
+          source_configured = read("source-configured.txt", empty=mode == "courier-pickup-authorization-ordering")
+          candidate_configured = read("candidate-configured.txt", empty=mode in clean)
+          if mode in clean:
+              expected_files = clean[mode]
+              output = Path("candidate-configured.txt").read_text(encoding="utf-8")
+              if candidate_configured or f"Success: no issues found in {expected_files} source files" not in output or int(os.environ["CANDIDATE_CONFIGURED_STATUS"]): raise SystemExit("Configured MyPy clean-file contract drift")
+          elif mode == "pre-batch2":
+              difference = mypy_difference(source_configured, candidate_configured)
+              if any(not item.path.startswith("tests/") for item in (*difference["source_only"], *difference["candidate_only"])) or len(candidate_configured) != 203 or len({item.path for item in candidate_configured}) != 18 or Counter(item.code for item in source_configured) != Counter(item.code for item in candidate_configured): raise SystemExit("configured MyPy historical boundary drift")
+          else:
+              equal("configured", source_configured, candidate_configured)
+              if mode in current:
+                  configured = mypy_inventory(candidate_configured)
+                  if configured != {"diagnostics": 12, "files": 1, "codes": {"arg-type": 12}, "fingerprint": "b50c53ef9a3bb574f36a8f6b489ec2b0c5285d08"} or {item.path for item in candidate_configured} != {"tests/test_merchant_generative_provider_evaluation.py"}: raise SystemExit("current-main configured MyPy evidence drift")
+              elif mode in capture:
+                  marker = "BACKEND_MYPY_EQUIVALENCE_V1" if mode == "mobile-booking-intent-foundation" else "BOOKING_CONSENT_MYPY_EVIDENCE_V1"
+                  lines = [marker]
+                  for label, values in (("strict_base", source_strict), ("strict_candidate", candidate_strict), ("configured_base", source_configured), ("configured_candidate", candidate_configured)):
+                      inventory = mypy_inventory(values); lines += [f"{label}_count={inventory['diagnostics']}", f"{label}_files={inventory['files']}", f"{label}_codes=" + json.dumps(inventory["codes"], separators=(",", ":")), f"{label}_fingerprint={inventory['fingerprint']}"]
+                  block = "\n".join([*lines, "END_" + marker]) + "\n"
+                  path = Path(os.environ["MOBILE_MYPY_EVIDENCE_PATH" if mode == "mobile-booking-intent-foundation" else "BOOKING_CONSENT_MYPY_EVIDENCE_PATH"]); path.parent.mkdir(parents=True, exist_ok=True)
+                  with path.open("x", encoding="utf-8", newline="\n") as output: output.write(block)
+                  if path.read_text(encoding="utf-8") != block: raise SystemExit("MyPy evidence retention failed")
           print("Batch 1 typing equivalence: PASS")
           PY
           if [[ "$source_strict_status" -eq 0 || "$candidate_strict_status" -eq 0 ]]; then
@@ -4427,10 +4169,13 @@ jobs:
           CONSENT_ARCHITECTURE_SECRET_EVIDENCE_PATH: ${{ runner.temp }}/consent-document-architecture-secret-inventory-v1.txt
           CONSENT_ARCHITECTURE_SECRET_CLEANUP_PATH: ${{ runner.temp }}/consent-document-architecture-secret-cleanup-v1.txt
           EVIDENCE_MODE: ${{ steps.evidence_contract.outputs.mode }}
+          TRUSTED_SHA: ${{ steps.trusted_comparison_base.outputs.sha }}
           WORKFLOW_EVENT_NAME: ${{ github.event_name }}
         run: |
           set -euo pipefail
           evidence_mode="$EVIDENCE_MODE"
+          g=false
+          [[ "$evidence_mode" == "ci-governance-evidence-extraction" || "$evidence_mode" == "ap-decision-registry-reconciliation-enablement" ]] && g=true
           candidate_json=candidate-secrets.json
           base_json=base-secrets.json
           baseline_json=reviewed-secrets-baseline.json
@@ -4509,7 +4254,8 @@ jobs:
             || "$evidence_mode" == "pip-audit-toolchain-remediation" \
             || "$evidence_mode" == "ap-decision-registry-main-landing" \
             || "$evidence_mode" == "ap-registry-active-state-correction" \
-            || "$evidence_mode" == "ap-registry-active-state-main-ci-correction" ]]; then
+            || "$evidence_mode" == "ap-registry-active-state-main-ci-correction" \
+            || "$g" == true ]]; then
             if [[ "$evidence_mode" == "booking-consent-document-delivery-architecture" ]]; then
               base_root="$(mktemp -d "$architecture_scan_dir/base-tree.XXXXXX")"
             else
@@ -4527,6 +4273,8 @@ jobs:
               secret_base=6b94c45187af70f176d6a98d40742187ceaf43c8
             elif [[ "$evidence_mode" == "ap-registry-active-state-main-ci-correction" ]]; then
               secret_base=a765a3e6c4a4e9202fb4f1a770e5a5daf2dec0b1
+            elif [[ "$g" == true ]]; then
+              secret_base="$TRUSTED_SHA"
             else
               secret_base=6613a936b0fe896308682c8fe038708876a06c02
             fi
@@ -4549,59 +4297,17 @@ jobs:
           import json
           import os
           from pathlib import Path
+          from tools.validate_ci_governance_evidence import (
+              BATCH2_ONLY_SECRET_PATHS,
+              IMMEDIATE_STANDARD_SECRET_ADDITIONS,
+              canonical_json,
+              reviewed_secret_inventory,
+              secret_fingerprint,
+              secret_inventory,
+          )
 
           VERSION = "1.5.0"
           BASELINE_KEYS = {"version", "plugins_used", "filters_used", "results", "inventory_fingerprint_bytes", "review"}
-          BATCH2_ONLY_PATHS = {
-              "tests/integration/test_account_access_foundation.py",
-              "tests/integration/test_authentication_runtime.py",
-              "tests/integration/test_identity_access_increment_2.py",
-              "tests/test_authentication_runtime.py",
-              "tests/test_q3_continuation3_identity_finance_coverage.py",
-          }
-          IMMEDIATE_STANDARD_REVIEWED_ADDITIONS = {
-              (
-                  "AYO-Mobile/tests/auth-session-foundation.test.ts", 59,
-                  "Secret Keyword", "df77a6b3e1381f280f62cc2eceea74ec575efde6",
-                  False,
-              ): "synthetic authentication credential test fixture",
-              (
-                  "AYO-Mobile/tests/authenticated-read-transport.test.ts", 27,
-                  "Secret Keyword", "99d72c7fc3e2e145870beab37c0b70e343ea9c3b",
-                  False,
-              ): "synthetic redaction test fixture",
-              (
-                  "AYO-Mobile/tests/authenticated-read-transport.test.ts", 43,
-                  "Basic Auth Credentials",
-                  "e5e9fa1ba31ecd1ae84f75caaa474f3a663f05f4", False,
-              ): "synthetic URL-normalization test fixture",
-              (
-                  "AYO-Mobile/tests/identity-session-provider.test.tsx", 10,
-                  "Secret Keyword", "df77a6b3e1381f280f62cc2eceea74ec575efde6",
-                  False,
-              ): "synthetic authentication credential test fixture",
-              (
-                  "AYO-Mobile/tests/operational-context-provider.test.tsx", 47,
-                  "Secret Keyword", "df77a6b3e1381f280f62cc2eceea74ec575efde6",
-                  False,
-              ): "synthetic authentication credential test fixture",
-              (
-                  "tests/test_merchant_anthropic_live_provider_evaluation.py", 307,
-                  "Secret Keyword", "8ced3c87ee2c45dc7602ae84d04a8350d58039aa",
-                  False,
-              ): "synthetic redaction test fixture",
-              (
-                  "tests/test_merchant_live_provider_evaluation.py", 127,
-                  "Secret Keyword", "8ced3c87ee2c45dc7602ae84d04a8350d58039aa",
-                  False,
-              ): "synthetic redaction test fixture",
-              # Inherited unchanged from the exact PR base; public UI wording only.
-              (
-                  "AYO-Mobile/localization/authentication.ts", 11,
-                  "Secret Keyword", "8be3c943b1609fffbfc51aad666d0a04adf83c9d",
-                  False,
-              ): "ordinary public password-field localization wording",
-          }
 
           def load(path):
               try:
@@ -4613,7 +4319,7 @@ jobs:
               return value
 
           def canonical(value):
-              return json.dumps(value, sort_keys=True, separators=(",", ":"))
+              return canonical_json(value)
 
           def hex_bytes(value, length, label):
               if (not isinstance(value, list) or len(value) != length
@@ -4622,39 +4328,10 @@ jobs:
               return bytes(value).hex()
 
           def scan_inventory(results):
-              if not isinstance(results, dict):
-                  raise SystemExit("scanner results must be an object")
-              output = []
-              for raw_path, records in results.items():
-                  if not isinstance(raw_path, str) or not isinstance(records, list):
-                      raise SystemExit("malformed scanner result path or records")
-                  path = raw_path.replace("\\", "/")
-                  for record in records:
-                      try:
-                          output.append((path, int(record["line_number"]), str(record["type"]), str(record["hashed_secret"]), bool(record["is_verified"])))
-                      except (KeyError, TypeError, ValueError) as error:
-                          raise SystemExit(f"malformed scanner finding in {path}: {record!r}") from error
-              return sorted(output)
-
-          def baseline_inventory(results):
-              if not isinstance(results, dict):
-                  raise SystemExit("reviewed results must be an object")
-              required = {"type", "digest_bytes", "is_verified", "line_number", "classification"}
-              output, classes = [], {}
-              for path, records in results.items():
-                  if not isinstance(path, str) or "\\" in path or not isinstance(records, list):
-                      raise SystemExit("malformed reviewed result path or records")
-                  for record in records:
-                      if set(record) != required:
-                          raise SystemExit(f"reviewed finding fields drifted in {path}: {sorted(record)}")
-                      item = (path, int(record["line_number"]), str(record["type"]), hex_bytes(record["digest_bytes"], 20, "finding digest"), bool(record["is_verified"]))
-                      output.append(item)
-                      classes[item[:3]] = str(record["classification"])
-              return sorted(output), classes
+              return list(secret_inventory(results))
 
           def fingerprint(items):
-              payload = "\n".join(f"{p}|{n}|{t}|{h}|{str(v).lower()}" for p, n, t, h, v in items)
-              return hashlib.sha256(payload.encode()).hexdigest()
+              return secret_fingerprint(items)
 
           def render(item):
               p, n, t, h, v = item
@@ -4685,7 +4362,7 @@ jobs:
               print("ACTUAL_FILTERS|" + canonical(scan.get("filters_used")))
               raise SystemExit("detect-secrets filter or path-exclusion drift")
 
-          reviewed, classes = baseline_inventory(baseline["results"])
+          reviewed, classes = reviewed_secret_inventory(baseline["results"])
           if len(reviewed) != 34 or len(set(reviewed)) != 34:
               raise SystemExit("reviewed finding count or uniqueness drift")
           if len(classes) != 34 or any(
@@ -4721,7 +4398,7 @@ jobs:
               raise SystemExit("reviewed baseline governance metadata drift")
 
           actual = scan_inventory(scan.get("results"))
-          pre_batch2 = sorted(item for item in reviewed if item[0] not in BATCH2_ONLY_PATHS)
+          pre_batch2 = sorted(item for item in reviewed if item[0] not in BATCH2_ONLY_SECRET_PATHS)
           mode = os.environ["EVIDENCE_MODE"]
           if mode in {
               "batch2", "courier-pickup-idempotency-v1",
@@ -4734,7 +4411,7 @@ jobs:
               "booking-complete-replay-equivalence",
           }:
               immediate_standard_reviewed = sorted(
-                  [*reviewed, *IMMEDIATE_STANDARD_REVIEWED_ADDITIONS]
+                  [*reviewed, *IMMEDIATE_STANDARD_SECRET_ADDITIONS]
               )
               if (
                   len(immediate_standard_reviewed) != 42
@@ -4871,27 +4548,18 @@ jobs:
                       "AP-registry introduced unreviewed secret-finding semantics"
                   )
               selected = "AP-registry exact governed commit-SHA false-positive inventory"
-          elif mode in {"ap-registry-active-state-correction", "ap-registry-active-state-main-ci-correction"}:
-              base = scan_inventory(load(os.environ["BASE_JSON"]).get("results"))
-              base_semantics = Counter(
-                  (path, detector, digest, verified)
-                  for path, _, detector, digest, verified in base
-              )
-              candidate_semantics = Counter(
-                  (path, detector, digest, verified)
-                  for path, _, detector, digest, verified in actual
-              )
-              candidate_only = sorted((candidate_semantics - base_semantics).elements())
-              payload = "\n".join(
-                  f"{path}|{detector}|{digest}|{str(verified).lower()}"
-                  for path, detector, digest, verified in candidate_only
-              )
-              candidate_only_fingerprint = hashlib.sha256(payload.encode()).hexdigest()
-              if (
-                  len(candidate_only) != 0
-                  or candidate_only_fingerprint
-                  != "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-              ):
+          elif mode in {"ap-registry-active-state-correction", "ap-registry-active-state-main-ci-correction", "ci-governance-evidence-extraction", "ap-decision-registry-reconciliation-enablement"}:
+              source = load(os.environ["BASE_JSON"]); base = scan_inventory(source.get("results"))
+              sem = lambda x: Counter((p,t,h,v) for p,_,t,h,v in x)
+              candidate_only = sorted((sem(actual)-sem(base)).elements())
+              payload = "\n".join(f"{p}|{t}|{h}|{str(v).lower()}" for p,t,h,v in candidate_only)
+              observed = hashlib.sha256(payload.encode()).hexdigest()
+              eq = lambda k: canonical(source.get(k))==canonical(scan.get(k))
+              print(f"Secret scan config: version={VERSION} plugins_equal={eq('plugins_used')} filters_equal={eq('filters_used')} base_total={len(base)} candidate_total={len(actual)}")
+              print(f"Secret candidate-only observed: count={len(candidate_only)} fingerprint={observed}")
+              for p,t,h,v in candidate_only: print(f"Secret candidate-only item: {p}|{t}|{h}|{str(v).lower()}")
+              expected = (5, "f758a3f743de40be4ac0320eac9f8abf0af34a4cb139567b3d977b858fef09b6") if mode == "ci-governance-evidence-extraction" else (0, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
+              if (len(candidate_only), observed) != expected:
                   raise SystemExit(
                       "AP-registry active-state introduced unreviewed secret semantics"
                   )
@@ -5015,10 +4683,14 @@ jobs:
             BASE_JSON="$base_json" BASELINE_JSON="$baseline_json" \
             STAGED_EVIDENCE="$staged_evidence" uv run --locked python - <<'PY'
           from collections import Counter
-          import hashlib
           import json
           import os
           from pathlib import Path
+          from tools.validate_ci_governance_evidence import (
+              canonical_json,
+              secret_fingerprint,
+              secret_inventory,
+          )
 
           VERSION = "1.5.0"
 
@@ -5032,38 +4704,13 @@ jobs:
               return value
 
           def canonical(value):
-              return json.dumps(value, sort_keys=True, separators=(",", ":"))
+              return canonical_json(value)
 
           def inventory(scan):
-              results = scan.get("results")
-              if not isinstance(results, dict):
-                  raise SystemExit("Approval-pack scanner results malformed")
-              items = []
-              for raw_path, records in results.items():
-                  if not isinstance(raw_path, str) or not isinstance(records, list):
-                      raise SystemExit("Approval-pack scanner inventory shape malformed")
-                  path = raw_path.replace("\\", "/")
-                  for record in records:
-                      if not isinstance(record, dict):
-                          raise SystemExit("Approval-pack scanner record malformed")
-                      try:
-                          item = (
-                              path, int(record["line_number"]), str(record["type"]),
-                              str(record["hashed_secret"]), bool(record["is_verified"]),
-                          )
-                      except (KeyError, TypeError, ValueError) as error:
-                          raise SystemExit("Approval-pack scanner record fields malformed") from error
-                      items.append(item)
-              if len(items) != len(set(items)):
-                  raise SystemExit("Approval-pack scanner inventory duplicates")
-              return sorted(items)
+              return list(secret_inventory(scan.get("results")))
 
           def digest(items):
-              data = "\n".join(
-                  f"{path}|{line}|{detector}|{fingerprint}|{str(verified).lower()}"
-                  for path, line, detector, fingerprint, verified in items
-              )
-              return hashlib.sha256(data.encode()).hexdigest()
+              return secret_fingerprint(items)
 
           candidate_scan = load("CANDIDATE_JSON")
           base_scan = load("BASE_JSON")
@@ -5795,7 +5442,7 @@ jobs:
           BACKEND ayo.py database/certify_restore.py
 
       - name: Verify remediated pip audit-toolchain version
-        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && (steps.evidence_contract.outputs.mode == 'pip-audit-toolchain-remediation' || steps.evidence_contract.outputs.mode == 'ap-decision-registry-main-landing' || steps.evidence_contract.outputs.mode == 'ap-registry-active-state-correction' || steps.evidence_contract.outputs.mode == 'ap-registry-active-state-main-ci-correction')
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && contains(fromJSON('["pip-audit-toolchain-remediation","ap-decision-registry-main-landing","ap-registry-active-state-correction","ap-registry-active-state-main-ci-correction","ci-governance-evidence-extraction","ap-decision-registry-reconciliation-enablement"]'), steps.evidence_contract.outputs.mode)
         run: |
           uv run --locked python - <<'PY'
           from importlib.metadata import version
