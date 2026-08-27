@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import NotRequired, TypedDict, cast
+from typing import NotRequired, TypedDict, Unpack, cast
 
 import pytest
 
@@ -36,6 +36,39 @@ class ActiveArgs(TypedDict):
     linear: NotRequired[bool]
 
 
+class MergeArgs(TypedDict):
+    event: str
+    ref: str
+    before: str
+    parents: tuple[str, ...]
+    merge_tree: str
+    feature_tree: str
+    merge_base: str
+    changed_paths: tuple[str, ...]
+    registry_active: bool
+    ap099_absent: bool
+    phase5_absent: bool
+
+
+class CorrectionArgs(TypedDict):
+    context: str
+    event: str
+    ref: str
+    before: str
+    base: str
+    parents: tuple[str, ...]
+    second_parent_base: str
+    subject: str
+    commit_paths: tuple[str, ...]
+    aggregate_paths: tuple[str, ...]
+    head_tree: str
+    second_parent_tree: str
+    registry_active: bool
+    ap099_absent: bool
+    phase5_absent: bool
+    linear: NotRequired[bool]
+
+
 class ClassifyArgs(TypedDict):
     predecessor: str
     content_base: str
@@ -52,6 +85,15 @@ ACTIVE_BASE = "6b94c451" + "87af70f1" + "76d6a98d" + "40742187" + "ceaf43c8"
 ACTIVE_STATE = "32775104" + "60b5af71" + "773dda62" + "a4db69cd" + "739433f3"
 ACTIVE_ADMISSION = "8aa0664a" + "904384d3" + "697ab12c" + "d306a2f0" + "2f6fa8ea"
 ACTIVE_BINDING = "5fe9b401" + "ae1ca421" + "8c40f1a2" + "7a8f1827" + "0fa7b461"
+ACTIVE_HEAD = "a6e4bb52" + "bf765e98" + "46c75b7b" + "32454aac" + "9c97453d"
+ACTIVE_MERGE = "a765a3e6" + "c4a4e920" + "2fb4f1a7" + "70e5a5da" + "f2dec0b1"
+ACTIVE_TREE = "610c6b04" + "125dcb67" + "bb5089ae" + "83246e22" + "c9e6c456"
+CORRECTION_MODE = "ap-registry-active-state-main-ci-correction"
+CORRECTION_SUBJECT = "ci: govern AP registry post-merge main topology"
+CORRECTION_PATHS = (
+    ".github/workflows/ci.yml",
+    "tests/governance/test_ci_trusted_comparison_base.py",
+)
 ACTIVE_SUBJECTS = (
     "governance: record active AP registry state",
     "ci: admit AP registry active-state correction",
@@ -141,6 +183,55 @@ def _resolve_active_state(
     if aggregate_paths != AGGREGATE_PATHS:
         raise ValueError("active-state aggregate path drift")
     return ACTIVE_BASE
+
+
+def _resolve_active_merge(**values: Unpack[MergeArgs]) -> str:
+    if (
+        values["event"] != "push"
+        or values["ref"] != "refs/heads/main"
+        or values["before"] != ACTIVE_BASE
+        or values["parents"] != (ACTIVE_BASE, ACTIVE_HEAD)
+        or values["merge_tree"] != ACTIVE_TREE
+        or values["feature_tree"] != ACTIVE_TREE
+        or values["merge_base"] != ACTIVE_BASE
+        or values["changed_paths"] != AGGREGATE_PATHS
+        or not values["registry_active"]
+        or not values["ap099_absent"]
+        or not values["phase5_absent"]
+    ):
+        raise ValueError("active-state authoritative merge drift")
+    return ACTIVE_BASE
+
+
+def _resolve_correction(**values: Unpack[CorrectionArgs]) -> str:
+    if (
+        values["base"] != ACTIVE_MERGE
+        or values["subject"] != CORRECTION_SUBJECT
+        or values["commit_paths"] != CORRECTION_PATHS
+        or values["aggregate_paths"] != CORRECTION_PATHS
+        or not values.get("linear", True)
+        or not values["registry_active"]
+        or not values["ap099_absent"]
+        or not values["phase5_absent"]
+    ):
+        raise ValueError("active-state CI correction drift")
+    if values["context"] == "candidate":
+        if values["parents"] != (ACTIVE_MERGE,):
+            raise ValueError("active-state CI candidate ancestry drift")
+        return ACTIVE_MERGE
+    if values["context"] == "merge":
+        if (
+            values["event"] != "push"
+            or values["ref"] != "refs/heads/main"
+            or values["before"] != ACTIVE_MERGE
+            or len(values["parents"]) != 2
+            or values["parents"][0] != ACTIVE_MERGE
+            or values["second_parent_base"] != ACTIVE_MERGE
+            or values["head_tree"] != values["second_parent_tree"]
+        ):
+            raise ValueError("active-state CI merge drift")
+        return ACTIVE_MERGE
+    raise ValueError("unknown active-state CI correction context")
 
 
 def _classify(
@@ -399,6 +490,107 @@ def test_active_state_topology_negative_controls(key: str, value: object) -> Non
     arguments = cast(ActiveArgs, {**_active_arguments(), key: value})
     with pytest.raises(ValueError):
         _resolve_active_state(**arguments)
+
+
+def _merge_arguments() -> MergeArgs:
+    return {
+        "event": "push",
+        "ref": "refs/heads/main",
+        "before": ACTIVE_BASE,
+        "parents": (ACTIVE_BASE, ACTIVE_HEAD),
+        "merge_tree": ACTIVE_TREE,
+        "feature_tree": ACTIVE_TREE,
+        "merge_base": ACTIVE_BASE,
+        "changed_paths": AGGREGATE_PATHS,
+        "registry_active": True,
+        "ap099_absent": True,
+        "phase5_absent": True,
+    }
+
+
+def _correction_arguments(context: str = "candidate") -> CorrectionArgs:
+    return {
+        "context": context,
+        "event": "push" if context == "merge" else "pull_request",
+        "ref": "refs/heads/main" if context == "merge" else "refs/heads/correction",
+        "before": ACTIVE_MERGE,
+        "base": ACTIVE_MERGE,
+        "parents": (ACTIVE_MERGE, "e" * 40) if context == "merge" else (ACTIVE_MERGE,),
+        "second_parent_base": ACTIVE_MERGE,
+        "subject": CORRECTION_SUBJECT,
+        "commit_paths": CORRECTION_PATHS,
+        "aggregate_paths": CORRECTION_PATHS,
+        "head_tree": "f" * 40,
+        "second_parent_tree": "f" * 40,
+        "registry_active": True,
+        "ap099_absent": True,
+        "phase5_absent": True,
+    }
+
+
+def test_active_state_authoritative_merge_positive_control() -> None:
+    assert _resolve_active_merge(**_merge_arguments()) == ACTIVE_BASE
+
+
+@pytest.mark.parametrize(
+    ("key", "value"),
+    (
+        ("event", "pull_request"),
+        ("ref", "refs/heads/feature"),
+        ("before", "e" * 40),
+        ("parents", ("e" * 40, ACTIVE_HEAD)),
+        ("parents", (ACTIVE_BASE, "e" * 40)),
+        ("parents", (ACTIVE_BASE, ACTIVE_HEAD, "e" * 40)),
+        ("merge_tree", "e" * 40),
+        ("feature_tree", "e" * 40),
+        ("merge_base", "e" * 40),
+        ("changed_paths", AGGREGATE_PATHS + ("unexpected",)),
+        ("registry_active", False),
+        ("ap099_absent", False),
+        ("phase5_absent", False),
+    ),
+)
+def test_active_state_authoritative_merge_negative_controls(
+    key: str, value: object
+) -> None:
+    with pytest.raises(ValueError):
+        _resolve_active_merge(**cast(MergeArgs, {**_merge_arguments(), key: value}))
+
+
+@pytest.mark.parametrize("context", ("candidate", "merge"))
+def test_active_state_ci_correction_positive_controls(context: str) -> None:
+    assert _resolve_correction(**_correction_arguments(context)) == ACTIVE_MERGE
+
+
+@pytest.mark.parametrize(
+    ("context", "key", "value"),
+    (
+        ("candidate", "base", "e" * 40),
+        ("candidate", "parents", (ACTIVE_MERGE, "e" * 40)),
+        ("candidate", "subject", "wrong subject"),
+        ("candidate", "commit_paths", CORRECTION_PATHS + ("unexpected",)),
+        ("candidate", "aggregate_paths", CORRECTION_PATHS + ("unexpected",)),
+        ("candidate", "linear", False),
+        ("merge", "event", "pull_request"),
+        ("merge", "ref", "refs/heads/feature"),
+        ("merge", "before", "e" * 40),
+        ("merge", "parents", ("e" * 40, "f" * 40)),
+        ("merge", "parents", (ACTIVE_MERGE,)),
+        ("merge", "second_parent_base", "e" * 40),
+        ("merge", "second_parent_tree", "e" * 40),
+        ("merge", "registry_active", False),
+        ("merge", "ap099_absent", False),
+        ("merge", "phase5_absent", False),
+        ("unknown", "context", "unknown"),
+    ),
+)
+def test_active_state_ci_correction_negative_controls(
+    context: str, key: str, value: object
+) -> None:
+    with pytest.raises(ValueError):
+        _resolve_correction(
+            **cast(CorrectionArgs, {**_correction_arguments(context), key: value})
+        )
 
 
 def test_trusted_content_classification_controls() -> None:
