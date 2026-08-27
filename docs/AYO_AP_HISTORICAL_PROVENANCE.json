@@ -1,0 +1,2376 @@
+{
+  "schema_version": 1,
+  "namespace": "ayo.governance.ap_historical_provenance",
+  "cutover": {
+    "base_main_commit": [
+      "dc564949",
+      "c7d19e03",
+      "84655251",
+      "cb40bda3",
+      "199ddace"
+    ],
+    "approved_date": "2026-08-27",
+    "founder_approval": "APPROVED",
+    "cto_approval": "APPROVED"
+  },
+  "authority_model": {
+    "primary_authority": "MAIN_RESIDENT_IMMUTABLE_MANIFEST",
+    "live_git_objects": "CORROBORATING_EVIDENCE_ONLY",
+    "manifest_only_scope": "APPROVED_FROZEN_PRE_CUTOVER_HISTORY_ONLY",
+    "post_cutover_manifest_only": "PROHIBITED"
+  },
+  "entries": [
+    {
+      "introducing_commit": [
+        "0613902b",
+        "2352a9fe",
+        "79eb3be6",
+        "d953a147",
+        "0ea26c2a"
+      ],
+      "commit_tree": [
+        "c8cc4b65",
+        "2f1757a7",
+        "54b69ac2",
+        "70e10e9b",
+        "447b72df"
+      ],
+      "parent_shas": [
+        [
+          "bac71fa4",
+          "4e8c1fd2",
+          "8fef0980",
+          "01cc7d12",
+          "09c2c45f"
+        ]
+      ],
+      "commit_subject": "Add merchant operational pickup context foundation",
+      "historical_identities": [
+        {
+          "ap_id": "AP-055",
+          "exact_title": "PRE-PRODUCTION merchant operational Pickup read ownership",
+          "historical_composite_id": [
+            "f53a477f",
+            "460a54f8",
+            "b5c47c63",
+            "5d901771",
+            "0b63c378",
+            "99138853",
+            "4f5608e3",
+            "b5272769"
+          ]
+        }
+      ],
+      "governed_lineage": "refs/heads/main",
+      "provenance_class": "MAIN_REACHABLE",
+      "live_object_requirement": "REQUIRED",
+      "authority": "FOUNDER_AND_CTO_APPROVED_2026-08-27",
+      "manifest_entry_id": [
+        "c921bcc9",
+        "76c7c4d5",
+        "d3c343b7",
+        "250842d5",
+        "b191fb5b",
+        "560ccf2f",
+        "f43906df",
+        "f530cce7"
+      ]
+    },
+    {
+      "introducing_commit": [
+        "106a1218",
+        "8b29d1fb",
+        "a580d429",
+        "4fb68590",
+        "5693cd93"
+      ],
+      "commit_tree": [
+        "84dffb91",
+        "43653bc9",
+        "27536dde",
+        "e85a498a",
+        "0088918a"
+      ],
+      "parent_shas": [
+        [
+          "8b4413be",
+          "4c914fcb",
+          "71315a29",
+          "46c9c171",
+          "abb6efc2"
+        ]
+      ],
+      "commit_subject": "Record Phase 8 Haiku evaluation evidence",
+      "historical_identities": [
+        {
+          "ap_id": "AP-070",
+          "exact_title": "AYO Intelligence Phase 8 Haiku admissible technical evaluation",
+          "historical_composite_id": [
+            "318928fa",
+            "fee9a46c",
+            "6d7f97c2",
+            "ce8da325",
+            "bc73751d",
+            "8956db6d",
+            "b206fda4",
+            "649b43c1"
+          ]
+        }
+      ],
+      "governed_lineage": "refs/heads/main",
+      "provenance_class": "MAIN_REACHABLE",
+      "live_object_requirement": "REQUIRED",
+      "authority": "FOUNDER_AND_CTO_APPROVED_2026-08-27",
+      "manifest_entry_id": [
+        "782920bc",
+        "e61c1109",
+        "05379159",
+        "f7444864",
+        "fe2ffb8d",
+        "d2427ec2",
+        "316079a4",
+        "14258324"
+      ]
+    },
+    {
+      "introducing_commit": [
+        "1523da1a",
+        "bf21bb1c",
+        "55f82d64",
+        "2109956e",
+        "be6a6bd4"
+      ],
+      "commit_tree": [
+        "47208b0c",
+        "b691d6c8",
+        "486fa2c2",
+        "e2e90b95",
+        "aebf34e0"
+      ],
+      "parent_shas": [
+        [
+          "0f66ead3",
+          "57f9899f",
+          "e658f2dd",
+          "afed1914",
+          "6238cb9e"
+        ]
+      ],
+      "commit_subject": "Add durable Phase 6 evaluation evidence capture",
+      "historical_identities": [
+        {
+          "ap_id": "AP-065",
+          "exact_title": "AYO Intelligence Phase 6 controlled synthetic provider evaluation",
+          "historical_composite_id": [
+            "25988ea9",
+            "5734b9d9",
+            "b81b20ea",
+            "273ea95c",
+            "45d40bbd",
+            "54f67aa7",
+            "c6311521",
+            "2f596b15"
+          ]
+        }
+      ],
+      "governed_lineage": "refs/heads/main",
+      "provenance_class": "MAIN_REACHABLE",
+      "live_object_requirement": "REQUIRED",
+      "authority": "FOUNDER_AND_CTO_APPROVED_2026-08-27",
+      "manifest_entry_id": [
+        "e0866504",
+        "15fff4f7",
+        "8e82577c",
+        "e5619046",
+        "68010191",
+        "0ec45ec3",
+        "4e8e6f16",
+        "e3af48fd"
+      ]
+    },
+    {
+      "introducing_commit": [
+        "15a75162",
+        "eb0e7f57",
+        "b80fda16",
+        "b084b8c9",
+        "3bcdb113"
+      ],
+      "commit_tree": [
+        "e8c7e2b1",
+        "7cdc67b3",
+        "a8be094e",
+        "c3644ce9",
+        "ba890776"
+      ],
+      "parent_shas": [
+        [
+          "1a2181c8",
+          "2ce600d6",
+          "dc383ade",
+          "c3a8123e",
+          "4189c4f7"
+        ]
+      ],
+      "commit_subject": "Record Phase 7 nano evaluation evidence",
+      "historical_identities": [
+        {
+          "ap_id": "AP-068",
+          "exact_title": "AYO Intelligence Phase 7 nano admissible technical evaluation",
+          "historical_composite_id": [
+            "eb41ce4b",
+            "eb004595",
+            "a12ac201",
+            "996df46b",
+            "df13ed0b",
+            "91098b18",
+            "cc76de12",
+            "3689546e"
+          ]
+        }
+      ],
+      "governed_lineage": "refs/heads/main",
+      "provenance_class": "MAIN_REACHABLE",
+      "live_object_requirement": "REQUIRED",
+      "authority": "FOUNDER_AND_CTO_APPROVED_2026-08-27",
+      "manifest_entry_id": [
+        "c6f28c75",
+        "285c83f9",
+        "a9e6689a",
+        "1f4e8609",
+        "68fceb9b",
+        "8175978b",
+        "510517c6",
+        "be85d769"
+      ]
+    },
+    {
+      "introducing_commit": [
+        "20b81a0e",
+        "4f4e0606",
+        "0525a33f",
+        "3a5f1c76",
+        "7f4b88f7"
+      ],
+      "commit_tree": [
+        "2b50e42b",
+        "c75d1e1b",
+        "40d19398",
+        "e0b0d86a",
+        "9e70ff9e"
+      ],
+      "parent_shas": [
+        [
+          "a62c3394",
+          "111c14d9",
+          "3f787b7b",
+          "319faa0a",
+          "9b13293d"
+        ]
+      ],
+      "commit_subject": "docs: record Founder consent consultation preferences",
+      "historical_identities": [
+        {
+          "ap_id": "AP-078",
+          "exact_title": "Founder Mobile Booking consent preferences for professional consultation",
+          "historical_composite_id": [
+            "480f7d39",
+            "e70bddd8",
+            "26cb0f22",
+            "f37856aa",
+            "336b7356",
+            "ed5fd9dd",
+            "fe3e30fb",
+            "6a6bba1e"
+          ]
+        }
+      ],
+      "governed_lineage": "refs/heads/agent/mobile-booking-consent-founder-consultation-preferences",
+      "provenance_class": "HISTORICAL_MANIFEST_ONLY",
+      "live_object_requirement": "APPROVED_PRE_CUTOVER_EXCEPTION",
+      "authority": "FOUNDER_AND_CTO_APPROVED_2026-08-27",
+      "manifest_entry_id": [
+        "15f18093",
+        "16146526",
+        "b8100e95",
+        "d529abce",
+        "4b30863d",
+        "a2bcc2dc",
+        "b37c9e58",
+        "ce0fe305"
+      ]
+    },
+    {
+      "introducing_commit": [
+        "22c025e2",
+        "dbc60d90",
+        "8fcb5495",
+        "2a0833fd",
+        "0eddbf19"
+      ],
+      "commit_tree": [
+        "217a7673",
+        "319233d7",
+        "bd75a33f",
+        "304867fd",
+        "50a27c08"
+      ],
+      "parent_shas": [
+        [
+          "bf9d37cc",
+          "57603b9c",
+          "0043e275",
+          "13a72520",
+          "904ab52f"
+        ]
+      ],
+      "commit_subject": "Add bounded generative explanation gateway",
+      "historical_identities": [
+        {
+          "ap_id": "AP-062",
+          "exact_title": "AYO Intelligence Phase 3 bounded generative explanation gateway",
+          "historical_composite_id": [
+            "cf22f8e0",
+            "3167dc76",
+            "2967c7b1",
+            "947998e4",
+            "429b9835",
+            "459c456f",
+            "f3fcc503",
+            "81d52336"
+          ]
+        }
+      ],
+      "governed_lineage": "refs/heads/main",
+      "provenance_class": "MAIN_REACHABLE",
+      "live_object_requirement": "REQUIRED",
+      "authority": "FOUNDER_AND_CTO_APPROVED_2026-08-27",
+      "manifest_entry_id": [
+        "dd73b92b",
+        "471c9b85",
+        "804efd67",
+        "15f78d9a",
+        "7542be3f",
+        "0137c154",
+        "a30851b0",
+        "65300f2a"
+      ]
+    },
+    {
+      "introducing_commit": [
+        "22ed5a95",
+        "72a040f4",
+        "efb965fc",
+        "df5a7311",
+        "45842868"
+      ],
+      "commit_tree": [
+        "197df660",
+        "9888581d",
+        "f7a2a09a",
+        "73747779",
+        "1405d731"
+      ],
+      "parent_shas": [
+        [
+          "cbad68e0",
+          "6c553666",
+          "3fb26cf8",
+          "6d8b48a8",
+          "6c56d669"
+        ]
+      ],
+      "commit_subject": "feat(ride): implement Mission 19 active ride core",
+      "historical_identities": [
+        {
+          "ap_id": "AP-034",
+          "exact_title": "Mission 19 Active Ride implementation",
+          "historical_composite_id": [
+            "3679fad1",
+            "eaa13e41",
+            "30c805e8",
+            "9179862b",
+            "927ba7b1",
+            "48a4d402",
+            "26f6a703",
+            "a55a090f"
+          ]
+        }
+      ],
+      "governed_lineage": "refs/heads/main",
+      "provenance_class": "MAIN_REACHABLE",
+      "live_object_requirement": "REQUIRED",
+      "authority": "FOUNDER_AND_CTO_APPROVED_2026-08-27",
+      "manifest_entry_id": [
+        "7f1ff03d",
+        "e86d8256",
+        "0d84d40d",
+        "13df4810",
+        "839d282c",
+        "5dbe1702",
+        "eee0495c",
+        "154e4e52"
+      ]
+    },
+    {
+      "introducing_commit": [
+        "2a2eae3a",
+        "0e718b94",
+        "5e63d342",
+        "d93caeb7",
+        "9b2b4e13"
+      ],
+      "commit_tree": [
+        "ce623cfc",
+        "9524eb9b",
+        "5bca4de2",
+        "abf05dc9",
+        "678509fc"
+      ],
+      "parent_shas": [
+        [
+          "6613a936",
+          "b0fe8963",
+          "08682c8f",
+          "e0387088",
+          "76a06c02"
+        ]
+      ],
+      "commit_subject": "feat(booking): add server-owned consent policy authority",
+      "historical_identities": [
+        {
+          "ap_id": "AP-074",
+          "exact_title": "Server-authoritative Immediate Standard booking consent metadata",
+          "historical_composite_id": [
+            "75577f60",
+            "ca8ec695",
+            "a8fddc00",
+            "f29703a7",
+            "cad74075",
+            "de5f4030",
+            "d560ae0f",
+            "4482fcf2"
+          ]
+        }
+      ],
+      "governed_lineage": "refs/heads/main",
+      "provenance_class": "MAIN_REACHABLE",
+      "live_object_requirement": "REQUIRED",
+      "authority": "FOUNDER_AND_CTO_APPROVED_2026-08-27",
+      "manifest_entry_id": [
+        "4474213c",
+        "6ccb135f",
+        "dd894022",
+        "714f2f8e",
+        "fd6f1805",
+        "e1ffda8a",
+        "c4fcd82c",
+        "2630ea16"
+      ]
+    },
+    {
+      "introducing_commit": [
+        "2a8fd973",
+        "322834b1",
+        "bc0282e0",
+        "0f4fdbd4",
+        "3acf0c98"
+      ],
+      "commit_tree": [
+        "97de76bf",
+        "d5c935ba",
+        "d1714182",
+        "3d817de5",
+        "cddfbd8c"
+      ],
+      "parent_shas": [
+        [
+          "ee6650d7",
+          "f6304e73",
+          "c31aee8a",
+          "1ab709cd",
+          "3be1fbf0"
+        ]
+      ],
+      "commit_subject": "feat(mobile): add confirmation-locked booking intent foundation",
+      "historical_identities": [
+        {
+          "ap_id": "AP-075",
+          "exact_title": "PRE-PRODUCTION Mobile Booking intent foundation",
+          "historical_composite_id": [
+            "f88b7e44",
+            "537f16cb",
+            "e8bf46c8",
+            "b2eee0fa",
+            "c702bca2",
+            "9dc49931",
+            "28487912",
+            "393b0b9b"
+          ]
+        }
+      ],
+      "governed_lineage": "refs/heads/main",
+      "provenance_class": "MAIN_REACHABLE",
+      "live_object_requirement": "REQUIRED",
+      "authority": "FOUNDER_AND_CTO_APPROVED_2026-08-27",
+      "manifest_entry_id": [
+        "8784e519",
+        "6f5849c4",
+        "61afc306",
+        "25646fef",
+        "a1754d55",
+        "c1861094",
+        "4fa7700a",
+        "a031f4fc"
+      ]
+    },
+    {
+      "introducing_commit": [
+        "300fbc28",
+        "c662e02a",
+        "ba142f5e",
+        "afa2acc8",
+        "3b1c40fc"
+      ],
+      "commit_tree": [
+        "57aa79ef",
+        "ed810f42",
+        "c5dd789c",
+        "a1a87489",
+        "92ed5457"
+      ],
+      "parent_shas": [
+        [
+          "cadaa30c",
+          "47ccbb84",
+          "9bf428c1",
+          "4576298b",
+          "26ee6323"
+        ]
+      ],
+      "commit_subject": "docs: define booking consent document delivery architecture",
+      "historical_identities": [
+        {
+          "ap_id": "AP-076",
+          "exact_title": "Proposed server-owned Booking consent document delivery contract",
+          "historical_composite_id": [
+            "877b2d0b",
+            "46d543a9",
+            "3cb003e7",
+            "09913877",
+            "264efd7c",
+            "d2cf7b5b",
+            "1197797c",
+            "083fbdaf"
+          ]
+        }
+      ],
+      "governed_lineage": "refs/heads/main",
+      "provenance_class": "MAIN_REACHABLE",
+      "live_object_requirement": "REQUIRED",
+      "authority": "FOUNDER_AND_CTO_APPROVED_2026-08-27",
+      "manifest_entry_id": [
+        "ec9bd6b0",
+        "4bc9a1f8",
+        "d72949d6",
+        "1db9f95c",
+        "d8e6d7d8",
+        "af72e83a",
+        "c395ba46",
+        "0a6cf0e0"
+      ]
+    },
+    {
+      "introducing_commit": [
+        "32716a1c",
+        "834ca24e",
+        "3237966c",
+        "53532886",
+        "afa558fe"
+      ],
+      "commit_tree": [
+        "b2b12720",
+        "12248b00",
+        "e2d65b8c",
+        "25623ab2",
+        "25dbf1c0"
+      ],
+      "parent_shas": [
+        [
+          "a62c3394",
+          "111c14d9",
+          "3f787b7b",
+          "319faa0a",
+          "9b13293d"
+        ]
+      ],
+      "commit_subject": "governance: add Phase 5 corpus preservation foundation",
+      "historical_identities": [
+        {
+          "ap_id": "AP-079",
+          "exact_title": "Founder Institutional Discovery Phase 5 Preservation Foundation",
+          "historical_composite_id": [
+            "2abd8f95",
+            "aabccffb",
+            "2029ace4",
+            "c99ad3bc",
+            "890da513",
+            "6b706f22",
+            "0ae56a4e",
+            "acd56689"
+          ]
+        }
+      ],
+      "governed_lineage": "refs/heads/agent/founder-institutional-discovery-phase5-foundation",
+      "provenance_class": "HISTORICAL_MANIFEST_ONLY",
+      "live_object_requirement": "APPROVED_PRE_CUTOVER_EXCEPTION",
+      "authority": "FOUNDER_AND_CTO_APPROVED_2026-08-27",
+      "manifest_entry_id": [
+        "f2983e51",
+        "246deffd",
+        "f7f7c774",
+        "a902474d",
+        "ab0d39eb",
+        "069a0208",
+        "db10049a",
+        "47ed63fd"
+      ]
+    },
+    {
+      "introducing_commit": [
+        "348b6d85",
+        "9d4c3f3c",
+        "3237bccc",
+        "cfe3cbaf",
+        "220adac4"
+      ],
+      "commit_tree": [
+        "7dc49bc9",
+        "e5520ac2",
+        "2ae2c4ee",
+        "36bc7b96",
+        "5e89fa32"
+      ],
+      "parent_shas": [
+        [
+          "634e65bc",
+          "0473261f",
+          "71002ddc",
+          "847c0a85",
+          "c6d2f568"
+        ]
+      ],
+      "commit_subject": "Record Phase 9 deterministic-first architecture",
+      "historical_identities": [
+        {
+          "ap_id": "AP-071",
+          "exact_title": "AYO Intelligence Phase 9 deterministic-first Merchant ACK architecture",
+          "historical_composite_id": [
+            "aaf89bae",
+            "d156e916",
+            "2120c565",
+            "3d6a3029",
+            "2c82c0dd",
+            "26b7c33c",
+            "114da5e5",
+            "259f79c0"
+          ]
+        }
+      ],
+      "governed_lineage": "refs/heads/main",
+      "provenance_class": "MAIN_REACHABLE",
+      "live_object_requirement": "REQUIRED",
+      "authority": "FOUNDER_AND_CTO_APPROVED_2026-08-27",
+      "manifest_entry_id": [
+        "cc0bd59c",
+        "2342010b",
+        "c0181255",
+        "430fca03",
+        "afb577ab",
+        "a9fa951a",
+        "55662c01",
+        "7eb60b36"
+      ]
+    },
+    {
+      "introducing_commit": [
+        "41491209",
+        "9449e3f0",
+        "dc44aaea",
+        "41c4c2f1",
+        "ab22979a"
+      ],
+      "commit_tree": [
+        "8164a308",
+        "915845df",
+        "c173994c",
+        "5dc0f83c",
+        "51766be6"
+      ],
+      "parent_shas": [
+        [
+          "de62ded7",
+          "a90244a8",
+          "08e13a76",
+          "0112caff",
+          "cbe5e5f3"
+        ]
+      ],
+      "commit_subject": "Add offline intelligence provider evaluation",
+      "historical_identities": [
+        {
+          "ap_id": "AP-064",
+          "exact_title": "AYO Intelligence Phase 5 provider evaluation and admission governance",
+          "historical_composite_id": [
+            "c9dc4636",
+            "aebac5c6",
+            "c534c0e1",
+            "6827e232",
+            "9e5e8e83",
+            "c8764177",
+            "e00d45f4",
+            "aacf3d0a"
+          ]
+        }
+      ],
+      "governed_lineage": "refs/heads/main",
+      "provenance_class": "MAIN_REACHABLE",
+      "live_object_requirement": "REQUIRED",
+      "authority": "FOUNDER_AND_CTO_APPROVED_2026-08-27",
+      "manifest_entry_id": [
+        "03180573",
+        "790e2ae1",
+        "51b1678d",
+        "c4166eb1",
+        "bbdf2658",
+        "4ec1a539",
+        "307f089e",
+        "c5777ef3"
+      ]
+    },
+    {
+      "introducing_commit": [
+        "4c416a68",
+        "b8368544",
+        "937e49b8",
+        "414e8e38",
+        "faec3488"
+      ],
+      "commit_tree": [
+        "9c85c1c6",
+        "6265b774",
+        "404265aa",
+        "d601a519",
+        "c3fa1790"
+      ],
+      "parent_shas": [
+        [
+          "c9a00db5",
+          "dd12d340",
+          "d1779534",
+          "28a0d03a",
+          "254c4238"
+        ]
+      ],
+      "commit_subject": "Add Phase 7 nano evaluation readiness",
+      "historical_identities": [
+        {
+          "ap_id": "AP-067",
+          "exact_title": "AYO Intelligence Phase 7 faster-model evaluation readiness",
+          "historical_composite_id": [
+            "6c4494e4",
+            "a8fedd47",
+            "85352012",
+            "14ead083",
+            "e7812566",
+            "ed99e246",
+            "253ce32c",
+            "8582e8dd"
+          ]
+        }
+      ],
+      "governed_lineage": "refs/heads/main",
+      "provenance_class": "MAIN_REACHABLE",
+      "live_object_requirement": "REQUIRED",
+      "authority": "FOUNDER_AND_CTO_APPROVED_2026-08-27",
+      "manifest_entry_id": [
+        "b360a7d7",
+        "7fc28cdf",
+        "25bfb69e",
+        "7092b767",
+        "d6487a7f",
+        "e9563a29",
+        "bcf48004",
+        "fe479b72"
+      ]
+    },
+    {
+      "introducing_commit": [
+        "5c775e8a",
+        "d44aab8e",
+        "00859f76",
+        "8d4ef175",
+        "82a65c1a"
+      ],
+      "commit_tree": [
+        "970bf17c",
+        "8cae5cb5",
+        "67493a38",
+        "6f869d3b",
+        "a78fbdb1"
+      ],
+      "parent_shas": [
+        [
+          "69adf1da",
+          "759a8d43",
+          "38743505",
+          "59e06b97",
+          "ea91cbcd"
+        ]
+      ],
+      "commit_subject": "Add bounded merchant operational intelligence",
+      "historical_identities": [
+        {
+          "ap_id": "AP-060",
+          "exact_title": "AYO Intelligence Phase 1 bounded operational recommendation",
+          "historical_composite_id": [
+            "0903989c",
+            "4b617b8e",
+            "ef62b3cf",
+            "9bccf334",
+            "cec7fc2b",
+            "b6e79ea6",
+            "cbefda53",
+            "f5270058"
+          ]
+        }
+      ],
+      "governed_lineage": "refs/heads/main",
+      "provenance_class": "MAIN_REACHABLE",
+      "live_object_requirement": "REQUIRED",
+      "authority": "FOUNDER_AND_CTO_APPROVED_2026-08-27",
+      "manifest_entry_id": [
+        "896a34a4",
+        "9b37c70f",
+        "1e1a346e",
+        "1cfffa92",
+        "75e2999c",
+        "570c9e8b",
+        "d948d1c0",
+        "053beeaf"
+      ]
+    },
+    {
+      "introducing_commit": [
+        "60343342",
+        "872fddfd",
+        "4ceed715",
+        "cf32fdc4",
+        "05f1e37e"
+      ],
+      "commit_tree": [
+        "21abbc09",
+        "cb2885f5",
+        "02317c63",
+        "96703b6d",
+        "0eb8101e"
+      ],
+      "parent_shas": [
+        [
+          "b305ef7b",
+          "17e5d837",
+          "afda7721",
+          "1e3f4f78",
+          "02ffd23e"
+        ]
+      ],
+      "commit_subject": "Add Phase 8 Anthropic Haiku readiness",
+      "historical_identities": [
+        {
+          "ap_id": "AP-069",
+          "exact_title": "AYO Intelligence Phase 8 Anthropic Haiku controlled-evaluation readiness",
+          "historical_composite_id": [
+            "381de05a",
+            "6eec8b5c",
+            "6f6dace7",
+            "3cc8c81f",
+            "b196a4f8",
+            "424dfe4f",
+            "5a91397d",
+            "f2bad477"
+          ]
+        }
+      ],
+      "governed_lineage": "refs/heads/main",
+      "provenance_class": "MAIN_REACHABLE",
+      "live_object_requirement": "REQUIRED",
+      "authority": "FOUNDER_AND_CTO_APPROVED_2026-08-27",
+      "manifest_entry_id": [
+        "2aaa2068",
+        "8bf4b329",
+        "6a728089",
+        "ccff9804",
+        "34363e59",
+        "a2998655",
+        "2db7a08a",
+        "94632ac7"
+      ]
+    },
+    {
+      "introducing_commit": [
+        "71a8541b",
+        "4eaf339e",
+        "54c6c45e",
+        "72a8cb12",
+        "1ee272dc"
+      ],
+      "commit_tree": [
+        "4afd8b40",
+        "eceabd46",
+        "72526fd0",
+        "55d9c616",
+        "ce7687bd"
+      ],
+      "parent_shas": [
+        [
+          "f1878b98",
+          "5df44031",
+          "6c30de95",
+          "f245b6e1",
+          "fd255ba7"
+        ]
+      ],
+      "commit_subject": "feat(auth): establish security and ownership foundation",
+      "historical_identities": [
+        {
+          "ap_id": "AP-048",
+          "exact_title": "Implementation Increment 2 authentication security foundation",
+          "historical_composite_id": [
+            "fbce582f",
+            "2b5b9ac4",
+            "8a628eda",
+            "cd791cac",
+            "15f935f2",
+            "141f4276",
+            "9500154c",
+            "c763ec5b"
+          ]
+        }
+      ],
+      "governed_lineage": "refs/heads/main",
+      "provenance_class": "MAIN_REACHABLE",
+      "live_object_requirement": "REQUIRED",
+      "authority": "FOUNDER_AND_CTO_APPROVED_2026-08-27",
+      "manifest_entry_id": [
+        "8c919623",
+        "f00fe029",
+        "2792d774",
+        "77a59161",
+        "631d40cf",
+        "6d770770",
+        "c1bf0ab6",
+        "46656c8e"
+      ]
+    },
+    {
+      "introducing_commit": [
+        "8222133e",
+        "3b91945f",
+        "8d738483",
+        "181aec53",
+        "e035f336"
+      ],
+      "commit_tree": [
+        "b807e929",
+        "49bbb1f0",
+        "fb095999",
+        "7eaa234f",
+        "524b3728"
+      ],
+      "parent_shas": [
+        [
+          "c79d2963",
+          "15f3554f",
+          "55e056b7",
+          "208bc9f2",
+          "23ed97f8"
+        ]
+      ],
+      "commit_subject": "feat(dispatch): secure controlled dispatch activation",
+      "historical_identities": [
+        {
+          "ap_id": "AP-027",
+          "exact_title": "Mission 14 secure internal dispatch activation",
+          "historical_composite_id": [
+            "64704a4d",
+            "0e2136da",
+            "3972bfb1",
+            "91904bc0",
+            "55d5b355",
+            "7960a41b",
+            "89ac492f",
+            "b906c532"
+          ]
+        }
+      ],
+      "governed_lineage": "refs/heads/main",
+      "provenance_class": "MAIN_REACHABLE",
+      "live_object_requirement": "REQUIRED",
+      "authority": "FOUNDER_AND_CTO_APPROVED_2026-08-27",
+      "manifest_entry_id": [
+        "6060f919",
+        "a373abaf",
+        "a3e625f5",
+        "2fa31a11",
+        "5345d16e",
+        "910ad4ab",
+        "5f83e7bc",
+        "c4d73140"
+      ]
+    },
+    {
+      "introducing_commit": [
+        "895bc15e",
+        "2bd51b6e",
+        "266833b5",
+        "8d7b3540",
+        "5ebe15a2"
+      ],
+      "commit_tree": [
+        "11b91076",
+        "d0788b87",
+        "72808e23",
+        "11172c16",
+        "1fc9f816"
+      ],
+      "parent_shas": [
+        [
+          "9b9f5d03",
+          "5741f270",
+          "fede1184",
+          "2254e71c",
+          "2885221c"
+        ]
+      ],
+      "commit_subject": "security: install fail-closed external admission verification scaffold",
+      "historical_identities": [
+        {
+          "ap_id": "AP-079",
+          "exact_title": "External immutable admission record for Ethiopia written-cycle evidence",
+          "historical_composite_id": [
+            "414efe1d",
+            "0711960b",
+            "3f82cd2b",
+            "8a5d727f",
+            "81fc6916",
+            "e01f32d2",
+            "0e42d54b",
+            "0f48d4d0"
+          ]
+        },
+        {
+          "ap_id": "AP-080",
+          "exact_title": "Admission Schema V2 and fail-closed Founder signature-verification scaffold",
+          "historical_composite_id": [
+            "933a9ca5",
+            "d335aad6",
+            "94037675",
+            "cb18f645",
+            "6903f45c",
+            "11382fd2",
+            "fb6ed5e3",
+            "de79cc85"
+          ]
+        },
+        {
+          "ap_id": "AP-081",
+          "exact_title": "Canonical two-key Founder admission trust schema",
+          "historical_composite_id": [
+            "85f46c35",
+            "dcfceeaf",
+            "f2e6d3f9",
+            "45bcb9fc",
+            "0e590ffd",
+            "014eb4ba",
+            "b83c28ec",
+            "e1e96677"
+          ]
+        }
+      ],
+      "governed_lineage": "refs/heads/agent/booking-consent-ethiopia-written-decision-pack",
+      "provenance_class": "REMOTE_REF_REACHABLE",
+      "live_object_requirement": "REQUIRED",
+      "authority": "FOUNDER_AND_CTO_APPROVED_2026-08-27",
+      "manifest_entry_id": [
+        "0d505390",
+        "9953f5ec",
+        "5d92e90f",
+        "2abee824",
+        "3e4e2f93",
+        "2b1112fc",
+        "9b111de6",
+        "34c808d1"
+      ]
+    },
+    {
+      "introducing_commit": [
+        "91845457",
+        "fa2146af",
+        "ac822496",
+        "94e68c5b",
+        "f15ab706"
+      ],
+      "commit_tree": [
+        "b932625b",
+        "4ff4e523",
+        "9156dd7d",
+        "00a98416",
+        "ac760980"
+      ],
+      "parent_shas": [
+        [
+          "517d7d0c",
+          "cc3d40cb",
+          "0831c64b",
+          "0d03ca01",
+          "d1adb83c"
+        ]
+      ],
+      "commit_subject": "Record Phase 6 Run 2 evaluation evidence",
+      "historical_identities": [
+        {
+          "ap_id": "AP-066",
+          "exact_title": "AYO Intelligence Phase 6 Run 2 admissible technical provider evaluation",
+          "historical_composite_id": [
+            "65140c74",
+            "090dbe39",
+            "1ee736f6",
+            "e8258d27",
+            "56d77a14",
+            "307f8525",
+            "fc5c8f04",
+            "2c35ef3e"
+          ]
+        }
+      ],
+      "governed_lineage": "refs/heads/main",
+      "provenance_class": "MAIN_REACHABLE",
+      "live_object_requirement": "REQUIRED",
+      "authority": "FOUNDER_AND_CTO_APPROVED_2026-08-27",
+      "manifest_entry_id": [
+        "ee9a644e",
+        "7101858a",
+        "672c23dd",
+        "3fe3d41f",
+        "c4b4f756",
+        "96e37959",
+        "09b0c6c9",
+        "8d106f06"
+      ]
+    },
+    {
+      "introducing_commit": [
+        "9bc9d873",
+        "bdc575ff",
+        "9a9341d3",
+        "b2a7a887",
+        "1c4bf12e"
+      ],
+      "commit_tree": [
+        "98ef66f7",
+        "6741ac4e",
+        "ef819a60",
+        "d06073b8",
+        "9f7e1116"
+      ],
+      "parent_shas": [
+        [
+          "1e5f37ee",
+          "d7a2d800",
+          "9bd6cf8d",
+          "ce9e963f",
+          "a0464fbc"
+        ]
+      ],
+      "commit_subject": "Add bounded merchant intelligence language",
+      "historical_identities": [
+        {
+          "ap_id": "AP-061",
+          "exact_title": "AYO Intelligence Phase 2 bounded natural-language explanation",
+          "historical_composite_id": [
+            "d46feb34",
+            "e2c5f6ae",
+            "d81bce67",
+            "f7af6bf9",
+            "46339c76",
+            "d11b3763",
+            "37708687",
+            "ce28b575"
+          ]
+        }
+      ],
+      "governed_lineage": "refs/heads/main",
+      "provenance_class": "MAIN_REACHABLE",
+      "live_object_requirement": "REQUIRED",
+      "authority": "FOUNDER_AND_CTO_APPROVED_2026-08-27",
+      "manifest_entry_id": [
+        "3ea805f4",
+        "bff6117f",
+        "aa6a5d71",
+        "6c1998f9",
+        "a3606ce6",
+        "c8751a62",
+        "04856044",
+        "a819d235"
+      ]
+    },
+    {
+      "introducing_commit": [
+        "a55e155c",
+        "688e3f44",
+        "08439722",
+        "c3b9dbde",
+        "fe381ea5"
+      ],
+      "commit_tree": [
+        "8a5be0ff",
+        "23d59682",
+        "4f36924a",
+        "93a3f9cb",
+        "dfd0a23e"
+      ],
+      "parent_shas": [
+        [
+          "725f752d",
+          "284078d4",
+          "6d7ddb69",
+          "6bc60402",
+          "39e94e96"
+        ]
+      ],
+      "commit_subject": "checkpoint(governance): bind canonical backend certification records",
+      "historical_identities": [
+        {
+          "ap_id": "AP-059",
+          "exact_title": "Increment 15 settlement and financial reconciliation evolution architecture",
+          "historical_composite_id": [
+            "d1607a7d",
+            "b361dd48",
+            "fccd7d99",
+            "c7a5bda9",
+            "28cad987",
+            "11f0fe5e",
+            "dfe7fb2e",
+            "360a1851"
+          ]
+        },
+        {
+          "ap_id": "AP-061",
+          "exact_title": "Increment 16 certification and recovery scope",
+          "historical_composite_id": [
+            "4bb5a3d6",
+            "262a9689",
+            "c9041d80",
+            "33ec9834",
+            "99dce936",
+            "daf0a26d",
+            "153ce733",
+            "e1b64599"
+          ]
+        },
+        {
+          "ap_id": "AP-065",
+          "exact_title": "Governance certification reconciliation for Increments 9\u201313",
+          "historical_composite_id": [
+            "194a733b",
+            "1ebb5b36",
+            "92e96c7c",
+            "a894b83c",
+            "bff97701",
+            "905dcf43",
+            "3a9fb51c",
+            "1ef6b9e3"
+          ]
+        },
+        {
+          "ap_id": "AP-066",
+          "exact_title": "Increment 17 Mission 17 certification and recovery scope",
+          "historical_composite_id": [
+            "3d5331a6",
+            "db533a34",
+            "d84afae7",
+            "fd8eb4a4",
+            "19cbb38e",
+            "905f0547",
+            "84a6d6b9",
+            "68a569a2"
+          ]
+        },
+        {
+          "ap_id": "AP-068",
+          "exact_title": "Increment 18 authenticated Immediate Standard cash ride mobile MVP",
+          "historical_composite_id": [
+            "87f3c8c3",
+            "414c09d9",
+            "3e3872a8",
+            "7f1c6584",
+            "1eb3846d",
+            "8cd79285",
+            "eaae8fe3",
+            "58055712"
+          ]
+        },
+        {
+          "ap_id": "AP-070",
+          "exact_title": "Increment 18 remaining implementation authorization",
+          "historical_composite_id": [
+            "1f4f4bcb",
+            "c6feede8",
+            "88d6aef1",
+            "57da5e5e",
+            "25a92595",
+            "256ec621",
+            "b0d41f5e",
+            "a6d70af8"
+          ]
+        },
+        {
+          "ap_id": "AP-075",
+          "exact_title": "AYO Design System v1 direction and implementation",
+          "historical_composite_id": [
+            "408ccb5b",
+            "ee9e83e4",
+            "74301e99",
+            "a1393d6f",
+            "18b10626",
+            "16e93ed4",
+            "daee4597",
+            "646fe428"
+          ]
+        },
+        {
+          "ap_id": "AP-076",
+          "exact_title": "Permanent AYO Identity & Role Engine architecture",
+          "historical_composite_id": [
+            "ff05f67d",
+            "1b0fc1f6",
+            "b0da9f43",
+            "41b01276",
+            "eb260441",
+            "93ce236c",
+            "7f567272",
+            "29605698"
+          ]
+        },
+        {
+          "ap_id": "AP-077",
+          "exact_title": "Permanent AYO Business Platform architecture",
+          "historical_composite_id": [
+            "2d32abd5",
+            "17c9b833",
+            "5c79d9c0",
+            "74887ed9",
+            "a4763137",
+            "cf409bb4",
+            "db5c0f53",
+            "f5543cd9"
+          ]
+        },
+        {
+          "ap_id": "AP-078",
+          "exact_title": "Permanent AYO Business Dashboard architecture",
+          "historical_composite_id": [
+            "1492bbbb",
+            "c02f798e",
+            "41f2f8c0",
+            "06545614",
+            "2596e40c",
+            "84835a60",
+            "b20fd079",
+            "cecf310c"
+          ]
+        },
+        {
+          "ap_id": "AP-079",
+          "exact_title": "Permanent AYO Family Platform architecture",
+          "historical_composite_id": [
+            "c5f51f16",
+            "c36ea28f",
+            "a0e4f5a2",
+            "0809c5f9",
+            "37d55755",
+            "c9ee306d",
+            "588fb74a",
+            "ccda55fd"
+          ]
+        },
+        {
+          "ap_id": "AP-080",
+          "exact_title": "Permanent AYO Community Platform architecture",
+          "historical_composite_id": [
+            "b98e20d7",
+            "1376433e",
+            "b59e449b",
+            "f44504b0",
+            "40ece9fe",
+            "7f1953ca",
+            "55f22870",
+            "708cc65d"
+          ]
+        },
+        {
+          "ap_id": "AP-081",
+          "exact_title": "Permanent AYO Consent, Delegation & Scoped Relationship Engine architecture",
+          "historical_composite_id": [
+            "d3bd1910",
+            "9d1e9789",
+            "922ea620",
+            "047846f2",
+            "9e586338",
+            "737c941e",
+            "e3502b0c",
+            "ee4acc88"
+          ]
+        },
+        {
+          "ap_id": "AP-082",
+          "exact_title": "Permanent AYO Notification & Communication Reliability Platform architecture",
+          "historical_composite_id": [
+            "848727f8",
+            "8e7f0987",
+            "3681b629",
+            "209d0245",
+            "522878e0",
+            "769765ba",
+            "4f259c59",
+            "ea32eda2"
+          ]
+        },
+        {
+          "ap_id": "AP-083",
+          "exact_title": "Permanent AYO Location, Maps & Place Evidence Platform architecture",
+          "historical_composite_id": [
+            "1c641e8b",
+            "57583062",
+            "a59586c4",
+            "fec86607",
+            "478407fb",
+            "267c5c83",
+            "0f78f1be",
+            "4247fa5c"
+          ]
+        },
+        {
+          "ap_id": "AP-084",
+          "exact_title": "Permanent AYO Excellence & Appreciation Platform architecture",
+          "historical_composite_id": [
+            "7f5f9057",
+            "55ffb948",
+            "bfc28f76",
+            "d6beab97",
+            "b69283f6",
+            "cc161b9e",
+            "7b7312bb",
+            "769368ec"
+          ]
+        },
+        {
+          "ap_id": "AP-085",
+          "exact_title": "Permanent AYO Kids Platform architecture",
+          "historical_composite_id": [
+            "96fdee2c",
+            "38b91f80",
+            "b05f7ddb",
+            "811ab8e3",
+            "f97a9258",
+            "16b12244",
+            "c7901e87",
+            "fd866733"
+          ]
+        },
+        {
+          "ap_id": "AP-086",
+          "exact_title": "Permanent Privacy & Minimum Disclosure architecture",
+          "historical_composite_id": [
+            "06ac39d5",
+            "2777ca03",
+            "2f801fe6",
+            "7dcf0efd",
+            "348a7829",
+            "5fd8d4fd",
+            "6108371d",
+            "94ffabc2"
+          ]
+        },
+        {
+          "ap_id": "AP-087",
+          "exact_title": "Permanent Protected Identity architecture",
+          "historical_composite_id": [
+            "ec29a33a",
+            "59a9530c",
+            "81ea4977",
+            "5dea330f",
+            "d1891611",
+            "a42f17ac",
+            "03943b75",
+            "b01a2ce9"
+          ]
+        },
+        {
+          "ap_id": "AP-088",
+          "exact_title": "Permanent Global Localization & Cultural Translation architecture",
+          "historical_composite_id": [
+            "6e913a8f",
+            "5cb35b20",
+            "3126af25",
+            "687e17dc",
+            "f420c307",
+            "31311ffe",
+            "fa83b2f4",
+            "c8295e4b"
+          ]
+        },
+        {
+          "ap_id": "AP-089",
+          "exact_title": "Permanent Continuous Learning & Improvement Principle",
+          "historical_composite_id": [
+            "bf2e592b",
+            "8090da0d",
+            "9a6bf34c",
+            "e4dc0a17",
+            "a52d8866",
+            "558e015d",
+            "a366a0fe",
+            "c9eabddd"
+          ]
+        },
+        {
+          "ap_id": "AP-090",
+          "exact_title": "Permanent AYO premium dashboard design direction",
+          "historical_composite_id": [
+            "4269ea11",
+            "880ac6d2",
+            "8725bb54",
+            "2da000f2",
+            "bed24674",
+            "fd7d8c06",
+            "cdc77ead",
+            "376a09e9"
+          ]
+        },
+        {
+          "ap_id": "AP-091",
+          "exact_title": "Explore Before Commitment",
+          "historical_composite_id": [
+            "e52dd0ee",
+            "e89fe77e",
+            "0bd524ab",
+            "3efb9791",
+            "539e5900",
+            "ab47745b",
+            "cfe454db",
+            "4219e2a3"
+          ]
+        },
+        {
+          "ap_id": "AP-092",
+          "exact_title": "Premium first-open presentation and One Identity, Multiple Journeys placeholders",
+          "historical_composite_id": [
+            "af32e16f",
+            "993e7f43",
+            "27fa4617",
+            "8ac13b4b",
+            "0a4ae6f4",
+            "02c9d88a",
+            "0b593e40",
+            "7381b72f"
+          ]
+        },
+        {
+          "ap_id": "AP-093",
+          "exact_title": "One Identity. Multiple Journeys.",
+          "historical_composite_id": [
+            "8c238537",
+            "ac0f57e3",
+            "be0dbb4e",
+            "03bb8149",
+            "c67b7d50",
+            "0ad842a9",
+            "a555ad0c",
+            "c196449e"
+          ]
+        },
+        {
+          "ap_id": "AP-094",
+          "exact_title": "Final architecture review refinements",
+          "historical_composite_id": [
+            "cad47e82",
+            "9968886f",
+            "b46a9948",
+            "b89a17a0",
+            "3cf9d92f",
+            "f47bdf9e",
+            "beb94966",
+            "a29c8156"
+          ]
+        },
+        {
+          "ap_id": "AP-095",
+          "exact_title": "AYO Route Intelligence Engine",
+          "historical_composite_id": [
+            "dde563fb",
+            "90d69024",
+            "d855a1fa",
+            "257aa511",
+            "38d4b6f2",
+            "eaf621c0",
+            "965a3545",
+            "f0c286c3"
+          ]
+        },
+        {
+          "ap_id": "AP-096",
+          "exact_title": "MVP settlement, ratings and reusable Preference Engine policy",
+          "historical_composite_id": [
+            "3b21cbca",
+            "8d65b8d7",
+            "a4afcfc8",
+            "e71028da",
+            "4957ce89",
+            "2a7ed7d0",
+            "06f46496",
+            "057a5170"
+          ]
+        },
+        {
+          "ap_id": "AP-097",
+          "exact_title": "Preference language, confidence and financial-timeline refinements",
+          "historical_composite_id": [
+            "3e53c9fc",
+            "50c65aaf",
+            "2e74936a",
+            "13631986",
+            "9805ca1c",
+            "52210692",
+            "4d05e7e5",
+            "ab918f2e"
+          ]
+        },
+        {
+          "ap_id": "AP-098",
+          "exact_title": "Future food-delivery bundling authority principle",
+          "historical_composite_id": [
+            "6d0426d2",
+            "5d28f134",
+            "7dfd4a31",
+            "73f93728",
+            "d87e50ef",
+            "627cd0fc",
+            "8c8b35dd",
+            "0cba0bc0"
+          ]
+        }
+      ],
+      "governed_lineage": "refs/remotes/origin/backend-certification-checkpoint",
+      "provenance_class": "REMOTE_REF_REACHABLE",
+      "live_object_requirement": "REQUIRED",
+      "authority": "FOUNDER_AND_CTO_APPROVED_2026-08-27",
+      "manifest_entry_id": [
+        "511316f4",
+        "889ed4d8",
+        "cfb121b1",
+        "662886b8",
+        "283a9d03",
+        "66f8e588",
+        "82821bb1",
+        "3eaa5cd8"
+      ]
+    },
+    {
+      "introducing_commit": [
+        "a88a2391",
+        "47cc3c94",
+        "29eae632",
+        "7f071616",
+        "d1d4e537"
+      ],
+      "commit_tree": [
+        "fc101ba5",
+        "2b00ac8e",
+        "f7849311",
+        "13621da5",
+        "6d2c329b"
+      ],
+      "parent_shas": [
+        [
+          "8fe07332",
+          "38d75b47",
+          "72af2c1c",
+          "1475b48e",
+          "fae9d5a9"
+        ]
+      ],
+      "commit_subject": "Add merchant operational order surface",
+      "historical_identities": [
+        {
+          "ap_id": "AP-057",
+          "exact_title": "PRE-PRODUCTION merchant operational order read and selection surface",
+          "historical_composite_id": [
+            "1b6dc85c",
+            "8e3e03a1",
+            "f290b0b2",
+            "c410830a",
+            "b1d08436",
+            "bd04b3da",
+            "6c252071",
+            "a2a11d45"
+          ]
+        }
+      ],
+      "governed_lineage": "refs/heads/main",
+      "provenance_class": "MAIN_REACHABLE",
+      "live_object_requirement": "REQUIRED",
+      "authority": "FOUNDER_AND_CTO_APPROVED_2026-08-27",
+      "manifest_entry_id": [
+        "51a32c58",
+        "b4f0157b",
+        "a16c0589",
+        "6a29f710",
+        "02e1d64c",
+        "38c9e30b",
+        "14033c21",
+        "88a9a1a2"
+      ]
+    },
+    {
+      "introducing_commit": [
+        "a8f8c28a",
+        "20341597",
+        "c4a1da0d",
+        "74d22c44",
+        "b100afb2"
+      ],
+      "commit_tree": [
+        "7ffb5d9f",
+        "cc6f6402",
+        "3b45878d",
+        "9a249710",
+        "1fcbe11d"
+      ],
+      "parent_shas": [
+        [
+          "05271ced",
+          "745ce8cd",
+          "b831ab1c",
+          "c2b9d98a",
+          "f9deb593"
+        ]
+      ],
+      "commit_subject": "Add merchant arrival acknowledgement interaction",
+      "historical_identities": [
+        {
+          "ap_id": "AP-059",
+          "exact_title": "First visible PRE-PRODUCTION merchant arrival acknowledgement",
+          "historical_composite_id": [
+            "04f7616b",
+            "488d0007",
+            "8b7ef789",
+            "6393ab75",
+            "9ad3a4d0",
+            "83bae22e",
+            "a5c117b3",
+            "d36504bb"
+          ]
+        }
+      ],
+      "governed_lineage": "refs/heads/main",
+      "provenance_class": "MAIN_REACHABLE",
+      "live_object_requirement": "REQUIRED",
+      "authority": "FOUNDER_AND_CTO_APPROVED_2026-08-27",
+      "manifest_entry_id": [
+        "cdd9822e",
+        "385dcc6a",
+        "3fd6b27d",
+        "9261df4c",
+        "aab59baf",
+        "3bccad24",
+        "9fcf1c70",
+        "c638d702"
+      ]
+    },
+    {
+      "introducing_commit": [
+        "b12a21a7",
+        "f824580b",
+        "6f5e9448",
+        "c95ebaef",
+        "3d76c9cb"
+      ],
+      "commit_tree": [
+        "6ddbbd65",
+        "216642f3",
+        "8f760a36",
+        "8be1f5f8",
+        "1d5848e2"
+      ],
+      "parent_shas": [
+        [
+          "4849307b",
+          "4a9d64b4",
+          "45d78925",
+          "eb6c80eb",
+          "d1b0dbee"
+        ]
+      ],
+      "commit_subject": "Implement bounded cash-ride certification repair",
+      "historical_identities": [
+        {
+          "ap_id": "AP-072",
+          "exact_title": "Immediate Standard cash-ride bounded certification repair",
+          "historical_composite_id": [
+            "be304196",
+            "270daf85",
+            "73cb510c",
+            "02196456",
+            "9124f680",
+            "d506fe59",
+            "7b3bf6e5",
+            "afa6cd06"
+          ]
+        }
+      ],
+      "governed_lineage": "refs/heads/main",
+      "provenance_class": "MAIN_REACHABLE",
+      "live_object_requirement": "REQUIRED",
+      "authority": "FOUNDER_AND_CTO_APPROVED_2026-08-27",
+      "manifest_entry_id": [
+        "5df1ff77",
+        "3285455d",
+        "edc439bb",
+        "e6bcd9ca",
+        "7b0dc80f",
+        "a93147d7",
+        "642875dc",
+        "9e501195"
+      ]
+    },
+    {
+      "introducing_commit": [
+        "b8f47103",
+        "c37463fe",
+        "c070073a",
+        "95890e2e",
+        "f145d82f"
+      ],
+      "commit_tree": [
+        "0154239a",
+        "cfc095db",
+        "048392de",
+        "56b2cc31",
+        "fb556a6b"
+      ],
+      "parent_shas": [
+        [
+          "6ea2f23c",
+          "0f94df0e",
+          "93739fb5",
+          "65629e35",
+          "722eb3d9"
+        ]
+      ],
+      "commit_subject": "Add bounded merchant arrival acknowledgement capability",
+      "historical_identities": [
+        {
+          "ap_id": "AP-056",
+          "exact_title": "PRE-PRODUCTION bounded merchant arrival-acknowledgement capability",
+          "historical_composite_id": [
+            "b379d79b",
+            "dd66d915",
+            "ce7126e8",
+            "b0f1a53c",
+            "3f349a6c",
+            "6b9d2296",
+            "78b323ed",
+            "23b5c180"
+          ]
+        }
+      ],
+      "governed_lineage": "refs/heads/main",
+      "provenance_class": "MAIN_REACHABLE",
+      "live_object_requirement": "REQUIRED",
+      "authority": "FOUNDER_AND_CTO_APPROVED_2026-08-27",
+      "manifest_entry_id": [
+        "e48fd743",
+        "e7bc2ddb",
+        "e3a0237d",
+        "6ba6ee57",
+        "2501f5be",
+        "79b70e42",
+        "f947f178",
+        "dddad618"
+      ]
+    },
+    {
+      "introducing_commit": [
+        "c79d2963",
+        "15f3554f",
+        "55e056b7",
+        "208bc9f2",
+        "23ed97f8"
+      ],
+      "commit_tree": [
+        "5298dfd4",
+        "62732d36",
+        "ce9f4173",
+        "10844c1f",
+        "835cf85a"
+      ],
+      "parent_shas": [
+        [
+          "1305d9a4",
+          "f2306e8a",
+          "36fd289d",
+          "b580247e",
+          "11321fad"
+        ]
+      ],
+      "commit_subject": "feat(dispatch): add durable secure dispatch foundation",
+      "historical_identities": [
+        {
+          "ap_id": "AP-025",
+          "exact_title": "Mission 12 immediate-dispatch implementation authorization",
+          "historical_composite_id": [
+            "546b2710",
+            "ef20b308",
+            "aa0d3138",
+            "bc41543c",
+            "1a624a8f",
+            "8a6a2e32",
+            "2ebcafbd",
+            "170dc660"
+          ]
+        },
+        {
+          "ap_id": "AP-026",
+          "exact_title": "Mission 13 production dispatch persistence and secure API foundation",
+          "historical_composite_id": [
+            "7ac3279d",
+            "5a46aedb",
+            "42307149",
+            "ee8f0aa9",
+            "37027587",
+            "37ab7eb7",
+            "0d398358",
+            "69a4dbfb"
+          ]
+        }
+      ],
+      "governed_lineage": "refs/heads/main",
+      "provenance_class": "MAIN_REACHABLE",
+      "live_object_requirement": "REQUIRED",
+      "authority": "FOUNDER_AND_CTO_APPROVED_2026-08-27",
+      "manifest_entry_id": [
+        "b7dc4393",
+        "3541d8fe",
+        "1226f5d9",
+        "0312bb6c",
+        "f09c1d90",
+        "91430353",
+        "5f79cd73",
+        "41cda338"
+      ]
+    },
+    {
+      "introducing_commit": [
+        "cac30235",
+        "0e46b87a",
+        "0ff18354",
+        "508baf87",
+        "6af7319e"
+      ],
+      "commit_tree": [
+        "ee5064d6",
+        "2f188de2",
+        "615e9249",
+        "2141a237",
+        "31592a6d"
+      ],
+      "parent_shas": [
+        [
+          "571dc0aa",
+          "c5a17cdb",
+          "637a3ec1",
+          "6ef13c4a",
+          "47fda489"
+        ]
+      ],
+      "commit_subject": "Bind merchant ACK presentation state to publication",
+      "historical_identities": [
+        {
+          "ap_id": "AP-058",
+          "exact_title": "PRE-PRODUCTION merchant ACK presentation-state publication ownership",
+          "historical_composite_id": [
+            "a9c422a9",
+            "0735e48c",
+            "dca7f765",
+            "d45f64f4",
+            "7d9d1379",
+            "8045d1a2",
+            "70fcbf51",
+            "c5b92c81"
+          ]
+        }
+      ],
+      "governed_lineage": "refs/heads/main",
+      "provenance_class": "MAIN_REACHABLE",
+      "live_object_requirement": "REQUIRED",
+      "authority": "FOUNDER_AND_CTO_APPROVED_2026-08-27",
+      "manifest_entry_id": [
+        "6dc1713f",
+        "cf3c5e5f",
+        "c48df37e",
+        "8085707a",
+        "eb70de39",
+        "e8a3f012",
+        "d610e38f",
+        "7d811a3d"
+      ]
+    },
+    {
+      "introducing_commit": [
+        "eb8b326b",
+        "afada43f",
+        "7a2c29bb",
+        "2c9e0c9a",
+        "7f78aa33"
+      ],
+      "commit_tree": [
+        "189eb213",
+        "fa8058fd",
+        "c470a573",
+        "d5846d00",
+        "a801fdaa"
+      ],
+      "parent_shas": [
+        [
+          "67f4a0f7",
+          "3517ba00",
+          "8f2291ac",
+          "7cd9bd2b",
+          "eab953eb"
+        ]
+      ],
+      "commit_subject": "Add secure merchant generative execution boundary",
+      "historical_identities": [
+        {
+          "ap_id": "AP-063",
+          "exact_title": "AYO Intelligence Phase 4 secure live-provider execution boundary",
+          "historical_composite_id": [
+            "f0c34c1b",
+            "d241d6a1",
+            "6e6948c6",
+            "7c22a4d6",
+            "48b8acf8",
+            "7d0a0533",
+            "cec988f6",
+            "167231de"
+          ]
+        }
+      ],
+      "governed_lineage": "refs/heads/main",
+      "provenance_class": "MAIN_REACHABLE",
+      "live_object_requirement": "REQUIRED",
+      "authority": "FOUNDER_AND_CTO_APPROVED_2026-08-27",
+      "manifest_entry_id": [
+        "c653ec7a",
+        "9f477f26",
+        "8bdbe384",
+        "8b6df40c",
+        "a685f417",
+        "5bdce76b",
+        "34b28bf0",
+        "737cb09f"
+      ]
+    },
+    {
+      "introducing_commit": [
+        "f1878b98",
+        "5df44031",
+        "6c30de95",
+        "f245b6e1",
+        "fd255ba7"
+      ],
+      "commit_tree": [
+        "c7b3e788",
+        "622c2bba",
+        "68aa1304",
+        "eb179d16",
+        "69e28f3d"
+      ],
+      "parent_shas": [
+        [
+          "f4cc4176",
+          "f7d5a2f5",
+          "aa0e6021",
+          "21ce88ca",
+          "28101bf7"
+        ]
+      ],
+      "commit_subject": "build(postgres): certify engineering foundation",
+      "historical_identities": [
+        {
+          "ap_id": "AP-047",
+          "exact_title": "Implementation Increment 1 foundation certification",
+          "historical_composite_id": [
+            "b650ce74",
+            "31d06acc",
+            "3770ca3f",
+            "5661062d",
+            "9d3009c4",
+            "81edfca6",
+            "30df29bc",
+            "6a97ef17"
+          ]
+        }
+      ],
+      "governed_lineage": "refs/heads/main",
+      "provenance_class": "MAIN_REACHABLE",
+      "live_object_requirement": "REQUIRED",
+      "authority": "FOUNDER_AND_CTO_APPROVED_2026-08-27",
+      "manifest_entry_id": [
+        "634fc46a",
+        "db62e1e9",
+        "1d8ab4aa",
+        "ef74e7ab",
+        "fbcf2f46",
+        "f8eacc89",
+        "a14c4d68",
+        "80657b92"
+      ]
+    },
+    {
+      "introducing_commit": [
+        "f728c993",
+        "ffa8deef",
+        "50ec044b",
+        "86682849",
+        "13b315fc"
+      ],
+      "commit_tree": [
+        "7f5b888a",
+        "9c970373",
+        "87fcdf24",
+        "2e26209e",
+        "be668877"
+      ],
+      "parent_shas": [
+        [
+          "6aa98a78",
+          "953531b6",
+          "37413e54",
+          "b3afa93c",
+          "721ae863"
+        ]
+      ],
+      "commit_subject": "docs: define booking consent approval pack architecture",
+      "historical_identities": [
+        {
+          "ap_id": "AP-077",
+          "exact_title": "Proposed governed Booking consent approval pack",
+          "historical_composite_id": [
+            "7bf3e53c",
+            "07a3859b",
+            "30da6e6b",
+            "db90fe3e",
+            "945260e0",
+            "5a6f1dd5",
+            "bca0aa9f",
+            "dda4c667"
+          ]
+        }
+      ],
+      "governed_lineage": "refs/heads/main",
+      "provenance_class": "MAIN_REACHABLE",
+      "live_object_requirement": "REQUIRED",
+      "authority": "FOUNDER_AND_CTO_APPROVED_2026-08-27",
+      "manifest_entry_id": [
+        "063c7211",
+        "9da4fb2c",
+        "50cbe1f1",
+        "55118a00",
+        "3d6179d8",
+        "b33b1014",
+        "4b6a701c",
+        "7911be73"
+      ]
+    },
+    {
+      "introducing_commit": [
+        "f864c3a1",
+        "19784a7f",
+        "d2862d11",
+        "b329d0f5",
+        "f52dad8a"
+      ],
+      "commit_tree": [
+        "edaed894",
+        "8d028e53",
+        "5a1dd7cd",
+        "98d531ea",
+        "15239433"
+      ],
+      "parent_shas": [
+        [
+          "8d41c6f2",
+          "48d931a1",
+          "142052e5",
+          "161ada07",
+          "869d1ab9"
+        ]
+      ],
+      "commit_subject": "feat(arrival): implement Mission 20 behind PostgreSQL certification gate",
+      "historical_identities": [
+        {
+          "ap_id": "AP-039",
+          "exact_title": "Mission 20 local implementation checkpoint",
+          "historical_composite_id": [
+            "cc49aa7a",
+            "bbd810e6",
+            "1f7ffcbc",
+            "4987e3c6",
+            "c7007f07",
+            "2b9d90a9",
+            "55df3737",
+            "9262ea14"
+          ]
+        }
+      ],
+      "governed_lineage": "refs/heads/main",
+      "provenance_class": "MAIN_REACHABLE",
+      "live_object_requirement": "REQUIRED",
+      "authority": "FOUNDER_AND_CTO_APPROVED_2026-08-27",
+      "manifest_entry_id": [
+        "2609594f",
+        "2dcb3158",
+        "0e162fa0",
+        "f4c596bd",
+        "34cd8bfe",
+        "6a46f9a7",
+        "2990988a",
+        "0de2a418"
+      ]
+    },
+    {
+      "introducing_commit": [
+        "fbdf8766",
+        "38f9d866",
+        "6e2144d0",
+        "b9431fd3",
+        "6c734575"
+      ],
+      "commit_tree": [
+        "26269ee5",
+        "0636930e",
+        "2bc610ce",
+        "21fc8049",
+        "edbc4989"
+      ],
+      "parent_shas": [
+        [
+          "a62c3394",
+          "111c14d9",
+          "3f787b7b",
+          "319faa0a",
+          "9b13293d"
+        ]
+      ],
+      "commit_subject": "docs: define Ethiopia booking consent written decision cycle",
+      "historical_identities": [
+        {
+          "ap_id": "AP-078",
+          "exact_title": "Proposed Ethiopia Booking consent written decision cycle",
+          "historical_composite_id": [
+            "29dcf31b",
+            "a125b30d",
+            "4aa43cc5",
+            "d77aab48",
+            "895f7864",
+            "a65640b5",
+            "8775279a",
+            "0923b0a4"
+          ]
+        }
+      ],
+      "governed_lineage": "refs/heads/agent/booking-consent-ethiopia-written-decision-pack",
+      "provenance_class": "REMOTE_REF_REACHABLE",
+      "live_object_requirement": "REQUIRED",
+      "authority": "FOUNDER_AND_CTO_APPROVED_2026-08-27",
+      "manifest_entry_id": [
+        "8f66daf4",
+        "882eaca2",
+        "b5973807",
+        "18ceab1f",
+        "60402506",
+        "44a9f31b",
+        "53471e77",
+        "80b6fe33"
+      ]
+    },
+    {
+      "introducing_commit": [
+        "fcd71ab4",
+        "e06ed7ad",
+        "f2c71486",
+        "bce83614",
+        "e08b664f"
+      ],
+      "commit_tree": [
+        "bf43d097",
+        "bec7c4d3",
+        "62adbc70",
+        "30faeed5",
+        "964605ea"
+      ],
+      "parent_shas": [
+        [
+          "10d31018",
+          "783bb11f",
+          "05a8dc3e",
+          "d789ac3e",
+          "3d92970e"
+        ]
+      ],
+      "commit_subject": "feat(booking): add governed weak-network confirmation recovery",
+      "historical_identities": [
+        {
+          "ap_id": "AP-073",
+          "exact_title": "Immediate Standard Rider/Driver public contract and weak-network recovery",
+          "historical_composite_id": [
+            "bd3de9bb",
+            "68456cf7",
+            "44348360",
+            "14d8464c",
+            "49d22766",
+            "cfc7cfef",
+            "01d1b201",
+            "3d6292fb"
+          ]
+        }
+      ],
+      "governed_lineage": "refs/heads/main",
+      "provenance_class": "MAIN_REACHABLE",
+      "live_object_requirement": "REQUIRED",
+      "authority": "FOUNDER_AND_CTO_APPROVED_2026-08-27",
+      "manifest_entry_id": [
+        "5b348de5",
+        "c4c0c492",
+        "30e744cd",
+        "9cb6b6ef",
+        "269aa55e",
+        "162e330c",
+        "434d8011",
+        "9aa3dde8"
+      ]
+    }
+  ]
+}

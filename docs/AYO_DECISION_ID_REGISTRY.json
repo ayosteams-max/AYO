@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "registry_namespace": "ayo.governance.ap_decision_ids",
   "serialization_authority": "GIT_MAIN",
   "cutover": {
@@ -764,5 +764,7 @@
       "origin": "BOOTSTRAPPED_PRE_CUTOVER",
       "reconciliation_status": "PENDING_MAIN_REVIEW"
     }
-  ]
+  ],
+  "forward_identity_events": [],
+  "collision_reconciliations": []
 }
