@@ -305,9 +305,9 @@ jobs:
               registry_test_blob="$(git rev-parse "$registry_candidate:tests/governance/test_ap_decision_registry.py")"
               registry_trusted_base_test_blob="$(git rev-parse "$registry_candidate:tests/governance/test_ci_trusted_comparison_base.py" 2>/dev/null || true)"
               registry_validator_blob="$(git rev-parse "$registry_candidate:tools/validate_ap_decision_registry.py")"
-              expected_ap_registry_ci_normalized_sha256="4c9f8ebef29a66c5""177c37077da70610""6194f5d0ccf5911e""013a7d02d7f813ac"
-              expected_ap_registry_active_state_ci_normalized_sha256="4c9f8ebef29a66c5""177c37077da70610""6194f5d0ccf5911e""013a7d02d7f813ac"
-              expected_ap_main_ci_sha256="4c9f8ebef29a66c5177c37077da70610""6194f5d0ccf5911e013a7d02d7f813ac"
+              expected_ap_registry_ci_normalized_sha256="383d2da909c5e1f3""22b57fa6e16664f5""2ec3d38468b6517d""e25fede18750713e"
+              expected_ap_registry_active_state_ci_normalized_sha256="383d2da909c5e1f3""22b57fa6e16664f5""2ec3d38468b6517d""e25fede18750713e"
+              expected_ap_main_ci_sha256="383d2da909c5e1f322b57fa6e16664f5""2ec3d38468b6517de25fede18750713e"
               ap_registry_ci_normalized_sha256="$(python tools/validate_ci_governance_evidence.py workflow-commitment --scope ap --workflow .github/workflows/ci.yml)"
               if [[ "$registry_blob" == d0d84754a49e9f87f370ed0e7d49de026d8fc5bc \
                 && "$registry_decision_blob" == 8533182c326e3d625f96bdac1410dbdb2f774158 \
@@ -334,7 +334,7 @@ jobs:
               dependency_pyproject_blob="$(git rev-parse "$dependency_candidate:pyproject.toml")"
               dependency_lock_blob="$(git rev-parse "$dependency_candidate:uv.lock")"
               dependency_decision_blob="$(git rev-parse "$dependency_candidate:docs/AYO_DECISION_LOG.md")"
-              expected_ci_normalized_sha256="e7bcd27126542f07d1ee4e1cea5530bf""70ddf3684b2ed1420538d054962fe574"
+              expected_ci_normalized_sha256="f14dc43506038c88c5792015fb6abe69""a5f0db0df89f0df659a9d19615fd1be5"
               ci_normalized_sha256="$(python tools/validate_ci_governance_evidence.py workflow-commitment --scope pip --workflow .github/workflows/ci.yml)"
               if [[ "$dependency_pyproject_blob" == a9eebc6ce34459318b3b58a7a0217dba571e8e1a \
                 && "$dependency_lock_blob" == b340334a94f1479199d7e3784474e9a16020a121 \
@@ -429,8 +429,8 @@ jobs:
             *)
               candidate="$TESTED_COMMIT_SHA"
               fixed=fee08725153496edb2020d543c8cf24c317b48f6
-              expected_ci_governance_extraction_sha256="4c9f8ebef29a66c5177c37077da70610""6194f5d0ccf5911e013a7d02d7f813ac"
-              expected_registry_reconciliation_enablement_sha256="4c9f8ebef29a66c5177c37077da70610""6194f5d0ccf5911e013a7d02d7f813ac"
+              expected_ci_governance_extraction_sha256="383d2da909c5e1f322b57fa6e16664f5""2ec3d38468b6517de25fede18750713e"
+              expected_registry_reconciliation_enablement_sha256="383d2da909c5e1f322b57fa6e16664f5""2ec3d38468b6517de25fede18750713e"
               normalized="$(python tools/validate_ci_governance_evidence.py workflow-commitment --scope ap --workflow .github/workflows/ci.yml)"
               mapfile -t governed_paths < <(git diff --name-only "$fixed" "$candidate")
               enablement_base="$(git merge-base "$candidate" refs/remotes/origin/main)"
@@ -482,58 +482,50 @@ jobs:
           fi
           if [[ "$EVIDENCE_MODE" == ci-governance-evidence-extraction ]]; then
             base="$fixed"
-            subject='ci: extract governed evidence machinery'
+            first=62baef5cb7dad6e5250d81194f4b2c1cfbf35776
+            subject='ci: correct governed evidence execution bytes'
             expected=(.github/workflows/ci.yml tests/governance/test_ci_governance_evidence.py tools/validate_ci_governance_evidence.py)
+            head_expected=(.github/workflows/ci.yml)
+            [[ "$(git rev-parse "$head^")" == "$first" && "$(git rev-parse "$first^")" == "$base" ]] || {
+              echo GOVERNANCE_EXTRACTION_CHAIN_DRIFT >&2; exit 1; }
           else
             base="$(git merge-base "$head" refs/remotes/origin/main)"
             [[ "${#parents[@]}" -eq 2 ]] && base="${parents[0]}"
             subject='governance: enable AP registry reconciliation'
             expected=(.github/workflows/ci.yml docs/AYO_DECISION_ID_REGISTRY.json docs/AYO_DECISION_LOG.md tests/governance/test_ap_decision_registry.py tools/validate_ap_decision_registry.py)
+            head_expected=("${expected[@]}")
             [[ "$(git rev-parse "$base:docs/AYO_DECISION_ID_REGISTRY.json")" == 2ffb2cfb9f6ac410cf4f75a7b4460ea95fc117c2 ]] || {
               echo REGISTRY_ENABLEMENT_BASE_DRIFT >&2; exit 1; }
           fi
           [[ "$(git merge-base "$head" "$base")" == "$base" \
-            && "$(git rev-list --count "$base..$head")" == 1 \
-            && "$(git rev-parse "$head^")" == "$base" \
             && "$(git show -s --format=%s "$head")" == "$subject" ]] || {
+            echo GOVERNANCE_ENABLEMENT_ANCESTRY_DRIFT >&2; exit 1; }
+          [[ "$EVIDENCE_MODE" == ci-governance-evidence-extraction \
+            || "$(git rev-list --count "$base..$head")" == 1 && "$(git rev-parse "$head^")" == "$base" ]] || {
             echo GOVERNANCE_ENABLEMENT_ANCESTRY_DRIFT >&2; exit 1; }
           mapfile -t head_paths < <(git diff-tree --no-commit-id --name-only -r "$head")
           mapfile -t aggregate < <(git diff --name-only "$base" "$candidate")
-          [[ "${head_paths[*]}" == "${expected[*]}" \
+          [[ "${head_paths[*]}" == "${head_expected[*]}" \
             && "${aggregate[*]}" == "${expected[*]}" ]] || {
             echo GOVERNANCE_ENABLEMENT_PATH_DRIFT >&2; exit 1; }
-          [[ "$(git rev-parse "$candidate:BACKEND")" == 62500035ef60d94ccc6333f25cb3aa79ff5c3f21 \
-            && "$(git rev-parse "$candidate:database/migrations")" == 253ecedebe58c31077a0baa7d2532adc46464f70 \
-            && "$(git rev-parse "$candidate:AYO-Mobile")" == da39714a911ffbf02171d28348c88a39eab2d938 \
-            && "$(git rev-parse "$candidate:.secrets.baseline")" == 71770a9e529e9af0c9ed5c72549b3a2f7ddcfb02 \
-            && "$(git rev-parse "$candidate:pyproject.toml")" == a9eebc6ce34459318b3b58a7a0217dba571e8e1a \
-            && "$(git rev-parse "$candidate:uv.lock")" == b340334a94f1479199d7e3784474e9a16020a121 ]] || {
+          git diff --quiet "$base" "$candidate" -- BACKEND database/migrations AYO-Mobile \
+            .secrets.baseline pyproject.toml uv.lock || {
             echo GOVERNANCE_ENABLEMENT_CONTROLLED_SURFACE_DRIFT >&2; exit 1; }
           BASE_SHA="$base" CANDIDATE_SHA="$candidate" EVIDENCE_MODE="$EVIDENCE_MODE" python - <<'PY'
-          import json, os, subprocess
-          def load(commit):
-              return json.loads(subprocess.check_output(
-                  ["git", "show", f"{commit}:docs/AYO_DECISION_ID_REGISTRY.json"], text=True
-              ))
-          base, candidate = load(os.environ["BASE_SHA"]), load(os.environ["CANDIDATE_SHA"])
-          allocations = candidate.get("allocations")
-          if candidate.get("cutover", {}).get("status") != "ACTIVE" or not isinstance(allocations, list):
-              raise SystemExit("registry enablement state drift")
-          if any(item.get("ap_id") in {"AP-099", "AP-100"} for item in allocations):
-              raise SystemExit("AP-099 or AP-100 entered governance enablement")
-          if candidate.get("forward_identity_events") or candidate.get("collision_reconciliations"):
-              raise SystemExit("reservation, allocation, or reconciliation entered enablement")
-          if os.environ["EVIDENCE_MODE"] == "ci-governance-evidence-extraction" and candidate != base:
-              raise SystemExit("registry changed during CI extraction")
-          if os.environ["EVIDENCE_MODE"] != "ci-governance-evidence-extraction" and allocations != base.get("allocations"):
-              raise SystemExit("historical registry allocation drift")
-          by_id = {}
-          for item in allocations: by_id.setdefault(item.get("ap_id"), []).append(item)
-          if len(allocations) != 66 or len(by_id) != 51 or sum(len(v) > 1 for v in by_id.values()) != 13:
-              raise SystemExit("registry inventory drift")
+          import json,os,subprocess
+          from collections import Counter
+          def load(x):return json.loads(subprocess.check_output(["git","show",f"{x}:docs/AYO_DECISION_ID_REGISTRY.json"]))
+          b,c=map(load,(os.environ["BASE_SHA"],os.environ["CANDIDATE_SHA"]));a=c.get("allocations");e=os.environ["EVIDENCE_MODE"].startswith("ci-")
+          if c.get("cutover",{}).get("status")!="ACTIVE" or not isinstance(a,list):raise SystemExit("state drift")
+          if any(x.get("ap_id") in {"AP-099","AP-100"} for x in a):raise SystemExit("AP drift")
+          if c.get("forward_identity_events") or c.get("collision_reconciliations"):raise SystemExit("event drift")
+          if (e and c!=b) or (not e and a!=b.get("allocations")):raise SystemExit("registry drift")
+          n=Counter(x.get("ap_id") for x in a)
+          if (len(a),len(n),sum(x>1 for x in n.values()))!=(66,51,13):raise SystemExit("inventory drift")
           PY
           git ls-tree -r --name-only "$candidate" | grep -q '^institutional/founder-discovery/phase-5/' && {
             echo PHASE5_ENTERED_GOVERNANCE_ENABLEMENT >&2; exit 1; }
+          uv run --locked pytest -q --no-cov tests/governance/test_ci_governance_evidence.py
           echo "Exact CI governance enablement identity: PASS"
 
       - name: Bind exact pip audit-toolchain remediation identity
@@ -1753,6 +1745,14 @@ jobs:
                   echo AP_MAIN_CI_ANCESTRY_DRIFT >&2; exit 1; }
                 comparison_sha="$expected_base"
                 mode=verified-ap-registry-main-ci-base
+              elif [[ "$EVIDENCE_MODE" == ci-governance-evidence-extraction ]]; then
+                b=fee08725153496edb2020d543c8cf24c317b48f6
+                git fetch --no-tags origin refs/heads/main:refs/remotes/origin/coverage-main
+                a="$(git rev-parse refs/remotes/origin/coverage-main)"
+                [[ "$EVENT_REF" == refs/heads/main && "$EVENT_BEFORE" == "$b" && "$a" == "$EVENT_HEAD_SHA" \
+                  || "$EVENT_REF" != refs/heads/main && "$a" == "$b" ]] || { echo CI_EXTRACTION_SOURCE_DRIFT >&2; exit 1; }
+                comparison_sha="$b"
+                mode=verified-ci-governance-extraction-base
               elif [[ -n "$EVENT_BEFORE" && "$EVENT_BEFORE" != "$zero" ]]; then
                 require_commit "$EVENT_BEFORE" "push before SHA"
                 git merge-base --is-ancestor "$EVENT_BEFORE" "$EVENT_HEAD_SHA" || {
