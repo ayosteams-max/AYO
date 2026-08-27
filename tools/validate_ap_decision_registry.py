@@ -108,10 +108,10 @@ PROVENANCE_CLASSES = frozenset(
 APPROVED_MANIFEST_ONLY = {
     "".join(
         ("20b81a0e", "4f4e0606", "0525a33f", "3a5f1c76", "7f4b88f7")
-    ): "agent/mobile-booking-consent-founder-consultation-preferences",
+    ): "refs/heads/agent/mobile-booking-consent-founder-consultation-preferences",
     "".join(
         ("32716a1c", "834ca24e", "3237966c", "53532886", "afa558fe")
-    ): "agent/founder-institutional-discovery-phase5-foundation",
+    ): "refs/heads/agent/founder-institutional-discovery-phase5-foundation",
 }
 MISSION2_BASE = "".join(("dc564949", "c7d19e03", "84655251", "cb40bda3", "199ddace"))
 MANIFEST_FIELDS = frozenset(

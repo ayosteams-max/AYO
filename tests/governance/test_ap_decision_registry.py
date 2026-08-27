@@ -14,6 +14,7 @@ from tools.validate_ap_decision_registry import (
     AP_099_TITLE,
     AP_100_PURPOSE,
     AP_100_TITLE,
+    APPROVED_MANIFEST_ONLY,
     RegistryValidationError,
     effective_reconciliation_status,
     event_id,
@@ -521,6 +522,19 @@ def test_mission2_workflow_binds_base_and_rejects_phase5_paths() -> None:
     assert registry_blob in contract
     assert "'^institutional/founder-discovery/phase-5/'" in workflow
 
+    resolver = workflow.index(
+        'elif [[ "$EVIDENCE_MODE" == ap-decision-registry-reconciliation-enablement ]]'
+    )
+    generic = workflow.index(
+        'elif [[ -n "$EVENT_BEFORE" && "$EVENT_BEFORE" != "$zero" ]]'
+    )
+    route = workflow[resolver:generic]
+    assert resolver < generic
+    assert f"b={exact_base}" in route
+    assert 'comparison_sha="$b"' in route
+    assert "mode=verified-ap-registry-reconciliation-enablement-base" in route
+    assert 'comparison_sha="$EVENT_BEFORE"' not in route
+
 
 def test_committed_registry_preserves_bootstrap_and_has_no_lifecycle_instances() -> (
     None
@@ -668,8 +682,12 @@ def test_manifest_is_complete_unique_and_immutable(mutation: str) -> None:
 
 def test_committed_manifest_uniformly_covers_bootstrap_history() -> None:
     root = Path(__file__).parents[2]
-    value = json.loads((root / "docs/AYO_DECISION_ID_REGISTRY.json").read_text())
-    manifest = json.loads((root / "docs/AYO_AP_HISTORICAL_PROVENANCE.json").read_text())
+    value = json.loads(
+        (root / "docs/AYO_DECISION_ID_REGISTRY.json").read_text(encoding="utf-8")
+    )
+    manifest = json.loads(
+        (root / "docs/AYO_AP_HISTORICAL_PROVENANCE.json").read_text(encoding="utf-8")
+    )
     assert len(manifest["entries"]) == 34
     assert {entry["provenance_class"] for entry in manifest["entries"]} == {
         "MAIN_REACHABLE",
@@ -686,6 +704,74 @@ def test_committed_manifest_uniformly_covers_bootstrap_history() -> None:
     assert sum(
         len(entry["historical_identities"]) for entry in manifest["entries"]
     ) == len(value["allocations"])
+    manifest_only = {
+        "".join(entry["introducing_commit"]): entry["governed_lineage"]
+        for entry in manifest["entries"]
+        if entry["provenance_class"] == "HISTORICAL_MANIFEST_ONLY"
+    }
+    assert manifest_only == APPROVED_MANIFEST_ONLY
+
+
+@pytest.mark.parametrize("sha", sorted(APPROVED_MANIFEST_ONLY))
+def test_committed_manifest_only_orphans_are_approved_when_unavailable(
+    sha: str,
+) -> None:
+    root = Path(__file__).parents[2]
+    value = json.loads(
+        (root / "docs/AYO_DECISION_ID_REGISTRY.json").read_text(encoding="utf-8")
+    )
+    manifest = json.loads(
+        (root / "docs/AYO_AP_HISTORICAL_PROVENANCE.json").read_text(encoding="utf-8")
+    )
+    validate_registry(
+        value,
+        (root / "docs/AYO_DECISION_LOG.md").read_text(encoding="utf-8"),
+        provenance_manifest=manifest,
+        resolve_commit=lambda candidate: (
+            None if candidate == sha else _repository_metadata(root, candidate)
+        ),
+    )
+
+
+@pytest.mark.parametrize(
+    "lineage",
+    [
+        "agent/mobile-booking-consent-founder-consultation-preferences",
+        "refs/heads/agent/wrong-branch",
+        "refs/tags/agent/mobile-booking-consent-founder-consultation-preferences",
+        "refs/remotes/origin/agent/mobile-booking-consent-founder-consultation-preferences",
+        "refs/heads/refs/heads/agent/mobile-booking-consent-founder-consultation-preferences",
+        "refs/heads/agent//mobile-booking-consent-founder-consultation-preferences",
+        "refs/heads/agent/founder-institutional-discovery-phase5-foundation",
+    ],
+)
+def test_manifest_only_exception_rejects_noncanonical_or_wrong_lineage(
+    lineage: str,
+) -> None:
+    root = Path(__file__).parents[2]
+    value = json.loads(
+        (root / "docs/AYO_DECISION_ID_REGISTRY.json").read_text(encoding="utf-8")
+    )
+    manifest = json.loads(
+        (root / "docs/AYO_AP_HISTORICAL_PROVENANCE.json").read_text(encoding="utf-8")
+    )
+    sha = next(iter(APPROVED_MANIFEST_ONLY))
+    entry = next(
+        item
+        for item in manifest["entries"]
+        if "".join(item["introducing_commit"]) == sha
+    )
+    entry["governed_lineage"] = lineage
+    entry["manifest_entry_id"] = chunks(manifest_entry_id(entry))
+    with pytest.raises(RegistryValidationError, match="approved exception"):
+        validate_registry(
+            value,
+            (root / "docs/AYO_DECISION_LOG.md").read_text(encoding="utf-8"),
+            provenance_manifest=manifest,
+            resolve_commit=lambda candidate: (
+                None if candidate == sha else _repository_metadata(root, candidate)
+            ),
+        )
 
 
 def test_post_cutover_event_requires_live_git_authority() -> None:
