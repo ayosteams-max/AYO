@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import subprocess
 from pathlib import Path
@@ -17,6 +18,7 @@ from tools.validate_ap_decision_registry import (
     effective_reconciliation_status,
     event_id,
     historical_composite_commitment,
+    manifest_entry_id,
     reconciliation_id,
     validate_authorized_forward_reservation,
     validate_registry,
@@ -76,6 +78,81 @@ def exists(sha: str) -> bool:
     return sha in COMMITS
 
 
+def metadata(sha: str) -> dict[str, Any] | None:
+    return (
+        {"tree": "e" * 40, "parents": [], "subject": "SYNTHETIC"}
+        if exists(sha)
+        else None
+    )
+
+
+def chunks(value: str) -> list[str]:
+    return [value[i : i + 8] for i in range(0, len(value), 8)]
+
+
+def _repository_metadata(root: Path, sha: str) -> dict[str, Any] | None:
+    result = subprocess.run(
+        ["git", "show", "-s", "--format=%T%x00%P%x00%s", sha],
+        cwd=root,
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    if result.returncode:
+        return None
+    tree, parents, subject = result.stdout.rstrip("\n").split("\0", 2)
+    return {
+        "tree": tree,
+        "parents": parents.split() if parents else [],
+        "subject": subject,
+    }
+
+
+def provenance(value: dict[str, Any]) -> dict[str, Any]:
+    entries = []
+    for commit in sorted({item["introducing_commit"] for item in value["allocations"]}):
+        identities = [
+            {
+                "ap_id": item["ap_id"],
+                "exact_title": item["title"],
+                "historical_composite_id": chunks(
+                    historical_composite_commitment(
+                        commit, item["ap_id"], item["title"]
+                    )
+                ),
+            }
+            for item in value["allocations"]
+            if item["introducing_commit"] == commit
+        ]
+        entry = {
+            "introducing_commit": chunks(commit),
+            "commit_tree": chunks("e" * 40),
+            "parent_shas": [],
+            "commit_subject": "SYNTHETIC",
+            "historical_identities": identities,
+            "governed_lineage": "refs/heads/synthetic-test",
+            "provenance_class": "MAIN_REACHABLE",
+            "live_object_requirement": "REQUIRED",
+            "authority": "SYNTHETIC_TEST_AUTHORITY",
+            "manifest_entry_id": "",
+        }
+        entry["manifest_entry_id"] = chunks(manifest_entry_id(entry))
+        entries.append(entry)
+    return {
+        "schema_version": 1,
+        "namespace": "ayo.governance.ap_historical_provenance",
+        "cutover": {
+            "base_main_commit": chunks("dc564949c7d19e0384655251cb40bda3199ddace")
+        },
+        "authority_model": {
+            "primary_authority": "MAIN_RESIDENT_IMMUTABLE_MANIFEST",
+            "post_cutover_manifest_only": "PROHIBITED",
+        },
+        "entries": entries,
+    }
+
+
 def event(
     kind="RESERVED",
     ap_id="AP-101",
@@ -122,12 +199,21 @@ def reconciliation(
 
 
 def validate(value: dict[str, Any], text="", baseline=None, **kwargs: Any):
+    main_reachable = kwargs.pop(
+        "main_reachable",
+        lambda sha, authoritative_main: sha == authoritative_main == BASE,
+    )
+    durable_ref_reachable = kwargs.pop("durable_ref_reachable", lambda _sha: False)
     return validate_registry(
         value,
         text,
         baseline_registry=baseline,
-        baseline_main_commit=BASE if baseline else None,
+        baseline_main_commit=BASE,
         commit_exists=exists,
+        main_reachable=main_reachable,
+        durable_ref_reachable=durable_ref_reachable,
+        provenance_manifest=provenance(value),
+        resolve_commit=metadata,
         **kwargs,
     )
 
@@ -283,7 +369,7 @@ def test_bootstrap_history_is_frozen_byte_for_byte(mutation: str) -> None:
 
 
 def test_missing_historical_commit_is_rejected() -> None:
-    with pytest.raises(RegistryValidationError, match="does not exist"):
+    with pytest.raises(RegistryValidationError, match="unavailable"):
         validate(registry(allocation(commit="f" * 40)))
 
 
@@ -423,13 +509,16 @@ def test_mission2_workflow_binds_base_and_rejects_phase5_paths() -> None:
     workflow = (
         Path(__file__).parents[2] / ".github" / "workflows" / "ci.yml"
     ).read_text(encoding="utf-8")
-    exact_base = "dc564949c7d19e0384655251cb40bda3199ddace"
+    exact_base = "".join(("dc564949", "c7d19e03", "84655251", "cb40bda3", "199ddace"))
     start = workflow.index(f"base={exact_base}")
     contract = workflow[start : workflow.index("          fi", start)]
     assert f"base={exact_base}" in contract
     assert 'git merge-base "$head" refs/remotes/origin/main' in contract
     assert 'base="$(git merge-base' not in contract
-    assert "2ffb2cfb9f6ac410cf4f75a7b4460ea95fc117c2" in contract
+    registry_blob = "".join(
+        ("2ffb2cfb", "9f6ac410", "cf4f75a7", "b4460ea9", "5fc117c2")
+    )
+    assert registry_blob in contract
     assert "'^institutional/founder-discovery/phase-5/'" in workflow
 
 
@@ -441,6 +530,9 @@ def test_committed_registry_preserves_bootstrap_and_has_no_lifecycle_instances()
         (root / "docs/AYO_DECISION_ID_REGISTRY.json").read_text(encoding="utf-8")
     )
     text = (root / "docs/AYO_DECISION_LOG.md").read_text(encoding="utf-8")
+    manifest = json.loads(
+        (root / "docs/AYO_AP_HISTORICAL_PROVENANCE.json").read_text(encoding="utf-8")
+    )
     report = validate_registry(
         value,
         text,
@@ -454,6 +546,8 @@ def test_committed_registry_preserves_bootstrap_and_has_no_lifecycle_instances()
             ).returncode
             == 0
         ),
+        provenance_manifest=manifest,
+        resolve_commit=lambda sha: _repository_metadata(root, sha),
     )
     assert (report.allocation_count, report.ap_id_count, report.collision_id_count) == (
         66,
@@ -472,6 +566,9 @@ def test_repository_candidate_uses_authoritative_main_baseline() -> None:
         (root / "docs/AYO_DECISION_ID_REGISTRY.json").read_text(encoding="utf-8")
     )
     text = (root / "docs/AYO_DECISION_LOG.md").read_text(encoding="utf-8")
+    manifest = json.loads(
+        (root / "docs/AYO_AP_HISTORICAL_PROVENANCE.json").read_text(encoding="utf-8")
+    )
     result = subprocess.run(
         ["git", "show", "refs/remotes/origin/main:docs/AYO_DECISION_ID_REGISTRY.json"],
         cwd=root,
@@ -489,5 +586,277 @@ def test_repository_candidate_uses_authoritative_main_baseline() -> None:
             ("dc564949", "c7d19e03", "84655251", "cb40bda3", "199ddace")
         ),
         commit_exists=lambda _: True,
+        provenance_manifest=manifest,
+        resolve_commit=lambda sha: _repository_metadata(root, sha),
     )
     assert value["allocations"] == baseline["allocations"]
+
+
+@pytest.mark.parametrize("field", ["commit_tree", "parent_shas", "commit_subject"])
+def test_manifest_rejects_live_object_metadata_mismatch(field: str) -> None:
+    value = registry(allocation())
+    manifest = provenance(value)
+    entry = manifest["entries"][0]
+    entry[field] = {
+        "commit_tree": chunks("f" * 40),
+        "parent_shas": [chunks("f" * 40)],
+        "commit_subject": "DRIFT",
+    }[field]
+    entry["manifest_entry_id"] = chunks(manifest_entry_id(entry))
+    with pytest.raises(RegistryValidationError, match="disagrees"):
+        validate_registry(
+            value,
+            "",
+            commit_exists=exists,
+            provenance_manifest=manifest,
+            resolve_commit=metadata,
+        )
+
+
+def test_manifest_rejects_unapproved_unavailable_object() -> None:
+    value = registry(allocation(commit="f" * 40))
+    manifest = provenance(value)
+    entry = manifest["entries"][0]
+    entry["provenance_class"] = "HISTORICAL_MANIFEST_ONLY"
+    entry["live_object_requirement"] = "APPROVED_PRE_CUTOVER_EXCEPTION"
+    entry["manifest_entry_id"] = chunks(manifest_entry_id(entry))
+    with pytest.raises(RegistryValidationError, match="approved exception"):
+        validate_registry(
+            value,
+            "",
+            commit_exists=exists,
+            provenance_manifest=manifest,
+            resolve_commit=metadata,
+        )
+
+
+def test_manifest_rejects_identity_and_entry_id_drift() -> None:
+    value = registry(allocation())
+    manifest = provenance(value)
+    manifest["entries"][0]["historical_identities"][0]["exact_title"] = "DRIFT"
+    with pytest.raises(RegistryValidationError, match="composite"):
+        validate_registry(
+            value,
+            "",
+            provenance_manifest=manifest,
+            resolve_commit=metadata,
+        )
+
+
+@pytest.mark.parametrize("mutation", ["delete", "duplicate", "lineage", "class"])
+def test_manifest_is_complete_unique_and_immutable(mutation: str) -> None:
+    value = registry(allocation())
+    manifest = provenance(value)
+    baseline = copy.deepcopy(manifest)
+    if mutation == "delete":
+        manifest["entries"] = []
+    elif mutation == "duplicate":
+        manifest["entries"].append(copy.deepcopy(manifest["entries"][0]))
+    elif mutation == "lineage":
+        manifest["entries"][0]["governed_lineage"] = "refs/heads/substitute"
+    else:
+        manifest["entries"][0]["provenance_class"] = "REMOTE_REF_REACHABLE"
+    with pytest.raises(RegistryValidationError):
+        validate_registry(
+            value,
+            "",
+            provenance_manifest=manifest,
+            baseline_provenance_manifest=baseline,
+            resolve_commit=metadata,
+        )
+
+
+def test_committed_manifest_uniformly_covers_bootstrap_history() -> None:
+    root = Path(__file__).parents[2]
+    value = json.loads((root / "docs/AYO_DECISION_ID_REGISTRY.json").read_text())
+    manifest = json.loads((root / "docs/AYO_AP_HISTORICAL_PROVENANCE.json").read_text())
+    assert len(manifest["entries"]) == 34
+    assert {entry["provenance_class"] for entry in manifest["entries"]} == {
+        "MAIN_REACHABLE",
+        "REMOTE_REF_REACHABLE",
+        "HISTORICAL_MANIFEST_ONLY",
+    }
+    assert (
+        sum(
+            entry["provenance_class"] == "HISTORICAL_MANIFEST_ONLY"
+            for entry in manifest["entries"]
+        )
+        == 2
+    )
+    assert sum(
+        len(entry["historical_identities"]) for entry in manifest["entries"]
+    ) == len(value["allocations"])
+
+
+def test_post_cutover_event_requires_live_git_authority() -> None:
+    value = registry(allocation())
+    value["forward_identity_events"] = [event(base="f" * 40)]
+    with pytest.raises(RegistryValidationError, match="does not exist"):
+        validate_registry(
+            value,
+            "",
+            commit_exists=exists,
+            provenance_manifest=provenance(value),
+            resolve_commit=metadata,
+        )
+
+
+def test_manifest_only_orphan_cannot_authorize_post_cutover_lifecycle() -> None:
+    orphan = "".join(("20b81a0e", "4f4e0606", "0525a33f", "3a5f1c76", "7f4b88f7"))
+    value = registry(allocation())
+    value["forward_identity_events"] = [event(base=orphan)]
+    with pytest.raises(RegistryValidationError, match="governed reachability"):
+        validate_registry(
+            value,
+            "",
+            baseline_main_commit=BASE,
+            commit_exists=lambda _sha: True,
+            main_reachable=lambda _sha, _main: False,
+            durable_ref_reachable=lambda _sha: False,
+            provenance_manifest=provenance(value),
+            resolve_commit=metadata,
+        )
+
+
+def test_arbitrary_live_object_and_wrong_main_are_rejected() -> None:
+    arbitrary = "f" * 40
+    value = registry(allocation())
+    value["forward_identity_events"] = [event(base=arbitrary)]
+    with pytest.raises(RegistryValidationError, match="governed reachability"):
+        validate_registry(
+            value,
+            "",
+            baseline_main_commit=BASE,
+            commit_exists=lambda _sha: True,
+            main_reachable=lambda _sha, main: main == "c" * 40,
+            durable_ref_reachable=lambda _sha: False,
+            provenance_manifest=provenance(value),
+            resolve_commit=metadata,
+        )
+
+
+@pytest.mark.parametrize("source", ["main", "durable"])
+def test_post_cutover_governed_reachability_is_accepted(source: str) -> None:
+    value = registry(allocation())
+    value["forward_identity_events"] = [event()]
+    validate(
+        value,
+        main_reachable=lambda sha, main: source == "main" and sha == main == BASE,
+        durable_ref_reachable=lambda sha: source == "durable" and sha == BASE,
+    )
+
+
+def _bandit_inventory(evidence: dict[str, Any]) -> tuple[list[str], str]:
+    rows = sorted(
+        "|".join(
+            (
+                item["test_id"],
+                item["issue_severity"],
+                item["issue_confidence"],
+                item["filename"].replace("\\", "/").lstrip("./"),
+                item["issue_text"],
+            )
+        )
+        for item in evidence["results"]
+    )
+    return rows, hashlib.sha256("\n".join(rows).encode()).hexdigest()
+
+
+def _validate_bandit_evidence(evidence: dict[str, Any], expected: str) -> None:
+    findings = evidence["results"]
+    rows, actual = _bandit_inventory(evidence)
+    totals = evidence["metrics"]["_totals"]
+    assert len(findings) == 3
+    assert sorted(item["test_id"] for item in findings) == ["B404", "B603", "B607"]
+    assert {
+        (item["issue_severity"], item["issue_confidence"]) for item in findings
+    } == {("LOW", "HIGH")}
+    assert actual == expected and len(rows) == 3
+    assert totals["nosec"] == totals["skipped_tests"] == 0
+    assert totals["SEVERITY.MEDIUM"] == totals["SEVERITY.HIGH"] == 0
+
+
+def test_validator_bandit_inventory_is_exact() -> None:
+    root = Path(__file__).parents[2]
+    result = subprocess.run(
+        [
+            "bandit",
+            "-c",
+            "pyproject.toml",
+            "-f",
+            "json",
+            "-q",
+            "tools/validate_ap_decision_registry.py",
+        ],
+        cwd=root,
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    evidence = json.loads(result.stdout)
+    assert result.returncode == 1
+    expected = "".join(
+        (
+            "08e68f3b",
+            "b3f9d1e9",
+            "c7ea85b5",
+            "146c0038",
+            "0ece5f27",
+            "4ae97325",
+            "14986e7e",
+            "b8875c7f",
+        )
+    )
+    _validate_bandit_evidence(evidence, expected)
+    assert (
+        "# nosec"
+        not in (root / "tools/validate_ap_decision_registry.py")
+        .read_text(encoding="utf-8")
+        .lower()
+    )
+
+
+def test_bandit_evidence_drift_is_rejected() -> None:
+    result = subprocess.run(
+        [
+            "bandit",
+            "-c",
+            "pyproject.toml",
+            "-f",
+            "json",
+            "-q",
+            "tools/validate_ap_decision_registry.py",
+        ],
+        cwd=Path(__file__).parents[2],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    pristine = json.loads(result.stdout)
+    _, expected = _bandit_inventory(pristine)
+    mutations = []
+    for field, value in (
+        ("issue_severity", "MEDIUM"),
+        ("issue_confidence", "MEDIUM"),
+        ("issue_text", "DRIFT"),
+    ):
+        item = copy.deepcopy(pristine)
+        item["results"][0][field] = value
+        mutations.append(item)
+    missing = copy.deepcopy(pristine)
+    missing["results"].pop()
+    mutations.append(missing)
+    fourth = copy.deepcopy(pristine)
+    fourth["results"].append(copy.deepcopy(fourth["results"][0]))
+    mutations.append(fourth)
+    suppressed = copy.deepcopy(pristine)
+    suppressed["metrics"]["_totals"]["nosec"] = 1
+    mutations.append(suppressed)
+    elevated = copy.deepcopy(pristine)
+    elevated["metrics"]["_totals"]["SEVERITY.HIGH"] = 1
+    mutations.append(elevated)
+    for evidence in mutations:
+        with pytest.raises(AssertionError):
+            _validate_bandit_evidence(evidence, expected)

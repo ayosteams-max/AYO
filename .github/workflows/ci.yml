@@ -273,7 +273,7 @@ jobs:
         run: |
           set -euo pipefail
           expected_helper_blob=287462f26399bdeb4964030fa5aac6170fb1a607
-          expected_ci_normalized_sha256="a55fc8fe7b590097ec0d02a3eda2465a""c5650c3bbfad2a5be4bcbfc4fa61e52a"
+          expected_ci_normalized_sha256="5969f1e1946d5432433d0b5da2e71c5e""5de2edb397152d8958268151c2c04d13"
           p="$expected_ci_normalized_sha256"
           helper_blob="$(git rev-parse "$TESTED_COMMIT_SHA:tools/validate_ci_governance_evidence.py" 2>/dev/null || true)"
           [[ "$helper_blob" == "$expected_helper_blob" ]] || {
@@ -307,9 +307,9 @@ jobs:
               registry_test_blob="$(git rev-parse "$registry_candidate:tests/governance/test_ap_decision_registry.py")"
               registry_trusted_base_test_blob="$(git rev-parse "$registry_candidate:tests/governance/test_ci_trusted_comparison_base.py" 2>/dev/null || true)"
               registry_validator_blob="$(git rev-parse "$registry_candidate:tools/validate_ap_decision_registry.py")"
-              expected_ap_registry_ci_normalized_sha256="319a8a92f5728cdf""5841ee1e6c1a8867""6377c4b9fa032338""4f1cab0a136c34a5"
-              expected_ap_registry_active_state_ci_normalized_sha256="319a8a92f5728cdf""5841ee1e6c1a8867""6377c4b9fa032338""4f1cab0a136c34a5"
-              expected_ap_main_ci_sha256="319a8a92f5728cdf5841ee1e6c1a8867""6377c4b9fa0323384f1cab0a136c34a5"
+              expected_ap_registry_ci_normalized_sha256="a2f5aaed57789b3e""451a527b074f6723""a085621eabab5720""f909194e1785bc7a"
+              expected_ap_registry_active_state_ci_normalized_sha256="a2f5aaed57789b3e""451a527b074f6723""a085621eabab5720""f909194e1785bc7a"
+              expected_ap_main_ci_sha256="a2f5aaed57789b3e451a527b074f6723""a085621eabab5720f909194e1785bc7a"
               ap_registry_ci_normalized_sha256="$(python tools/validate_ci_governance_evidence.py workflow-commitment --scope ap --workflow .github/workflows/ci.yml)"
               if [[ "$registry_blob" == d0d84754a49e9f87f370ed0e7d49de026d8fc5bc \
                 && "$registry_decision_blob" == 8533182c326e3d625f96bdac1410dbdb2f774158 \
@@ -430,8 +430,8 @@ jobs:
             *)
               candidate="$TESTED_COMMIT_SHA"
               fixed=fee08725153496edb2020d543c8cf24c317b48f6
-              expected_ci_governance_extraction_sha256="319a8a92f5728cdf5841ee1e6c1a8867""6377c4b9fa0323384f1cab0a136c34a5"
-              expected_registry_reconciliation_enablement_sha256="319a8a92f5728cdf5841ee1e6c1a8867""6377c4b9fa0323384f1cab0a136c34a5"
+              expected_ci_governance_extraction_sha256="a2f5aaed57789b3e451a527b074f6723""a085621eabab5720f909194e1785bc7a"
+              expected_registry_reconciliation_enablement_sha256="a2f5aaed57789b3e451a527b074f6723""a085621eabab5720f909194e1785bc7a"
               normalized="$(python tools/validate_ci_governance_evidence.py workflow-commitment --scope ap --workflow .github/workflows/ci.yml)"
               [[ "$(python tools/validate_ci_governance_evidence.py workflow-commitment --scope pip --workflow .github/workflows/ci.yml)" == "$p" ]] || exit 1
               mapfile -t governed_paths < <(git diff --name-only "$fixed" "$candidate")
@@ -443,9 +443,9 @@ jobs:
                 && "$helper_test" == 39a019a6ceb79f08c3c532003c64104fbdb7fa89 \
                 && "$normalized" == "$expected_ci_governance_extraction_sha256" ]]; then
                 mode=ci-governance-evidence-extraction
-              elif [[ "${enablement_paths[*]}" == '.github/workflows/ci.yml docs/AYO_DECISION_ID_REGISTRY.json docs/AYO_DECISION_LOG.md tests/governance/test_ap_decision_registry.py tools/validate_ap_decision_registry.py' \
+              elif [[ "${enablement_paths[*]}" == '.github/workflows/ci.yml docs/AYO_AP_HISTORICAL_PROVENANCE.json docs/AYO_DECISION_ID_REGISTRY.json docs/AYO_DECISION_LOG.md tests/governance/test_ap_decision_registry.py tools/validate_ap_decision_registry.py' \
                 && "$normalized" == "$expected_registry_reconciliation_enablement_sha256" \
-                && "$(git rev-parse "$candidate":{docs/AYO_DECISION_ID_REGISTRY.json,docs/AYO_DECISION_LOG.md,tests/governance/test_ap_decision_registry.py,tools/validate_ap_decision_registry.py} | tr '\n' ' ')" == 'a8a9797f6b63612496f83f841cc089ca3bd37af4 702f1e85691b82a31397d6ff1bea468e0ae663b8 0d9a475d340e743b5a14c27e6f337beba3f9b1f9 89746395e9aa819ddaebf7191c0f77ab3214bd02 ' ]]; then
+                && "$(git rev-parse "$candidate":{docs/AYO_AP_HISTORICAL_PROVENANCE.json,docs/AYO_DECISION_ID_REGISTRY.json,docs/AYO_DECISION_LOG.md,tests/governance/test_ap_decision_registry.py,tools/validate_ap_decision_registry.py} | tr '\n' ' ')" == '2220b1feb90469c980e7661d366f5fd1fb1b616c a8a9797f6b63612496f83f841cc089ca3bd37af4 9becdd2034a1c42b39557ce34cd5d02874bfacae 4dcaf8ba630c6105f64209863577c6c048c141b4 f39cb6730ed8a80a373538f1cfe2e848fe3bc3d8 ' ]]; then
                 mode=ap-decision-registry-reconciliation-enablement
               else
                 exit 1
@@ -494,16 +494,18 @@ jobs:
             base=dc564949c7d19e0384655251cb40bda3199ddace
             [[ "${#parents[@]}" -ne 2 || "${parents[0]}" == "$base" ]] || exit 1
             [[ "$(git merge-base "$head" refs/remotes/origin/main)" == "$base" ]] || exit 1
-            subject='governance: enable AP registry reconciliation lifecycle'
-            expected=(.github/workflows/ci.yml docs/AYO_DECISION_ID_REGISTRY.json docs/AYO_DECISION_LOG.md tests/governance/test_ap_decision_registry.py tools/validate_ap_decision_registry.py)
-            head_expected=("${expected[@]}")
+            subject='governance: bind historical AP provenance manifest'
+            expected=(.github/workflows/ci.yml docs/AYO_AP_HISTORICAL_PROVENANCE.json docs/AYO_DECISION_ID_REGISTRY.json docs/AYO_DECISION_LOG.md tests/governance/test_ap_decision_registry.py tools/validate_ap_decision_registry.py)
+            head_expected=(.github/workflows/ci.yml docs/AYO_AP_HISTORICAL_PROVENANCE.json docs/AYO_DECISION_LOG.md tests/governance/test_ap_decision_registry.py tools/validate_ap_decision_registry.py)
+            [[ "$(git rev-list --reverse "$base..$head")" == $'fc2953e0d1905514d2f6b45130429fa14a161f26\n'"$head" && "$(git rev-parse "$head^")" == fc2953e0d1905514d2f6b45130429fa14a161f26 ]] || exit 1
             [[ "$(git rev-parse "$base:docs/AYO_DECISION_ID_REGISTRY.json")" == 2ffb2cfb9f6ac410cf4f75a7b4460ea95fc117c2 ]] || exit 1
+            for x in docs/AYO_AP_HISTORICAL_PROVENANCE.json:2220b1feb90469c980e7661d366f5fd1fb1b616c docs/AYO_DECISION_LOG.md:9becdd2034a1c42b39557ce34cd5d02874bfacae tests/governance/test_ap_decision_registry.py:4dcaf8ba630c6105f64209863577c6c048c141b4 tools/validate_ap_decision_registry.py:f39cb6730ed8a80a373538f1cfe2e848fe3bc3d8; do [[ "$(git rev-parse "$head:${x%:*}")" == "${x#*:}" ]] || exit 1; done
           fi
           [[ "$(git merge-base "$head" "$base")" == "$base" \
             && "$(git show -s --format=%s "$head")" == "$subject" ]] || {
             echo GOV_ANCESTRY_DRIFT >&2; exit 1; }
-          [[ "$EVIDENCE_MODE" == ci-governance-evidence-extraction \
-            || "$(git rev-list --count "$base..$head")" == 1 && "$(git rev-parse "$head^")" == "$base" ]] || {
+          [[ "$EVIDENCE_MODE" != ci-governance-evidence-extraction \
+            || "$(git rev-list --count "$base..$head")" == 5 ]] || {
             echo GOV_ANCESTRY_DRIFT >&2; exit 1; }
           mapfile -t head_paths < <(git diff-tree --no-commit-id --name-only -r "$head")
           mapfile -t aggregate < <(git diff --name-only "$base" "$candidate")
@@ -513,19 +515,10 @@ jobs:
           git diff --quiet "$base" "$candidate" -- BACKEND database/migrations AYO-Mobile \
             .secrets.baseline pyproject.toml uv.lock || {
             echo GOV_SURFACE_DRIFT >&2; exit 1; }
-          BASE_SHA="$base" CANDIDATE_SHA="$candidate" EVIDENCE_MODE="$EVIDENCE_MODE" python - <<'PY'
-          import json,os,subprocess
-          from collections import Counter
-          def load(x):return json.loads(subprocess.check_output(["git","show",f"{x}:docs/AYO_DECISION_ID_REGISTRY.json"]))
-          b,c=map(load,(os.environ["BASE_SHA"],os.environ["CANDIDATE_SHA"]));a=c.get("allocations");e=os.environ["EVIDENCE_MODE"].startswith("ci-")
-          if c.get("schema_version")!=2 or c.get("cutover",{}).get("status")!="ACTIVE" or not isinstance(a,list):raise SystemExit("state drift")
-          if any(x.get("ap_id") in {"AP-099","AP-100"} for x in a):raise SystemExit("AP drift")
-          if c.get("forward_identity_events") or c.get("collision_reconciliations"):raise SystemExit("event drift")
-          if (e and c!=b) or (not e and a!=b.get("allocations")):raise SystemExit("registry drift")
-          n=Counter(x.get("ap_id") for x in a)
-          if (len(a),len(n),sum(x>1 for x in n.values()))!=(66,51,13):raise SystemExit("inventory drift")
-          PY
-          [[ "$EVIDENCE_MODE" == ci-* ]] || uv run --locked python tools/validate_ap_decision_registry.py --enablement-only --baseline-registry <(git show "$base:docs/AYO_DECISION_ID_REGISTRY.json") --baseline-main-commit "$base"
+          if [[ "$EVIDENCE_MODE" != ci-* ]]; then
+            git fetch --no-tags origin refs/heads/agent/booking-consent-ethiopia-written-decision-pack refs/heads/backend-certification-checkpoint
+            uv run --locked python tools/validate_ap_decision_registry.py --enablement-only --baseline-registry <(git show "$base:docs/AYO_DECISION_ID_REGISTRY.json") --baseline-main-commit "$base"
+          fi
           git ls-tree -r --name-only "$candidate" | grep -q '^institutional/founder-discovery/phase-5/' && exit 1
           uv run --locked pytest -q --no-cov tests/governance/test_ci_governance_evidence.py
 
