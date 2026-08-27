@@ -294,15 +294,16 @@ jobs:
             382a299236787d20a567cc5934a8f82d0147e7ad)
               mode=booking-complete-replay-equivalence
               ;;
-            efd4172d0ff7e790e36af9c7fecddafb426b0b67|cf01f4061000f081cf8fe54fbc29e168f4b6f127)
+            efd4172d0ff7e790e36af9c7fecddafb426b0b67|cf01f4061000f081cf8fe54fbc29e168f4b6f127|edd03e3f8c41e245bdb66861fddf3f79aab3b959)
               registry_candidate="$TESTED_COMMIT_SHA"
               registry_blob="$(git rev-parse "$registry_candidate:docs/AYO_DECISION_ID_REGISTRY.json")"
               registry_decision_blob="$(git rev-parse "$registry_candidate:docs/AYO_DECISION_LOG.md")"
               registry_test_blob="$(git rev-parse "$registry_candidate:tests/governance/test_ap_decision_registry.py")"
               registry_trusted_base_test_blob="$(git rev-parse "$registry_candidate:tests/governance/test_ci_trusted_comparison_base.py" 2>/dev/null || true)"
               registry_validator_blob="$(git rev-parse "$registry_candidate:tools/validate_ap_decision_registry.py")"
-              expected_ap_registry_ci_normalized_sha256="c3cbfa04eeba9beb""f4bcf318c73d85da""8c2ed87af9ddf9d6""bfcae9e7fbd6873e"
-              expected_ap_registry_active_state_ci_normalized_sha256="c3cbfa04eeba9beb""f4bcf318c73d85da""8c2ed87af9ddf9d6""bfcae9e7fbd6873e"
+              expected_ap_registry_ci_normalized_sha256="19f5666ca6eb7968""e6dd00c95c26114b""52813516a8f1c5ff""db7d025ba81c9509"
+              expected_ap_registry_active_state_ci_normalized_sha256="19f5666ca6eb7968""e6dd00c95c26114b""52813516a8f1c5ff""db7d025ba81c9509"
+              expected_ap_main_ci_sha256="19f5666ca6eb7968e6dd00c95c26114b""52813516a8f1c5ffdb7d025ba81c9509"
               ap_registry_ci_normalized_sha256="$(python - <<'PY'
           import hashlib
           import re
@@ -312,15 +313,18 @@ jobs:
           markers = (
               rb'expected_ci_normalized_sha256="[0-9a-f]{32}""[0-9a-f]{32}"',
               rb'expected_ap_registry_ci_normalized_sha256="[0-9a-f]{16}""[0-9a-f]{16}""[0-9a-f]{16}""[0-9a-f]{16}"',
-              rb'expected_ap_registry_active_state_ci_normalized_sha256="[0-9a-f]{16}""[0-9a-f]{16}""[0-9a-f]{16}""[0-9a-f]{16}"',
+                rb'expected_ap_registry_active_state_ci_normalized_sha256="[0-9a-f]{16}""[0-9a-f]{16}""[0-9a-f]{16}""[0-9a-f]{16}"',
+                rb'expected_ap_main_ci_sha256="[0-9a-f]{32}""[0-9a-f]{32}"',
           )
           replacements = (
               b'expected_ci_normalized_sha256="00000000000000000000000000000000"'
               b'"00000000000000000000000000000000"',
               b'expected_ap_registry_ci_normalized_sha256="0000000000000000"'
               b'"0000000000000000""0000000000000000""0000000000000000"',
-              b'expected_ap_registry_active_state_ci_normalized_sha256="0000000000000000"'
-              b'"0000000000000000""0000000000000000""0000000000000000"',
+                b'expected_ap_registry_active_state_ci_normalized_sha256="0000000000000000"'
+                b'"0000000000000000""0000000000000000""0000000000000000"',
+                b'expected_ap_main_ci_sha256="00000000000000000000000000000000"'
+                b'"00000000000000000000000000000000"',
           )
           normalized = data
           for marker, replacement in zip(markers, replacements, strict=True):
@@ -339,10 +343,12 @@ jobs:
               elif [[ "$registry_blob" == 2ffb2cfb9f6ac410cf4f75a7b4460ea95fc117c2 \
                 && "$registry_decision_blob" == 8533182c326e3d625f96bdac1410dbdb2f774158 \
                 && "$registry_test_blob" == 9f15b8c5e8591c7f72730c20431a88a4aa932144 \
-                && "$registry_trusted_base_test_blob" == 0fd58b8d7deecc09372068c9763c1b21a06ab4e5 \
-                && "$registry_validator_blob" == 0206e15654a0d4d57275476bfa452bee15c2e2bf \
-                && "$ap_registry_ci_normalized_sha256" == "$expected_ap_registry_active_state_ci_normalized_sha256" ]]; then
-                mode=ap-registry-active-state-correction
+                && "$registry_validator_blob" == 0206e15654a0d4d57275476bfa452bee15c2e2bf ]]; then
+                case "$registry_trusted_base_test_blob|$ap_registry_ci_normalized_sha256" in
+                  0fd58b8d7deecc09372068c9763c1b21a06ab4e5\|"$expected_ap_registry_active_state_ci_normalized_sha256") mode=ap-registry-active-state-correction ;;
+                  600dbcab98b0e57e16b562bcc5699e420610c413\|"$expected_ap_main_ci_sha256") mode=ap-registry-active-state-main-ci-correction ;;
+                  *) echo AP_STATE_ID_DRIFT >&2; exit 1 ;;
+                esac
               else
                 echo "Unreviewed AP-registry candidate identity" >&2
                 exit 1
@@ -353,7 +359,7 @@ jobs:
               dependency_pyproject_blob="$(git rev-parse "$dependency_candidate:pyproject.toml")"
               dependency_lock_blob="$(git rev-parse "$dependency_candidate:uv.lock")"
               dependency_decision_blob="$(git rev-parse "$dependency_candidate:docs/AYO_DECISION_LOG.md")"
-              expected_ci_normalized_sha256="1b771ba73c0343ef5d1b18856bfbbb0e""6cafe0bade6b78668a9eeefee9dd07b2"
+              expected_ci_normalized_sha256="64b2eb8bcbed99102af98599a98ccac5""1a9c92c836bd508ff5cf9ebb83171889"
               ci_normalized_sha256="$(python - <<'PY'
           import hashlib
           import re
@@ -365,6 +371,7 @@ jobs:
               re.compile(rb'expected_ci_normalized_sha256="[0-9a-f]{32}""[0-9a-f]{32}"'),
               re.compile(rb'expected_ap_registry_ci_normalized_sha256="[0-9a-f]{16}""[0-9a-f]{16}""[0-9a-f]{16}""[0-9a-f]{16}"'),
               re.compile(rb'expected_ap_registry_active_state_ci_normalized_sha256="[0-9a-f]{16}""[0-9a-f]{16}""[0-9a-f]{16}""[0-9a-f]{16}"'),
+              re.compile(rb'expected_ap_main_ci_sha256="[0-9a-f]{32}""[0-9a-f]{32}"'),
           )
           if any(len(pattern.findall(data)) != 1 for pattern in patterns):
               raise SystemExit("pip-remediation workflow normalization marker drift")
@@ -611,57 +618,70 @@ jobs:
           echo "Exact AP decision-registry landing identity: PASS"
 
       - name: Bind exact AP registry active-state correction identity
-        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'ap-registry-active-state-correction'
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && (steps.evidence_contract.outputs.mode == 'ap-registry-active-state-correction' || steps.evidence_contract.outputs.mode == 'ap-registry-active-state-main-ci-correction')
         env:
           CANDIDATE_SHA: ${{ env.TESTED_COMMIT_SHA }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_REF: ${{ github.ref }}
+          EVENT_BEFORE: ${{ github.event.before || '' }}
+          EVIDENCE_MODE: ${{ steps.evidence_contract.outputs.mode }}
         run: |
           set -euo pipefail
           candidate="$CANDIDATE_SHA"
           base=6b94c45187af70f176d6a98d40742187ceaf43c8
-          state_commit=3277510460b5af71773dda62a4db69cd739433f3
-          admission_commit=8aa0664a904384d3697ab12cd306a2f02f6fa8ea
-          comparison_commit=5fe9b401ae1ca4218c40f1a27a8f18270fa7b461
-          state_subject='governance: record active AP registry state'
-          admission_subject='ci: admit AP registry active-state correction'
-          comparison_subject='ci: bind AP registry state push comparison base'
-          subject='ci: extract trusted-base controls from workflow'
-          [[ "$candidate" =~ ^[0-9a-f]{40}$ \
-            && "$(git merge-base "$candidate" "$base")" == "$base" \
-            && "$(git rev-list --count "$base..$candidate")" == 4 \
-            && "$(git rev-parse "$candidate^")" == "$comparison_commit" \
-            && "$(git rev-parse "$comparison_commit^")" == "$admission_commit" \
-            && "$(git rev-parse "$admission_commit^")" == "$state_commit" \
-            && "$(git rev-parse "$state_commit^")" == "$base" \
-            && "$(git show -s --format=%s "$state_commit")" == "$state_subject" \
-            && "$(git show -s --format=%s "$admission_commit")" == "$admission_subject" \
-            && "$(git show -s --format=%s "$comparison_commit")" == "$comparison_subject" \
-            && "$(git show -s --format=%s "$candidate")" == "$subject" ]] || {
-            echo "AP-registry active-state ancestry drift" >&2; exit 1; }
-          mapfile -t state_changed < <(git diff-tree --no-commit-id --name-only -r "$state_commit")
-          [[ "${#state_changed[@]}" -eq 1 \
-            && "${state_changed[0]}" == docs/AYO_DECISION_ID_REGISTRY.json ]] || {
-            echo "AP-registry active-state commit path drift" >&2; exit 1; }
-          for workflow_commit in "$admission_commit" "$comparison_commit"; do
-            mapfile -t workflow_changed < <(git diff-tree --no-commit-id --name-only -r "$workflow_commit")
-            [[ "${#workflow_changed[@]}" -eq 1 \
-              && "${workflow_changed[0]}" == .github/workflows/ci.yml ]] || {
-              echo "AP-registry active-state CI commit path drift" >&2; exit 1; }
-          done
-          mapfile -t extraction_changed < <(git diff-tree --no-commit-id --name-only -r "$candidate")
-          expected_extraction=(.github/workflows/ci.yml tests/governance/test_ci_trusted_comparison_base.py)
-          [[ "${#extraction_changed[@]}" -eq 2 \
-            && "${extraction_changed[*]}" == "${expected_extraction[*]}" ]] || {
-            echo "AP-registry active-state extraction commit path drift" >&2; exit 1; }
-          expected=(.github/workflows/ci.yml docs/AYO_DECISION_ID_REGISTRY.json tests/governance/test_ci_trusted_comparison_base.py)
-          mapfile -t changed < <(git diff --name-only "$base" "$candidate")
-          [[ "${#changed[@]}" -eq 3 && "${changed[*]}" == "${expected[*]}" ]] || {
-            echo "AP-registry active-state exact three-path manifest drift" >&2; exit 1; }
+          feature=a6e4bb52bf765e9846c75b7b32454aac9c97453d
+          activation_merge=a765a3e6c4a4e9202fb4f1a770e5a5daf2dec0b1
+          active_tree=610c6b04125dcb67bb5089ae83246e22c9e6c456
+          fix_subject='ci: bind active-state MyPy modes'
+          tests_id=cf01f4061000f081cf8fe54fbc29e168f4b6f127
+          trusted_test=0fd58b8d7deecc09372068c9763c1b21a06ab4e5
+          if [[ "$EVIDENCE_MODE" == ap-registry-active-state-correction ]]; then
+            [[ "$(git merge-base "$feature" "$base")" == "$base" \
+              && "$(git rev-list --count "$base..$feature")" == 4 ]] || {
+              echo "AP-registry active-state ancestry drift" >&2; exit 1; }
+            if [[ "$candidate" == "$activation_merge" ]]; then
+              mapfile -t merge_parents < <(git show -s --format=%P "$candidate" | tr ' ' '\n')
+              [[ "$EVENT_NAME" == push && "$EVENT_REF" == refs/heads/main \
+                && "$EVENT_BEFORE" == "$base" && "${merge_parents[*]}" == "$base $feature" \
+                && "$(git rev-parse "$candidate^{tree}")" == "$active_tree" \
+                && "$(git rev-parse "$feature^{tree}")" == "$active_tree" ]] || {
+                echo AP_STATE_MERGE_DRIFT >&2; exit 1; }
+            else
+              [[ "$candidate" == "$feature" ]] || { echo AP_STATE_CONTEXT_DRIFT >&2; exit 1; }
+            fi
+            expected=(.github/workflows/ci.yml docs/AYO_DECISION_ID_REGISTRY.json tests/governance/test_ci_trusted_comparison_base.py)
+            scope_base="$base"
+          else
+            tests_id=edd03e3f8c41e245bdb66861fddf3f79aab3b959
+            trusted_test=600dbcab98b0e57e16b562bcc5699e420610c413
+            scope_base="$activation_merge"
+            expected=(.github/workflows/ci.yml tests/governance/test_ci_trusted_comparison_base.py)
+            mapfile -t parents < <(git show -s --format=%P "$candidate" | tr ' ' '\n')
+            correction_head="$candidate"
+            if [[ "${#parents[@]}" -eq 2 ]]; then
+              correction_head="${parents[1]}"
+              [[ "$EVENT_NAME" == push && "$EVENT_REF" == refs/heads/main \
+                && "$EVENT_BEFORE" == "${parents[0]}" && "${parents[0]}" == "$scope_base" \
+                && "$(git rev-parse "$candidate^{tree}")" == "$(git rev-parse "$correction_head^{tree}")" ]] || {
+                echo AP_MAIN_CI_MERGE_DRIFT >&2; exit 1; }
+            elif [[ "${#parents[@]}" -ne 1 || "${parents[0]}" != 2dd80f73ee3e8db4d91e517ec2b516240b3c51a5 ]]; then
+              echo AP_MAIN_CI_CANDIDATE_DRIFT >&2; exit 1
+            fi
+            mapfile -t correction_paths < <(git diff-tree --no-commit-id --name-only -r "$correction_head")
+            [[ "$(git rev-parse "$correction_head^")" == 2dd80f73ee3e8db4d91e517ec2b516240b3c51a5 \
+              && "$(git show -s --format=%s "$correction_head")" == "$fix_subject" \
+              && "${correction_paths[*]}" == .github/workflows/ci.yml ]] || {
+              echo AP_MAIN_CI_ID_DRIFT >&2; exit 1; }
+          fi
+          mapfile -t changed < <(git diff --name-only "$scope_base" "$candidate")
+          [[ "${#changed[@]}" -eq "${#expected[@]}" && "${changed[*]}" == "${expected[*]}" ]] || {
+            echo AP_STATE_PATH_DRIFT >&2; exit 1; }
           [[ "$(git rev-parse "$base:docs/AYO_DECISION_ID_REGISTRY.json")" == d0d84754a49e9f87f370ed0e7d49de026d8fc5bc \
             && "$(git rev-parse "$candidate:docs/AYO_DECISION_ID_REGISTRY.json")" == 2ffb2cfb9f6ac410cf4f75a7b4460ea95fc117c2 \
             && "$(git rev-parse "$candidate:docs/AYO_DECISION_LOG.md")" == 8533182c326e3d625f96bdac1410dbdb2f774158 \
-            && "$(git rev-parse "$candidate:tests")" == cf01f4061000f081cf8fe54fbc29e168f4b6f127 \
+            && "$(git rev-parse "$candidate:tests")" == "$tests_id" \
             && "$(git rev-parse "$candidate:tests/governance/test_ap_decision_registry.py")" == 9f15b8c5e8591c7f72730c20431a88a4aa932144 \
-            && "$(git rev-parse "$candidate:tests/governance/test_ci_trusted_comparison_base.py")" == 0fd58b8d7deecc09372068c9763c1b21a06ab4e5 \
+            && "$(git rev-parse "$candidate:tests/governance/test_ci_trusted_comparison_base.py")" == "$trusted_test" \
             && "$(git rev-parse "$candidate:tools/validate_ap_decision_registry.py")" == 0206e15654a0d4d57275476bfa452bee15c2e2bf \
             && "$(git rev-parse "$candidate:BACKEND")" == 62500035ef60d94ccc6333f25cb3aa79ff5c3f21 \
             && "$(git rev-parse "$candidate:database/migrations")" == 253ecedebe58c31077a0baa7d2532adc46464f70 \
@@ -723,7 +743,7 @@ jobs:
           echo "Exact AP registry active-state correction identity: PASS"
 
       - name: Validate AP decision registry candidate
-        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && (steps.evidence_contract.outputs.mode == 'ap-decision-registry-main-landing' || steps.evidence_contract.outputs.mode == 'ap-registry-active-state-correction')
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && (steps.evidence_contract.outputs.mode == 'ap-decision-registry-main-landing' || steps.evidence_contract.outputs.mode == 'ap-registry-active-state-correction' || steps.evidence_contract.outputs.mode == 'ap-registry-active-state-main-ci-correction')
         run: |
           set -euo pipefail
           uv run --locked python tools/validate_ap_decision_registry.py
@@ -1589,6 +1609,7 @@ jobs:
         id: trusted_comparison_base
         env:
           EVENT_NAME: ${{ github.event_name }}
+          EVENT_REF: ${{ github.ref }}
           EVENT_BEFORE: ${{ github.event.before || '' }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || '' }}
@@ -1636,51 +1657,53 @@ jobs:
               fi
               if [[ "$EVIDENCE_MODE" == "ap-registry-active-state-correction" ]]; then
                 expected_base=6b94c45187af70f176d6a98d40742187ceaf43c8
-                state_commit=3277510460b5af71773dda62a4db69cd739433f3
-                admission_commit=8aa0664a904384d3697ab12cd306a2f02f6fa8ea
-                comparison_commit=5fe9b401ae1ca4218c40f1a27a8f18270fa7b461
-                state_subject='governance: record active AP registry state'
-                admission_subject='ci: admit AP registry active-state correction'
-                correction_subject='ci: bind AP registry state push comparison base'
-                extraction_subject='ci: extract trusted-base controls from workflow'
+                feature=a6e4bb52bf765e9846c75b7b32454aac9c97453d
+                merged=a765a3e6c4a4e9202fb4f1a770e5a5daf2dec0b1
+                tree=610c6b04125dcb67bb5089ae83246e22c9e6c456
                 git fetch --no-tags origin \
                   refs/heads/main:refs/remotes/origin/coverage-main
                 authoritative_main="$(git rev-parse refs/remotes/origin/coverage-main)"
                 require_commit "$authoritative_main" "authoritative remote main SHA"
-                [[ "$authoritative_main" == "$expected_base" \
-                  && "$(git merge-base "$EVENT_HEAD_SHA" "$authoritative_main")" == "$expected_base" \
-                  && "$(git rev-list --count "$expected_base..$EVENT_HEAD_SHA")" == 4 \
-                  && "$(git rev-parse "$EVENT_HEAD_SHA^")" == "$comparison_commit" \
-                  && "$(git rev-parse "$comparison_commit^")" == "$admission_commit" \
-                  && "$(git rev-parse "$admission_commit^")" == "$state_commit" \
-                  && "$(git rev-parse "$state_commit^")" == "$expected_base" \
-                  && "$(git show -s --format=%s "$state_commit")" == "$state_subject" \
-                  && "$(git show -s --format=%s "$admission_commit")" == "$admission_subject" \
-                  && "$(git show -s --format=%s "$comparison_commit")" == "$correction_subject" \
-                  && "$(git show -s --format=%s "$EVENT_HEAD_SHA")" == "$extraction_subject" ]] || {
-                  echo "AP-registry active-state trusted topology drift" >&2; exit 1; }
-                mapfile -t state_paths < <(git diff-tree --no-commit-id --name-only -r "$state_commit")
-                [[ "${#state_paths[@]}" -eq 1 \
-                  && "${state_paths[0]}" == docs/AYO_DECISION_ID_REGISTRY.json ]] || {
-                  echo "AP-registry active-state state-commit path drift" >&2; exit 1; }
-                for workflow_commit in "$admission_commit" "$comparison_commit"; do
-                  mapfile -t workflow_paths < <(git diff-tree --no-commit-id --name-only -r "$workflow_commit")
-                  [[ "${#workflow_paths[@]}" -eq 1 \
-                    && "${workflow_paths[0]}" == .github/workflows/ci.yml ]] || {
-                    echo "AP-registry active-state workflow-commit path drift" >&2; exit 1; }
-                done
-                mapfile -t extraction_paths < <(git diff-tree --no-commit-id --name-only -r "$EVENT_HEAD_SHA")
-                expected_extraction_paths=(.github/workflows/ci.yml tests/governance/test_ci_trusted_comparison_base.py)
-                [[ "${#extraction_paths[@]}" -eq 2 \
-                  && "${extraction_paths[*]}" == "${expected_extraction_paths[*]}" ]] || {
-                  echo "AP-registry active-state extraction path drift" >&2; exit 1; }
                 expected_paths=(.github/workflows/ci.yml docs/AYO_DECISION_ID_REGISTRY.json tests/governance/test_ci_trusted_comparison_base.py)
+                if [[ "$EVENT_HEAD_SHA" == "$merged" ]]; then
+                  mapfile -t parents < <(git show -s --format=%P "$EVENT_HEAD_SHA" | tr ' ' '\n')
+                  [[ "$EVENT_REF" == refs/heads/main && "$EVENT_BEFORE" == "$expected_base" \
+                    && "$authoritative_main" == "$merged" && "${parents[*]}" == "$expected_base $feature" \
+                    && "$(git merge-base "$feature" "$expected_base")" == "$expected_base" \
+                    && "$(git rev-parse "$EVENT_HEAD_SHA^{tree}")" == "$tree" \
+                    && "$(git rev-parse "$feature^{tree}")" == "$tree" ]] || {
+                    echo "AP active-state main-merge drift" >&2; exit 1; }
+                else
+                  [[ "$EVENT_HEAD_SHA" == "$feature" && "$authoritative_main" == "$expected_base" ]] || {
+                    echo AP_STATE_FEATURE_DRIFT >&2; exit 1; }
+                fi
                 mapfile -t aggregate_paths < <(git diff --name-only "$expected_base" "$EVENT_HEAD_SHA")
-                [[ "${#aggregate_paths[@]}" -eq 3 \
-                  && "${aggregate_paths[*]}" == "${expected_paths[*]}" ]] || {
-                  echo "AP-registry active-state aggregate path drift" >&2; exit 1; }
+                [[ "${aggregate_paths[*]}" == "${expected_paths[*]}" ]] || { echo AP_STATE_SCOPE_DRIFT >&2; exit 1; }
                 comparison_sha="$expected_base"
                 mode=verified-ap-registry-active-state-base
+              elif [[ "$EVIDENCE_MODE" == "ap-registry-active-state-main-ci-correction" ]]; then
+                expected_base=a765a3e6c4a4e9202fb4f1a770e5a5daf2dec0b1
+                r=2dd80f73ee3e8db4d91e517ec2b516240b3c51a5
+                git fetch --no-tags origin refs/heads/main:refs/remotes/origin/coverage-main
+                authoritative_main="$(git rev-parse refs/remotes/origin/coverage-main)"
+                mapfile -t parents < <(git show -s --format=%P "$EVENT_HEAD_SHA" | tr ' ' '\n')
+                correction_head="$EVENT_HEAD_SHA"
+                if [[ "$EVENT_REF" == refs/heads/main ]]; then
+                  [[ "${#parents[@]}" -eq 2 && "${parents[0]}" == "$EVENT_BEFORE" \
+                    && "$EVENT_BEFORE" == "$expected_base" && "$authoritative_main" == "$EVENT_HEAD_SHA" ]] || {
+                    echo AP_MAIN_CI_SOURCE_DRIFT >&2; exit 1; }
+                  correction_head="${parents[1]}"
+                  [[ "$(git rev-parse "$EVENT_HEAD_SHA^{tree}")" == "$(git rev-parse "$correction_head^{tree}")" ]] || {
+                    echo AP_MAIN_CI_MERGE_CONTENT >&2; exit 1; }
+                else
+                  [[ "${#parents[@]}" -eq 1 && "${parents[0]}" == "$r" \
+                    && "$authoritative_main" == "$expected_base" ]] || {
+                    echo AP_MAIN_CI_SOURCE_DRIFT >&2; exit 1; }
+                fi
+                [[ "$(git rev-parse "$correction_head^")" == "$r" ]] || {
+                  echo AP_MAIN_CI_ANCESTRY_DRIFT >&2; exit 1; }
+                comparison_sha="$expected_base"
+                mode=verified-ap-registry-main-ci-base
               elif [[ -n "$EVENT_BEFORE" && "$EVENT_BEFORE" != "$zero" ]]; then
                 require_commit "$EVENT_BEFORE" "push before SHA"
                 git merge-base --is-ancestor "$EVENT_BEFORE" "$EVENT_HEAD_SHA" || {
@@ -3968,6 +3991,8 @@ jobs:
             source_sha=9fcdbd66b4136850b366e076fde1971e9ead98ba
           elif [[ "$EVIDENCE_MODE" == "ap-registry-active-state-correction" ]]; then
             source_sha=6b94c45187af70f176d6a98d40742187ceaf43c8
+          elif [[ "$EVIDENCE_MODE" == "ap-registry-active-state-main-ci-correction" ]]; then
+            source_sha=a765a3e6c4a4e9202fb4f1a770e5a5daf2dec0b1
           fi
           git archive "$source_sha" | tar -x -C "$source_dir"
           UV_PROJECT_ENVIRONMENT="$mypy_environment" uv sync --locked --all-groups
@@ -4139,6 +4164,7 @@ jobs:
           source_strict = normalized("source-strict.txt")
           candidate_strict = normalized("candidate-strict.txt")
           mode = os.environ["EVIDENCE_MODE"]
+          active_modes = {"ap-registry-active-state-correction", "ap-registry-active-state-main-ci-correction"}
           if mode in {"booking-consent-policy-authority", "mobile-booking-intent-foundation"}:
               report("Source strict backend", source_strict)
               report("Candidate strict backend", candidate_strict)
@@ -4222,7 +4248,7 @@ jobs:
               "booking-complete-replay-equivalence",
               "pip-audit-toolchain-remediation",
               "ap-decision-registry-main-landing",
-              "ap-registry-active-state-correction",
+              *active_modes,
           }:
               if len(candidate_strict) != 383 or len(strict_files) != 54:
                   raise SystemExit("Immediate Standard strict MyPy count drift")
@@ -4260,7 +4286,7 @@ jobs:
               "mobile-booking-intent-foundation",
               "pip-audit-toolchain-remediation",
               "ap-decision-registry-main-landing",
-              "ap-registry-active-state-correction",
+              *active_modes,
           }:
               strict_fingerprint = fingerprint(candidate_strict)
               if strict_fingerprint != "6257a24b9c057c822e45a041519a849c471f6c48":
@@ -4302,7 +4328,7 @@ jobs:
               "mobile-booking-intent-foundation",
               "pip-audit-toolchain-remediation",
               "ap-decision-registry-main-landing",
-              "ap-registry-active-state-correction",
+              *active_modes,
           }:
               compare("configured", source_configured, candidate_configured)
               configured_files = {item.path for item in candidate_configured}
@@ -4320,7 +4346,7 @@ jobs:
                           "booking-complete-replay-equivalence",
                           "pip-audit-toolchain-remediation",
                           "ap-decision-registry-main-landing",
-                          "ap-registry-active-state-correction",
+                          *active_modes,
                       }
                       and fingerprint(candidate_configured)
                       != "b50c53ef9a3bb574f36a8f6b489ec2b0c5285d08"
@@ -4482,7 +4508,8 @@ jobs:
             || "$evidence_mode" == "booking-consent-document-delivery-architecture" \
             || "$evidence_mode" == "pip-audit-toolchain-remediation" \
             || "$evidence_mode" == "ap-decision-registry-main-landing" \
-            || "$evidence_mode" == "ap-registry-active-state-correction" ]]; then
+            || "$evidence_mode" == "ap-registry-active-state-correction" \
+            || "$evidence_mode" == "ap-registry-active-state-main-ci-correction" ]]; then
             if [[ "$evidence_mode" == "booking-consent-document-delivery-architecture" ]]; then
               base_root="$(mktemp -d "$architecture_scan_dir/base-tree.XXXXXX")"
             else
@@ -4498,6 +4525,8 @@ jobs:
               secret_base=9fcdbd66b4136850b366e076fde1971e9ead98ba
             elif [[ "$evidence_mode" == "ap-registry-active-state-correction" ]]; then
               secret_base=6b94c45187af70f176d6a98d40742187ceaf43c8
+            elif [[ "$evidence_mode" == "ap-registry-active-state-main-ci-correction" ]]; then
+              secret_base=a765a3e6c4a4e9202fb4f1a770e5a5daf2dec0b1
             else
               secret_base=6613a936b0fe896308682c8fe038708876a06c02
             fi
@@ -4842,7 +4871,7 @@ jobs:
                       "AP-registry introduced unreviewed secret-finding semantics"
                   )
               selected = "AP-registry exact governed commit-SHA false-positive inventory"
-          elif mode == "ap-registry-active-state-correction":
+          elif mode in {"ap-registry-active-state-correction", "ap-registry-active-state-main-ci-correction"}:
               base = scan_inventory(load(os.environ["BASE_JSON"]).get("results"))
               base_semantics = Counter(
                   (path, detector, digest, verified)
@@ -5766,7 +5795,7 @@ jobs:
           BACKEND ayo.py database/certify_restore.py
 
       - name: Verify remediated pip audit-toolchain version
-        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && (steps.evidence_contract.outputs.mode == 'pip-audit-toolchain-remediation' || steps.evidence_contract.outputs.mode == 'ap-decision-registry-main-landing' || steps.evidence_contract.outputs.mode == 'ap-registry-active-state-correction')
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && (steps.evidence_contract.outputs.mode == 'pip-audit-toolchain-remediation' || steps.evidence_contract.outputs.mode == 'ap-decision-registry-main-landing' || steps.evidence_contract.outputs.mode == 'ap-registry-active-state-correction' || steps.evidence_contract.outputs.mode == 'ap-registry-active-state-main-ci-correction')
         run: |
           uv run --locked python - <<'PY'
           from importlib.metadata import version
