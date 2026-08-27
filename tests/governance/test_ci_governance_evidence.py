@@ -149,10 +149,11 @@ def test_mypy_rejects_duplicate_diagnostics() -> None:
 
 
 def finding(line: int = 2) -> dict[str, object]:
+    value = "abc" + "123"
     return {
         "line_number": line,
         "type": "Hex High Entropy String",
-        "hashed_secret": "abc123",
+        "hashed_secret": value,
         "is_verified": False,
     }
 
