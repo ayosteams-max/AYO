@@ -301,9 +301,9 @@ jobs:
               registry_test_blob="$(git rev-parse "$registry_candidate:tests/governance/test_ap_decision_registry.py")"
               registry_trusted_base_test_blob="$(git rev-parse "$registry_candidate:tests/governance/test_ci_trusted_comparison_base.py" 2>/dev/null || true)"
               registry_validator_blob="$(git rev-parse "$registry_candidate:tools/validate_ap_decision_registry.py")"
-              expected_ap_registry_ci_normalized_sha256="14114781d54bbc2c""620fd3a9d1e993f4""811ee2124ff29d1f""2d9187c2b17053b8"
-              expected_ap_registry_active_state_ci_normalized_sha256="14114781d54bbc2c""620fd3a9d1e993f4""811ee2124ff29d1f""2d9187c2b17053b8"
-              expected_ap_main_ci_sha256="14114781d54bbc2c620fd3a9d1e993f4""811ee2124ff29d1f2d9187c2b17053b8"
+              expected_ap_registry_ci_normalized_sha256="19f5666ca6eb7968""e6dd00c95c26114b""52813516a8f1c5ff""db7d025ba81c9509"
+              expected_ap_registry_active_state_ci_normalized_sha256="19f5666ca6eb7968""e6dd00c95c26114b""52813516a8f1c5ff""db7d025ba81c9509"
+              expected_ap_main_ci_sha256="19f5666ca6eb7968e6dd00c95c26114b""52813516a8f1c5ffdb7d025ba81c9509"
               ap_registry_ci_normalized_sha256="$(python - <<'PY'
           import hashlib
           import re
@@ -359,7 +359,7 @@ jobs:
               dependency_pyproject_blob="$(git rev-parse "$dependency_candidate:pyproject.toml")"
               dependency_lock_blob="$(git rev-parse "$dependency_candidate:uv.lock")"
               dependency_decision_blob="$(git rev-parse "$dependency_candidate:docs/AYO_DECISION_LOG.md")"
-              expected_ci_normalized_sha256="fe650db4fc4a60479356645b5018ee3a""52d98177a0e21bc72aac905045f92479"
+              expected_ci_normalized_sha256="64b2eb8bcbed99102af98599a98ccac5""1a9c92c836bd508ff5cf9ebb83171889"
               ci_normalized_sha256="$(python - <<'PY'
           import hashlib
           import re
@@ -632,7 +632,7 @@ jobs:
           feature=a6e4bb52bf765e9846c75b7b32454aac9c97453d
           activation_merge=a765a3e6c4a4e9202fb4f1a770e5a5daf2dec0b1
           active_tree=610c6b04125dcb67bb5089ae83246e22c9e6c456
-          fix_subject='ci: govern AP registry post-merge main topology'
+          fix_subject='ci: bind active-state MyPy modes'
           tests_id=cf01f4061000f081cf8fe54fbc29e168f4b6f127
           trusted_test=0fd58b8d7deecc09372068c9763c1b21a06ab4e5
           if [[ "$EVIDENCE_MODE" == ap-registry-active-state-correction ]]; then
@@ -664,13 +664,13 @@ jobs:
                 && "$EVENT_BEFORE" == "${parents[0]}" && "${parents[0]}" == "$scope_base" \
                 && "$(git rev-parse "$candidate^{tree}")" == "$(git rev-parse "$correction_head^{tree}")" ]] || {
                 echo AP_MAIN_CI_MERGE_DRIFT >&2; exit 1; }
-            elif [[ "${#parents[@]}" -ne 1 || "${parents[0]}" != "$scope_base" ]]; then
+            elif [[ "${#parents[@]}" -ne 1 || "${parents[0]}" != 2dd80f73ee3e8db4d91e517ec2b516240b3c51a5 ]]; then
               echo AP_MAIN_CI_CANDIDATE_DRIFT >&2; exit 1
             fi
             mapfile -t correction_paths < <(git diff-tree --no-commit-id --name-only -r "$correction_head")
-            [[ "$(git rev-parse "$correction_head^")" == "$scope_base" \
+            [[ "$(git rev-parse "$correction_head^")" == 2dd80f73ee3e8db4d91e517ec2b516240b3c51a5 \
               && "$(git show -s --format=%s "$correction_head")" == "$fix_subject" \
-              && "${correction_paths[*]}" == "${expected[*]}" ]] || {
+              && "${correction_paths[*]}" == .github/workflows/ci.yml ]] || {
               echo AP_MAIN_CI_ID_DRIFT >&2; exit 1; }
           fi
           mapfile -t changed < <(git diff --name-only "$scope_base" "$candidate")
@@ -1683,6 +1683,7 @@ jobs:
                 mode=verified-ap-registry-active-state-base
               elif [[ "$EVIDENCE_MODE" == "ap-registry-active-state-main-ci-correction" ]]; then
                 expected_base=a765a3e6c4a4e9202fb4f1a770e5a5daf2dec0b1
+                r=2dd80f73ee3e8db4d91e517ec2b516240b3c51a5
                 git fetch --no-tags origin refs/heads/main:refs/remotes/origin/coverage-main
                 authoritative_main="$(git rev-parse refs/remotes/origin/coverage-main)"
                 mapfile -t parents < <(git show -s --format=%P "$EVENT_HEAD_SHA" | tr ' ' '\n')
@@ -1695,11 +1696,11 @@ jobs:
                   [[ "$(git rev-parse "$EVENT_HEAD_SHA^{tree}")" == "$(git rev-parse "$correction_head^{tree}")" ]] || {
                     echo AP_MAIN_CI_MERGE_CONTENT >&2; exit 1; }
                 else
-                  [[ "${#parents[@]}" -eq 1 && "${parents[0]}" == "$expected_base" \
+                  [[ "${#parents[@]}" -eq 1 && "${parents[0]}" == "$r" \
                     && "$authoritative_main" == "$expected_base" ]] || {
                     echo AP_MAIN_CI_SOURCE_DRIFT >&2; exit 1; }
                 fi
-                [[ "$(git rev-parse "$correction_head^")" == "$expected_base" ]] || {
+                [[ "$(git rev-parse "$correction_head^")" == "$r" ]] || {
                   echo AP_MAIN_CI_ANCESTRY_DRIFT >&2; exit 1; }
                 comparison_sha="$expected_base"
                 mode=verified-ap-registry-main-ci-base
@@ -2578,7 +2579,6 @@ jobs:
               "tests/test_services.py::test_cash_commission_is_not_lost_on_repeated_wallet_refresh"
           }
           mode = os.environ["EVIDENCE_MODE"]
-          active_modes = {"ap-registry-active-state-correction", "ap-registry-active-state-main-ci-correction"}
           governed_replay_evidence = mode in {
               "booking-complete-replay-equivalence",
               "booking-consent-policy-authority",
@@ -4164,6 +4164,7 @@ jobs:
           source_strict = normalized("source-strict.txt")
           candidate_strict = normalized("candidate-strict.txt")
           mode = os.environ["EVIDENCE_MODE"]
+          active_modes = {"ap-registry-active-state-correction", "ap-registry-active-state-main-ci-correction"}
           if mode in {"booking-consent-policy-authority", "mobile-booking-intent-foundation"}:
               report("Source strict backend", source_strict)
               report("Candidate strict backend", candidate_strict)
