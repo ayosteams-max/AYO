@@ -80,6 +80,18 @@ class ClassifyArgs(TypedDict):
     reviewed_feature: bool
 
 
+class PrResolverArgs(TypedDict):
+    event: str
+    ref: str
+    mode: str
+    base: str
+    head: str
+    checked_out_head: str
+    reservation_validated: bool
+    base_is_ancestor: NotRequired[bool]
+    head_is_ancestor: NotRequired[bool]
+
+
 ACTIVE_MODE = "ap-registry-active-state-correction"
 ACTIVE_BASE = "6b94c451" + "87af70f1" + "76d6a98d" + "40742187" + "ceaf43c8"
 ACTIVE_STATE = "32775104" + "60b5af71" + "773dda62" + "a4db69cd" + "739433f3"
@@ -120,6 +132,8 @@ RESERVATION_ENABLEMENT_BASE = (
     "334ca80b" + "3c9701a7" + "1756cccb" + "00d4ce9d" + "fd9b59f7"
 )
 RESERVATION_PATHS = ("docs/AYO_DECISION_ID_REGISTRY.json",)
+GENERIC_PR_MODE = "booking-complete-replay-equivalence"
+RESERVATION_RESOLVER = "verified-ap-registry-forward-reservation-base"
 
 
 def _validate_reservation_paths(paths: tuple[str, ...]) -> None:
@@ -147,6 +161,34 @@ def _resolve_reservation_source(
     if mode == RESERVATION_ENABLEMENT_MODE and source != RESERVATION_ENABLEMENT_BASE:
         raise ValueError("reservation enablement base drift")
     return source
+
+
+def _resolve_pr_source(
+    *,
+    event: str,
+    ref: str,
+    mode: str,
+    base: str,
+    head: str,
+    checked_out_head: str,
+    reservation_validated: bool,
+    base_is_ancestor: bool = True,
+    head_is_ancestor: bool = True,
+) -> tuple[str, str]:
+    if event != "pull_request" or not re.fullmatch(r"refs/pull/[1-9][0-9]*/merge", ref):
+        raise ValueError("pull-request event/ref drift")
+    if mode not in {RESERVATION_MODE, GENERIC_PR_MODE}:
+        raise ValueError("unknown PR evidence mode")
+    for value in (base, head, checked_out_head):
+        if not re.fullmatch(r"[0-9a-f]{40}", value) or value == ZERO:
+            raise ValueError("pull-request identity drift")
+    if not base_is_ancestor or not head_is_ancestor:
+        raise ValueError("synthetic merge topology drift")
+    if mode == RESERVATION_MODE:
+        if not reservation_validated or head == base:
+            raise ValueError("reservation PR authority drift")
+        return base, RESERVATION_RESOLVER
+    return base, "pull-request-base"
 
 
 def _require_commit(value: str) -> None:
@@ -526,6 +568,61 @@ def test_forward_reservation_trusted_source_positive_controls(
     )
 
 
+def test_forward_reservation_pr_uses_verified_resolver() -> None:
+    assert _resolve_pr_source(
+        event="pull_request",
+        ref="refs/pull/102/merge",
+        mode=RESERVATION_MODE,
+        base=AUTHORITATIVE_BASE,
+        head=HEAD,
+        checked_out_head="d" * 40,
+        reservation_validated=True,
+    ) == (AUTHORITATIVE_BASE, RESERVATION_RESOLVER)
+
+
+def test_generic_pr_resolver_is_unchanged() -> None:
+    assert _resolve_pr_source(
+        event="pull_request",
+        ref="refs/pull/7/merge",
+        mode=GENERIC_PR_MODE,
+        base=AUTHORITATIVE_BASE,
+        head=HEAD,
+        checked_out_head="d" * 40,
+        reservation_validated=False,
+    ) == (AUTHORITATIVE_BASE, "pull-request-base")
+
+
+@pytest.mark.parametrize(
+    "changes",
+    (
+        {"event": "push"},
+        {"ref": "refs/heads/feature"},
+        {"base": "not-a-sha"},
+        {"head": ZERO},
+        {"base_is_ancestor": False},
+        {"head_is_ancestor": False},
+        {"reservation_validated": False},
+        {"mode": "unknown"},
+        {"head": AUTHORITATIVE_BASE},
+    ),
+)
+def test_forward_reservation_pr_resolver_fails_closed(
+    changes: dict[str, object],
+) -> None:
+    values: PrResolverArgs = {
+        "event": "pull_request",
+        "ref": "refs/pull/102/merge",
+        "mode": RESERVATION_MODE,
+        "base": AUTHORITATIVE_BASE,
+        "head": HEAD,
+        "checked_out_head": "d" * 40,
+        "reservation_validated": True,
+    }
+    values.update(cast(PrResolverArgs, changes))
+    with pytest.raises(ValueError):
+        _resolve_pr_source(**values)
+
+
 @pytest.mark.parametrize(
     "values",
     (
@@ -576,6 +673,13 @@ def test_workflow_routes_forward_reservation_before_generic_push() -> None:
     generic = 'elif [[ -n "$EVENT_BEFORE" && "$EVENT_BEFORE" != "$zero" ]]'
     assert workflow.index(dedicated) < workflow.index(generic)
     assert "mode=verified-ap-registry-forward-reservation-base" in workflow
+    assert "AP_VALIDATED: ${{ steps.apr.outputs.validated }}" in workflow
+    assert "^refs/pull/[1-9][0-9]*/merge$" in workflow
+    assert (
+        "if [[ $EVIDENCE_MODE == ap-decision-registry-forward-reservation ]];then"
+        in workflow
+    )
+    assert "mode=ap-reservation-pr-resolver-correction" in workflow
     assert "--forward-reservation-only" in workflow
     assert "x=docs/AYO_DECISION_ID_REGISTRY.json" in workflow
     assert "institutional/founder-discovery/phase-5/" in workflow
