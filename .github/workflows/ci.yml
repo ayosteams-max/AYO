@@ -254,7 +254,7 @@ jobs:
         run: |
           set -euo pipefail
           expected_helper_blob=287462f26399bdeb4964030fa5aac6170fb1a607
-          expected_ci_normalized_sha256="e0d57fad4338ce5af9c96e541f1e78a5""872514060a0f16c8391e5391db0d6d77"
+          expected_ci_normalized_sha256="3b9180cb5b0936e1b4a127fac82b7a14""c634360b63206b7ce85a26bfbb650da6"
           p="$expected_ci_normalized_sha256"
           helper_blob="$(git rev-parse "$TESTED_COMMIT_SHA:tools/validate_ci_governance_evidence.py" 2>/dev/null || true)"
           [[ "$helper_blob" == "$expected_helper_blob" ]] || {
@@ -288,9 +288,9 @@ jobs:
               registry_test_blob="$(git rev-parse "$registry_candidate:tests/governance/test_ap_decision_registry.py")"
               registry_trusted_base_test_blob="$(git rev-parse "$registry_candidate:tests/governance/test_ci_trusted_comparison_base.py" 2>/dev/null || true)"
               registry_validator_blob="$(git rev-parse "$registry_candidate:tools/validate_ap_decision_registry.py")"
-              expected_ap_registry_ci_normalized_sha256="59e9d0e5e0f393fa""c518371c61e2d986""9010016b16b5faea""f158a763e5911392"
-              expected_ap_registry_active_state_ci_normalized_sha256="59e9d0e5e0f393fa""c518371c61e2d986""9010016b16b5faea""f158a763e5911392"
-              expected_ap_main_ci_sha256="59e9d0e5e0f393fac518371c61e2d986""9010016b16b5faeaf158a763e5911392"
+          expected_ap_registry_ci_normalized_sha256="6dbccb6a32adb931""2a14291c15da5df3""187b060228bf68f2""db7fe18d72b26b48"
+          expected_ap_registry_active_state_ci_normalized_sha256="6dbccb6a32adb931""2a14291c15da5df3""187b060228bf68f2""db7fe18d72b26b48"
+          expected_ap_main_ci_sha256="6dbccb6a32adb9312a14291c15da5df3""187b060228bf68f2db7fe18d72b26b48"
               ap_registry_ci_normalized_sha256="$(python tools/validate_ci_governance_evidence.py workflow-commitment --scope ap --workflow .github/workflows/ci.yml)"
               if [[ "$registry_blob" == d0d84754a49e9f87f370ed0e7d49de026d8fc5bc \
                 && "$registry_decision_blob" == 8533182c326e3d625f96bdac1410dbdb2f774158 \
@@ -410,10 +410,10 @@ jobs:
               ;;
             *)
               candidate="$TESTED_COMMIT_SHA";fixed=fee08725153496edb2020d543c8cf24c317b48f6
-              expected_ci_governance_extraction_sha256="59e9d0e5e0f393fac518371c61e2d986""9010016b16b5faeaf158a763e5911392"
-              expected_registry_reconciliation_enablement_sha256="59e9d0e5e0f393fac518371c61e2d986""9010016b16b5faeaf158a763e5911392"
+              expected_ci_governance_extraction_sha256="6dbccb6a32adb9312a14291c15da5df3""187b060228bf68f2db7fe18d72b26b48"
+              expected_registry_reconciliation_enablement_sha256="6dbccb6a32adb9312a14291c15da5df3""187b060228bf68f2db7fe18d72b26b48"
               normalized="$(python tools/validate_ci_governance_evidence.py workflow-commitment --scope ap --workflow .github/workflows/ci.yml)";[[ "$(python tools/validate_ci_governance_evidence.py workflow-commitment --scope pip --workflow .github/workflows/ci.yml)" == "$p" ]]||exit 1
-              mapfile -t governed_paths < <(git diff --name-only "$fixed" "$candidate"); enablement_base="$(git merge-base "$candidate" refs/remotes/origin/main)"; [[ "$(git show -s --format=%P "$candidate" | wc -w)" == 2 ]] && enablement_base="$(git rev-parse "$candidate^1")"; mapfile -t enablement_paths < <(git diff --name-only "$enablement_base" "$candidate")
+              mapfile -t governed_paths < <(git diff --name-only "$fixed" "$candidate");eb=$(git merge-base $candidate refs/remotes/origin/main);reviewed=$candidate;[[ $(git show -s --format=%P $candidate|wc -w) == 2 ]]&&{ eb=$(git rev-parse $candidate^1);reviewed=$(git rev-parse $candidate^2);};mapfile -t enablement_paths < <(git diff --name-only "$eb" "$candidate")
               helper_test="$(git rev-parse "$candidate:tests/governance/test_ci_governance_evidence.py" 2>/dev/null || true)"; rc="$(git rev-parse "$candidate":{tests/governance/test_ap_decision_registry.py,tests/governance/test_ci_trusted_comparison_base.py,tools/validate_ap_decision_registry.py} | tr '\n' ' ')"
               re='0f087ad3c2bc98e4737eb14d74409e7726564fc6 b0c411867b96b59dce0b214a3d19763588d58141 ba728c665a39aa916892bd5b087fe89ae6a17f21 '
               if [[ "${governed_paths[*]}" == '.github/workflows/ci.yml tests/governance/test_ci_governance_evidence.py tools/validate_ci_governance_evidence.py' \
@@ -426,6 +426,8 @@ jobs:
                 mode=ap-decision-registry-reconciliation-enablement
               elif [[ "${enablement_paths[*]}" == '.github/workflows/ci.yml tests/governance/test_ap_decision_registry.py tests/governance/test_ci_governance_evidence.py tests/governance/test_ci_trusted_comparison_base.py tools/validate_ap_decision_registry.py' && "$rc" == "$re" && "$helper_test" == a4a01bd0fdf1283e0f1f3eaa8b84ffa7e75e043b && "$(git rev-parse "$candidate":{docs/AYO_AP_HISTORICAL_PROVENANCE.json,docs/AYO_DECISION_ID_REGISTRY.json,docs/AYO_DECISION_LOG.md})" == $'2220b1feb90469c980e7661d366f5fd1fb1b616c\na8a9797f6b63612496f83f841cc089ca3bd37af4\n9becdd2034a1c42b39557ce34cd5d02874bfacae' ]]; then
                 mode=ap-decision-registry-forward-reservation-enablement
+              elif [[ "${enablement_paths[*]} $(git log -1 --format='%P %s' $reviewed)" == '.github/workflows/ci.yml tests/governance/test_ap_decision_registry.py 6b2e31ac44169655f6ea044ff3e5835569a390e3 ci: execute reservation context helper evidence' && $helper_test == a4a01bd0fdf1283e0f1f3eaa8b84ffa7e75e043b && $(git rev-parse $candidate:tests/governance/test_ap_decision_registry.py) == 98139cf19ac6afc287d4233cc53859bec95cc65e ]];then
+                mode=ap-decision-registry-forward-reservation-context
               elif [[ "${enablement_paths[*]}" == docs/AYO_DECISION_ID_REGISTRY.json && "$rc" == "$re" ]]; then
                 mode=ap-decision-registry-forward-reservation
               else
@@ -471,12 +473,13 @@ jobs:
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && startsWith(steps.evidence_contract.outputs.mode, 'ap-decision-registry-forward-reservation')
         run: |
           set -euo pipefail
-          c=${{ env.TESTED_COMMIT_SHA }}; m=${{ steps.evidence_contract.outputs.mode }}; h=$c; p=($(git show -s --format=%P $c)); if ((${#p[@]}==1));then b=$(git merge-base $h refs/remotes/origin/main);else h=${p[1]};b=${p[0]};fi
-          if [[ $m == *-enablement ]];then q=4a19af9eaa472d3f3c49c4fadc9f3cc540e08899;r=87c1651854b5944c5b749a02b0e281ab0e33dc4c;x='.github/workflows/ci.yml tests/governance/test_ap_decision_registry.py tests/governance/test_ci_governance_evidence.py tests/governance/test_ci_trusted_comparison_base.py tools/validate_ap_decision_registry.py';y='.github/workflows/ci.yml tests/governance/test_ci_governance_evidence.py';f=--enablement-only;[[ $b == 334ca80b3c9701a71756cccb00d4ce9dfd9b59f7 && $(git rev-parse $h^) == $r && $(git rev-parse $r^) == $q && $(git rev-parse $q^) == $b && $(git show -s --format=%s $h) == 'ci: stabilize reservation enablement evidence' ]]||exit 1
+          c=${{ env.TESTED_COMMIT_SHA }};m=${{ steps.evidence_contract.outputs.mode }};h=$c;p=($(git show -s --format=%P $c));if ((${#p[@]}==1));then b=$(git merge-base $h refs/remotes/origin/main);else h=${p[1]};b=${p[0]};fi
+          if [[ $m == *-context ]];then y=.github/workflows/ci.yml;f=--enablement-only;[[ $b == 721ebda0badccfffc603a78ccf63786955567e48 && $(git log -1 --format='%P %s' $h) == '6b2e31ac44169655f6ea044ff3e5835569a390e3 ci: execute reservation context helper evidence' && $(git rev-parse $h^^) == $b ]]||exit 1
+          elif [[ $m == *-enablement ]];then q=4a19af9eaa472d3f3c49c4fadc9f3cc540e08899;r=87c1651854b5944c5b749a02b0e281ab0e33dc4c;y='.github/workflows/ci.yml tests/governance/test_ci_governance_evidence.py';f=--enablement-only;[[ $b == 334ca80b3c9701a71756cccb00d4ce9dfd9b59f7 && $(git rev-parse $h^) == $r && $(git rev-parse $r^) == $q && $(git rev-parse $q^) == $b && $(git show -s --format=%s $h) == 'ci: stabilize reservation enablement evidence' ]]||exit 1
           else x=docs/AYO_DECISION_ID_REGISTRY.json;y=$x;f=--forward-reservation-only;[[ "$(git rev-parse $h^) $(git show -s --format=%s $h)" == "$b governance: reserve AP-099 and AP-100" ]]||exit 1;fi
-          hp=$(git diff-tree --no-commit-id --name-only -r $h|tr '\n' ' '|sed 's/ $//');ap=$(git diff --name-only $b $c|tr '\n' ' '|sed 's/ $//');[[ "$hp" == "$y" && "$ap" == "$x" ]]||exit 1
+          hp=$(git diff-tree --no-commit-id --name-only -r $h|tr '\n' ' '|sed 's/ $//');[[ $hp == "$y" ]]||exit 1
           uv run --locked python tools/validate_ap_decision_registry.py "$f" --baseline-registry <(git show $b:docs/AYO_DECISION_ID_REGISTRY.json) --baseline-provenance-manifest <(git show $b:docs/AYO_AP_HISTORICAL_PROVENANCE.json) --baseline-main-commit $b
-          [[ $m != *-enablement ]]||uv run --locked pytest -q --no-cov tests/governance/test_ci_governance_evidence.py
+          if [[ $m == *-context || $m == ap-decision-registry-forward-reservation ]];then AYO_AP_TRUSTED_MAIN_SHA=$b uv run --locked pytest -q --no-cov tests/governance/test_ap_decision_registry.py;[[ $m != *-context ]]||uv run --locked pytest -q --no-cov tests/governance/test_ci_governance_evidence.py;elif [[ $m == *-enablement ]];then uv run --locked pytest -q --no-cov tests/governance/test_ci_governance_evidence.py;fi
           ! git ls-tree -r --name-only $c|grep -q '^institutional/founder-discovery/phase-5/'
       - name: Bind exact pip audit-toolchain remediation identity
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'pip-audit-toolchain-remediation'
@@ -500,11 +503,11 @@ jobs:
             && "$(git rev-parse "$second^")" == "$first" \
             && "$(git rev-parse "$first^")" == "$fixed" \
             && "$(git show -s --format=%s "$candidate")" == "$subject" ]] || {
-            echo "pip-remediation ancestry drift" >&2; exit 1; }
+            echo PIP_ANCESTRY_DRIFT >&2; exit 1; }
           mapfile -t correction_changed < <(git diff --name-only "$fourth" "$candidate")
           [[ "${#correction_changed[@]}" -eq 1 \
             && "${correction_changed[0]}" == .github/workflows/ci.yml ]] || {
-            echo "pip-remediation correction path drift" >&2; exit 1; }
+            echo PIP_PATH_DRIFT >&2; exit 1; }
           expected=(
             .github/workflows/ci.yml
             docs/AYO_DECISION_LOG.md
@@ -513,7 +516,7 @@ jobs:
           )
           mapfile -t changed < <(git diff --name-only "$fixed" "$candidate")
           [[ "${#changed[@]}" -eq 4 && "${changed[*]}" == "${expected[*]}" ]] || {
-            echo "pip-remediation exact four-path manifest drift" >&2; exit 1; }
+            echo PIP_SCOPE_DRIFT >&2; exit 1; }
           [[ "$(git rev-parse "$candidate:BACKEND")" == 62500035ef60d94ccc6333f25cb3aa79ff5c3f21 \
             && "$(git rev-parse "$candidate:database/migrations")" == 253ecedebe58c31077a0baa7d2532adc46464f70 \
             && "$(git rev-parse "$candidate:AYO-Mobile")" == da39714a911ffbf02171d28348c88a39eab2d938 \
@@ -525,17 +528,17 @@ jobs:
             && "$(git rev-parse "$candidate:pyproject.toml")" == a9eebc6ce34459318b3b58a7a0217dba571e8e1a \
             && "$(git rev-parse "$candidate:uv.lock")" == b340334a94f1479199d7e3784474e9a16020a121 \
             && "$(git rev-parse "$candidate:docs/AYO_DECISION_LOG.md")" == a071b48fcb1e08938893788abcfbc4e6067e05f9 ]] || {
-            echo "pip-remediation immutable identity drift" >&2; exit 1; }
+            echo PIP_ID_DRIFT >&2; exit 1; }
           git cat-file -e "$candidate:docs/AYO_DECISION_ID_REGISTRY.json" 2>/dev/null && {
-            echo "AP registry entered pip-remediation scope" >&2; exit 1; }
+            echo PIP_AP_DRIFT >&2; exit 1; }
           git ls-tree -r --name-only "$candidate" | grep -q '^institutional/founder-discovery/phase-5/' && {
-            echo "Phase 5 material entered pip-remediation scope" >&2; exit 1; }
+            echo PIP_PHASE5_DRIFT >&2; exit 1; }
           git show "$candidate:docs/AYO_DECISION_LOG.md" | grep -Eq '^### AP-099([[:space:]]|$)' && {
-            echo "AP-099 allocation entered pip-remediation scope" >&2; exit 1; }
+            echo PIP_AP099_DRIFT >&2; exit 1; }
           git diff --quiet "$fixed" "$candidate" -- BACKEND database/migrations AYO-Mobile \
             alembic.ini .python-version .secrets.baseline tests || {
-            echo "pip-remediation executable or controlled-tree drift" >&2; exit 1; }
-          echo "Exact pip audit-toolchain remediation identity: PASS"
+            echo PIP_TREE_DRIFT >&2; exit 1; }
+          echo PIP_IDENTITY_PASS
       - name: Bind exact AP decision-registry landing identity
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'ap-decision-registry-main-landing'
         env:
@@ -565,11 +568,11 @@ jobs:
             && "$(git show -s --format=%s "$previous")" == "$previous_subject" \
             && "$(git show -s --format=%s "$current")" == "$current_subject" \
             && "$(git show -s --format=%s "$candidate")" == "$subject" ]] || {
-            echo "AP-registry ancestry drift" >&2; exit 1; }
+            echo AP_ANCESTRY_DRIFT >&2; exit 1; }
           mapfile -t correction_changed < <(git diff --name-only "$current" "$candidate")
           [[ "${#correction_changed[@]}" -eq 1 \
             && "${correction_changed[0]}" == .github/workflows/ci.yml ]] || {
-            echo "AP-registry CI-admission commit path drift" >&2; exit 1; }
+            echo AP_COMMIT_PATH_DRIFT >&2; exit 1; }
           expected=(
             .github/workflows/ci.yml
             docs/AYO_DECISION_ID_REGISTRY.json
@@ -579,7 +582,7 @@ jobs:
           )
           mapfile -t changed < <(git diff --name-only "$base" "$candidate")
           [[ "${#changed[@]}" -eq 5 && "${changed[*]}" == "${expected[*]}" ]] || {
-            echo "AP-registry exact five-path manifest drift" >&2; exit 1; }
+            echo AP_SCOPE_DRIFT >&2; exit 1; }
           [[ "$(git rev-parse "$candidate:docs/AYO_DECISION_ID_REGISTRY.json")" == d0d84754a49e9f87f370ed0e7d49de026d8fc5bc \
             && "$(git rev-parse "$candidate:docs/AYO_DECISION_LOG.md")" == 8533182c326e3d625f96bdac1410dbdb2f774158 \
             && "$(git rev-parse "$candidate:tests")" == efd4172d0ff7e790e36af9c7fecddafb426b0b67 \
@@ -594,18 +597,18 @@ jobs:
             && "$(git rev-parse "$candidate:.python-version")" == ebe773d9eeab42ab1f896401f5b9c581f88d6709 \
             && "$(git rev-parse "$candidate:pyproject.toml")" == a9eebc6ce34459318b3b58a7a0217dba571e8e1a \
             && "$(git rev-parse "$candidate:uv.lock")" == b340334a94f1479199d7e3784474e9a16020a121 ]] || {
-            echo "AP-registry immutable identity drift" >&2; exit 1; }
+            echo AP_ID_DRIFT >&2; exit 1; }
           git show "$candidate:docs/AYO_DECISION_LOG.md" | grep -Eq '^### AP-099([[:space:]]|$)' && {
-            echo "AP-099 allocation entered AP-registry scope" >&2; exit 1; }
+            echo AP099_DRIFT >&2; exit 1; }
           git ls-tree -r --name-only "$candidate" | grep -q '^institutional/founder-discovery/phase-5/' && {
-            echo "Phase 5 material entered AP-registry scope" >&2; exit 1; }
+            echo AP_PHASE5_DRIFT >&2; exit 1; }
           git diff --quiet "$base" "$candidate" -- BACKEND database/migrations AYO-Mobile \
             alembic.ini .python-version .secrets.baseline pyproject.toml uv.lock || {
-            echo "AP-registry executable, dependency, or controlled-tree drift" >&2; exit 1; }
+            echo AP_TREE_DRIFT >&2; exit 1; }
           grep -Fq '"status": "READY_FOR_MAIN_ACTIVATION"' \
             docs/AYO_DECISION_ID_REGISTRY.json || {
-            echo "AP-registry activation state drift" >&2; exit 1; }
-          echo "Exact AP decision-registry landing identity: PASS"
+            echo AP_STATE_DRIFT >&2; exit 1; }
+          echo AP_IDENTITY_PASS
       - name: Bind exact AP registry active-state correction identity
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && (steps.evidence_contract.outputs.mode == 'ap-registry-active-state-correction' || steps.evidence_contract.outputs.mode == 'ap-registry-active-state-main-ci-correction')
         env:
@@ -627,7 +630,7 @@ jobs:
           if [[ "$EVIDENCE_MODE" == ap-registry-active-state-correction ]]; then
             [[ "$(git merge-base "$feature" "$base")" == "$base" \
               && "$(git rev-list --count "$base..$feature")" == 4 ]] || {
-              echo "AP-registry active-state ancestry drift" >&2; exit 1; }
+              echo AP_STATE_ANCESTRY_DRIFT >&2; exit 1; }
             if [[ "$candidate" == "$activation_merge" ]]; then
               mapfile -t merge_parents < <(git show -s --format=%P "$candidate" | tr ' ' '\n')
               [[ "$EVENT_NAME" == push && "$EVENT_REF" == refs/heads/main \
@@ -681,7 +684,7 @@ jobs:
             && "$(git rev-parse "$candidate:.python-version")" == ebe773d9eeab42ab1f896401f5b9c581f88d6709 \
             && "$(git rev-parse "$candidate:pyproject.toml")" == a9eebc6ce34459318b3b58a7a0217dba571e8e1a \
             && "$(git rev-parse "$candidate:uv.lock")" == b340334a94f1479199d7e3784474e9a16020a121 ]] || {
-            echo "AP-registry active-state immutable identity drift" >&2; exit 1; }
+            echo AP_STATE_ID_DRIFT >&2; exit 1; }
           BASE_SHA="$base" CANDIDATE_SHA="$candidate" python - <<'PY'
           import copy
           import json
@@ -722,14 +725,14 @@ jobs:
           print("AP registry structured active-state-only transition: PASS")
           PY
           git ls-tree -r --name-only "$candidate" | grep -q '^institutional/founder-discovery/phase-5/' && {
-            echo "Phase 5 material entered AP-registry active-state scope" >&2; exit 1; }
+            echo AP_STATE_PHASE5_DRIFT >&2; exit 1; }
           git diff --quiet "$base" "$candidate" -- BACKEND database/migrations AYO-Mobile \
             alembic.ini .python-version .secrets.baseline pyproject.toml uv.lock \
             docs/AYO_DECISION_LOG.md tools/validate_ap_decision_registry.py || {
-            echo "AP-registry active-state controlled-surface drift" >&2; exit 1; }
-          echo "Exact AP registry active-state correction identity: PASS"
+            echo AP_STATE_TREE_DRIFT >&2; exit 1; }
+          echo AP_STATE_IDENTITY_PASS
       - name: Validate AP decision registry candidate
-        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && contains(fromJSON('["ap-decision-registry-main-landing","ap-registry-active-state-correction","ap-registry-active-state-main-ci-correction","ap-decision-registry-reconciliation-enablement","ap-decision-registry-forward-reservation-enablement","ap-decision-registry-forward-reservation"]'), steps.evidence_contract.outputs.mode)
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && contains(fromJSON('["ap-decision-registry-main-landing","ap-registry-active-state-correction","ap-registry-active-state-main-ci-correction","ap-decision-registry-reconciliation-enablement","ap-decision-registry-forward-reservation-enablement"]'), steps.evidence_contract.outputs.mode)
         run: |
           set -euo pipefail
           uv run --locked python tools/validate_ap_decision_registry.py
@@ -3876,7 +3879,8 @@ jobs:
                   for item in difference["candidate_only"]: print("CANDIDATE_ONLY|" + item.render())
                   raise SystemExit(label + " MyPy diagnostic population changed")
           mode = os.environ["EVIDENCE_MODE"]
-          active = {"ap-registry-active-state-correction", "ap-registry-active-state-main-ci-correction", "ci-governance-evidence-extraction", "ap-decision-registry-reconciliation-enablement", "ap-decision-registry-forward-reservation-enablement", "ap-decision-registry-forward-reservation"}
+          active = {"ap-registry-active-state-correction", "ap-registry-active-state-main-ci-correction", "ci-governance-evidence-extraction", "ap-decision-registry-reconciliation-enablement"}
+          if mode.startswith("ap-decision-registry-forward-reservation"): active.add(mode)
           current = {"immediate-standard-public-contract", "booking-complete-replay-equivalence", "pip-audit-toolchain-remediation", "ap-decision-registry-main-landing", *active}
           capture = {"booking-consent-policy-authority", "mobile-booking-intent-foundation"}
           clean = {"batch2": 447, "courier-pickup-idempotency-v1": 450, "courier-pickup-authorization-ordering": 452}
@@ -4315,7 +4319,7 @@ jobs:
                       "AP-registry introduced unreviewed secret-finding semantics"
                   )
               selected = "AP-registry exact governed commit-SHA false-positive inventory"
-          elif mode in {"ap-registry-active-state-correction", "ap-registry-active-state-main-ci-correction", "ci-governance-evidence-extraction", "ap-decision-registry-reconciliation-enablement", "ap-decision-registry-forward-reservation-enablement", "ap-decision-registry-forward-reservation"}:
+          elif mode in {"ap-registry-active-state-correction", "ap-registry-active-state-main-ci-correction", "ci-governance-evidence-extraction", "ap-decision-registry-reconciliation-enablement"} or mode.startswith("ap-decision-registry-forward-reservation"):
               source = load(os.environ["BASE_JSON"]); base = scan_inventory(source.get("results"))
               sem = lambda x: Counter((p,t,h,v) for p,_,t,h,v in x)
               candidate_only = sorted((sem(actual)-sem(base)).elements())
@@ -5145,7 +5149,7 @@ jobs:
           uv run --locked bandit -c pyproject.toml -r
           BACKEND ayo.py database/certify_restore.py
       - name: Verify remediated pip audit-toolchain version
-        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && contains(fromJSON('["pip-audit-toolchain-remediation","ap-decision-registry-main-landing","ap-registry-active-state-correction","ap-registry-active-state-main-ci-correction","ci-governance-evidence-extraction","ap-decision-registry-reconciliation-enablement","ap-decision-registry-forward-reservation-enablement","ap-decision-registry-forward-reservation"]'), steps.evidence_contract.outputs.mode)
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && (startsWith(steps.evidence_contract.outputs.mode, 'ap-decision-registry-forward-reservation') || contains(fromJSON('["pip-audit-toolchain-remediation","ap-decision-registry-main-landing","ap-registry-active-state-correction","ap-registry-active-state-main-ci-correction","ci-governance-evidence-extraction","ap-decision-registry-reconciliation-enablement"]'), steps.evidence_contract.outputs.mode))
         run: |
           uv run --locked python - <<'PY'
           from importlib.metadata import version

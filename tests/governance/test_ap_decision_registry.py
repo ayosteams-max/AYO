@@ -3,6 +3,8 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import os
+import re
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -110,6 +112,119 @@ def _repository_metadata(root: Path, sha: str) -> dict[str, Any] | None:
         "parents": parents.split() if parents else [],
         "subject": subject,
     }
+
+
+def _repository_forward_context(
+    root: Path, value: dict[str, Any]
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None, str | None, Any]:
+    if not value.get("forward_identity_events"):
+        return None, None, None, None
+    trusted = os.environ.get("AYO_AP_TRUSTED_MAIN_SHA", "")
+    if not re.fullmatch(r"[0-9a-f]{40}", trusted):
+        raise RegistryValidationError("forward events require trusted main context")
+    head = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=root,
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    ).stdout.strip()
+    if trusted == head:
+        raise RegistryValidationError("candidate HEAD is not authoritative main")
+
+    def load(path: str) -> dict[str, Any]:
+        result = subprocess.run(
+            ["git", "show", f"{trusted}:{path}"],
+            cwd=root,
+            check=False,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        )
+        if result.returncode:
+            raise RegistryValidationError("trusted main context is unavailable")
+        loaded = json.loads(result.stdout)
+        if not isinstance(loaded, dict):
+            raise RegistryValidationError("trusted main data is malformed")
+        return loaded
+
+    def reachable(sha: str, main: str) -> bool:
+        return (
+            main == trusted
+            and subprocess.run(
+                ["git", "merge-base", "--is-ancestor", sha, trusted],
+                cwd=root,
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            ).returncode
+            == 0
+        )
+
+    return (
+        load("docs/AYO_DECISION_ID_REGISTRY.json"),
+        load("docs/AYO_AP_HISTORICAL_PROVENANCE.json"),
+        trusted,
+        reachable,
+    )
+
+
+@pytest.mark.parametrize("trusted", [None, "not-a-sha"])
+def test_forward_repository_context_fails_closed(
+    monkeypatch: pytest.MonkeyPatch, trusted: str | None
+) -> None:
+    if trusted is None:
+        monkeypatch.delenv("AYO_AP_TRUSTED_MAIN_SHA", raising=False)
+    else:
+        monkeypatch.setenv("AYO_AP_TRUSTED_MAIN_SHA", trusted)
+    value = registry(allocation())
+    value["forward_identity_events"] = [event()]
+    with pytest.raises(RegistryValidationError, match="trusted main context"):
+        _repository_forward_context(Path(__file__).parents[2], value)
+
+
+def test_forward_repository_context_loads_explicit_main(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = Path(__file__).parents[2]
+    trusted = subprocess.run(
+        ["git", "rev-parse", "refs/remotes/origin/main"],
+        cwd=root,
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    ).stdout.strip()
+    monkeypatch.setenv("AYO_AP_TRUSTED_MAIN_SHA", trusted)
+    value = registry(allocation())
+    value["forward_identity_events"] = [event()]
+    baseline, manifest, observed, reachable = _repository_forward_context(root, value)
+    assert observed == trusted
+    assert baseline and baseline["forward_identity_events"] == []
+    assert (
+        manifest and manifest["namespace"] == "ayo.governance.ap_historical_provenance"
+    )
+    assert reachable(trusted, trusted)
+
+
+def test_forward_repository_context_rejects_candidate_head(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = Path(__file__).parents[2]
+    head = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=root,
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    ).stdout.strip()
+    monkeypatch.setenv("AYO_AP_TRUSTED_MAIN_SHA", head)
+    value = registry(allocation())
+    value["forward_identity_events"] = [event(base=head)]
+    with pytest.raises(RegistryValidationError, match="candidate HEAD"):
+        _repository_forward_context(root, value)
 
 
 def provenance(value: dict[str, Any]) -> dict[str, Any]:
@@ -503,6 +618,24 @@ def test_exact_forward_reservation_batch_is_accepted() -> None:
     )
 
 
+def test_future_authoritative_main_accepts_landed_reservations() -> None:
+    baseline, landed = reservation_candidate()
+    authoritative_main = "c" * 40
+    report = validate_registry(
+        landed,
+        "",
+        baseline_main_commit=authoritative_main,
+        commit_exists=exists,
+        main_reachable=lambda sha, main: sha == BASE and main == authoritative_main,
+        durable_ref_reachable=lambda _sha: False,
+        provenance_manifest=provenance(landed),
+        resolve_commit=metadata,
+    )
+    assert report.forward_event_count == 2
+    assert landed["allocations"] == baseline["allocations"]
+    assert landed["collision_reconciliations"] == []
+
+
 @pytest.mark.parametrize(
     "mutation",
     (
@@ -703,9 +836,15 @@ def test_committed_registry_preserves_bootstrap_and_has_no_lifecycle_instances()
     manifest = json.loads(
         (root / "docs/AYO_AP_HISTORICAL_PROVENANCE.json").read_text(encoding="utf-8")
     )
+    baseline, baseline_manifest, trusted, reachable = _repository_forward_context(
+        root, value
+    )
     report = validate_registry(
         value,
         text,
+        baseline_registry=baseline,
+        baseline_provenance_manifest=baseline_manifest,
+        baseline_main_commit=trusted,
         commit_exists=lambda sha: (
             subprocess.run(
                 ["git", "cat-file", "-e", f"{sha}^{{commit}}"],
@@ -718,13 +857,18 @@ def test_committed_registry_preserves_bootstrap_and_has_no_lifecycle_instances()
         ),
         provenance_manifest=manifest,
         resolve_commit=lambda sha: _repository_metadata(root, sha),
+        main_reachable=reachable,
     )
     assert (report.allocation_count, report.ap_id_count, report.collision_id_count) == (
         66,
         51,
         13,
     )
-    assert value["forward_identity_events"] == value["collision_reconciliations"] == []
+    if baseline is None:
+        assert value["forward_identity_events"] == []
+    else:
+        validate_forward_reservation_candidate(value, baseline, text, trusted or "")
+    assert value["collision_reconciliations"] == []
     assert all(
         item["ap_id"] not in {"AP-099", "AP-100"} for item in value["allocations"]
     )
@@ -739,25 +883,38 @@ def test_repository_candidate_uses_authoritative_main_baseline() -> None:
     manifest = json.loads(
         (root / "docs/AYO_AP_HISTORICAL_PROVENANCE.json").read_text(encoding="utf-8")
     )
-    result = subprocess.run(
-        ["git", "show", "refs/remotes/origin/main:docs/AYO_DECISION_ID_REGISTRY.json"],
-        cwd=root,
-        check=True,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
+    baseline, baseline_manifest, trusted, reachable = _repository_forward_context(
+        root, value
     )
-    baseline = json.loads(result.stdout)
+    if baseline is None:
+        trusted = subprocess.run(
+            ["git", "rev-parse", "refs/remotes/origin/main"],
+            cwd=root,
+            check=True,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        ).stdout.strip()
+        baseline = json.loads(
+            subprocess.run(
+                ["git", "show", f"{trusted}:docs/AYO_DECISION_ID_REGISTRY.json"],
+                cwd=root,
+                check=True,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+            ).stdout
+        )
     validate_registry(
         value,
         text,
         baseline_registry=baseline,
-        baseline_main_commit="".join(
-            ("dc564949", "c7d19e03", "84655251", "cb40bda3", "199ddace")
-        ),
-        commit_exists=lambda _: True,
+        baseline_main_commit=trusted,
+        commit_exists=lambda sha: _repository_metadata(root, sha) is not None,
         provenance_manifest=manifest,
+        baseline_provenance_manifest=baseline_manifest,
         resolve_commit=lambda sha: _repository_metadata(root, sha),
+        main_reachable=reachable,
     )
     assert value["allocations"] == baseline["allocations"]
 
@@ -879,10 +1036,17 @@ def test_committed_manifest_only_orphans_are_approved_when_unavailable(
     manifest = json.loads(
         (root / "docs/AYO_AP_HISTORICAL_PROVENANCE.json").read_text(encoding="utf-8")
     )
+    baseline, baseline_manifest, trusted, reachable = _repository_forward_context(
+        root, value
+    )
     validate_registry(
         value,
         (root / "docs/AYO_DECISION_LOG.md").read_text(encoding="utf-8"),
         provenance_manifest=manifest,
+        baseline_registry=baseline,
+        baseline_provenance_manifest=baseline_manifest,
+        baseline_main_commit=trusted,
+        main_reachable=reachable,
         resolve_commit=lambda candidate: (
             None if candidate == sha else _repository_metadata(root, candidate)
         ),
