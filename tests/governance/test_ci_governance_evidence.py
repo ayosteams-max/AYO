@@ -394,24 +394,22 @@ def test_reservation_secret_semantics_requires_authenticated_mode(
 )
 def test_registry_git_provenance_fails_closed(mutation: str) -> None:
     main = "a1" * 20
-    finding = [
-        "docs/AYO_DECISION_ID_REGISTRY.json",
-        "Hex High Entropy String",
-        hashlib.sha1(main.encode()).hexdigest(),
-        False,
-    ]
+    path = "docs/AYO_DECISION_ID_REGISTRY.json"
+    detector = "Hex High Entropy String"
+    identity = hashlib.sha1(main.encode()).hexdigest()
+    verified = False
     registry: dict[str, object] = {
         "forward_identity_events": [{"base_main_commit": main}]
     }
     head, trusted, valid, reachable = "b" * 40, main, True, True
     if mutation == "path":
-        finding[0] = "other.json"
+        path = "other.json"
     elif mutation == "field":
         registry = {"forward_identity_events": [{"other": main}]}
     elif mutation == "detector":
-        finding[1] = "Secret Keyword"
+        detector = "Secret Keyword"
     elif mutation == "random":
-        finding[2] = "d" * 40
+        identity = "d" * 40
     elif mutation == "uppercase":
         main = main.upper()
         trusted = main
@@ -428,7 +426,7 @@ def test_registry_git_provenance_fails_closed(mutation: str) -> None:
     else:
         reachable = False
     governed, unreviewed = classify_registry_git_provenance(
-        (tuple(finding),),
+        ((path, detector, identity, verified),),
         registry,
         trusted,
         head,
