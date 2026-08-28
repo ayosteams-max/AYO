@@ -254,11 +254,11 @@ jobs:
         run: |
           set -euo pipefail
           expected_helper_blob=287462f26399bdeb4964030fa5aac6170fb1a607
-          expected_ci_normalized_sha256="3b9180cb5b0936e1b4a127fac82b7a14""c634360b63206b7ce85a26bfbb650da6"
+          expected_ci_normalized_sha256="c2b7d76b5f829d63f82b1f827aa4ed21""525b886fcbbde6c53db331971151f9ed"
           p="$expected_ci_normalized_sha256"
           helper_blob="$(git rev-parse "$TESTED_COMMIT_SHA:tools/validate_ci_governance_evidence.py" 2>/dev/null || true)"
           [[ "$helper_blob" == "$expected_helper_blob" ]] || {
-            echo "Unreviewed governance evidence helper" >&2; exit 1; }
+            echo EVIDENCE_HELPER_DRIFT >&2; exit 1; }
           tests_tree="$(git rev-parse HEAD:tests)"
           mobile_tests_tree=""
           mobile_tree=""
@@ -288,9 +288,9 @@ jobs:
               registry_test_blob="$(git rev-parse "$registry_candidate:tests/governance/test_ap_decision_registry.py")"
               registry_trusted_base_test_blob="$(git rev-parse "$registry_candidate:tests/governance/test_ci_trusted_comparison_base.py" 2>/dev/null || true)"
               registry_validator_blob="$(git rev-parse "$registry_candidate:tools/validate_ap_decision_registry.py")"
-          expected_ap_registry_ci_normalized_sha256="6dbccb6a32adb931""2a14291c15da5df3""187b060228bf68f2""db7fe18d72b26b48"
-          expected_ap_registry_active_state_ci_normalized_sha256="6dbccb6a32adb931""2a14291c15da5df3""187b060228bf68f2""db7fe18d72b26b48"
-          expected_ap_main_ci_sha256="6dbccb6a32adb9312a14291c15da5df3""187b060228bf68f2db7fe18d72b26b48"
+          expected_ap_registry_ci_normalized_sha256="7afe87e634433069""bad860dc384f90d0""f2d10a7f1ec10e35""67dc781df77ce55d"
+          expected_ap_registry_active_state_ci_normalized_sha256="7afe87e634433069""bad860dc384f90d0""f2d10a7f1ec10e35""67dc781df77ce55d"
+          expected_ap_main_ci_sha256="7afe87e634433069bad860dc384f90d0""f2d10a7f1ec10e3567dc781df77ce55d"
               ap_registry_ci_normalized_sha256="$(python tools/validate_ci_governance_evidence.py workflow-commitment --scope ap --workflow .github/workflows/ci.yml)"
               if [[ "$registry_blob" == d0d84754a49e9f87f370ed0e7d49de026d8fc5bc \
                 && "$registry_decision_blob" == 8533182c326e3d625f96bdac1410dbdb2f774158 \
@@ -308,7 +308,7 @@ jobs:
                   *) echo AP_STATE_ID_DRIFT >&2; exit 1 ;;
                 esac
               else
-                echo "Unreviewed AP-registry candidate identity" >&2
+                echo AP_ID_DRIFT >&2
                 exit 1
               fi
               ;;
@@ -322,15 +322,15 @@ jobs:
                 && "$dependency_lock_blob" == b340334a94f1479199d7e3784474e9a16020a121 \
                 && "$dependency_decision_blob" == a071b48fcb1e08938893788abcfbc4e6067e05f9 ]]; then
                 [[ "$ci_normalized_sha256" == "$p" ]] || {
-                  echo "Unreviewed pip-remediation workflow identity" >&2; exit 1; }
+                  echo PIP_ID_DRIFT >&2; exit 1; }
                 mode=pip-audit-toolchain-remediation
               else
               mobile_candidate="$TESTED_COMMIT_SHA"
               [[ "$mobile_candidate" =~ ^[0-9a-f]{40}$ \
                 && "$mobile_candidate" != 0000000000000000000000000000000000000000 ]] || {
-                echo "Mobile selector candidate is absent, malformed, or all-zero" >&2; exit 1; }
+                echo MOBILE_SHA_DRIFT >&2; exit 1; }
               git cat-file -e "$mobile_candidate^{commit}" 2>/dev/null || {
-                echo "Mobile selector candidate is unavailable" >&2; exit 1; }
+                echo MOBILE_SHA_MISSING >&2; exit 1; }
               mobile_tests_tree="$(git rev-parse "$mobile_candidate:AYO-Mobile/tests")"
               mobile_tree="$(git rev-parse "$mobile_candidate:AYO-Mobile")"
               case "$mobile_tests_tree|$mobile_tree" in
@@ -343,7 +343,7 @@ jobs:
                   git cat-file -e "$mobile_candidate:$approval_pack_template_path" 2>/dev/null && approval_pack_template_present=true
                   if [[ "$approval_pack_architecture_present" == true || "$approval_pack_template_present" == true ]]; then
                     [[ "$approval_pack_architecture_present" == true && "$approval_pack_template_present" == true ]] || {
-                      echo "Partial Booking consent approval-pack architecture identity" >&2; exit 1; }
+                      echo CONSENT_PARTIAL >&2; exit 1; }
                     approval_pack_architecture_blob="$(git rev-parse "$mobile_candidate:$approval_pack_architecture_path")"
                     approval_pack_template_blob="$(git rev-parse "$mobile_candidate:$approval_pack_template_path")"
                     decision_blob="$(git rev-parse "$mobile_candidate:docs/AYO_DECISION_LOG.md")"
@@ -361,14 +361,14 @@ jobs:
                     approval_pack_tuple="$approval_pack_architecture_blob|$approval_pack_template_blob|$decision_blob|$roadmap_blob|$consent_architecture_blob|$baseline_blob|$backend_tree|$migration_tree|$package_blob|$lockfile_blob|$root_package_blob|$root_lockfile_blob|$alembic_blob|$python_version_blob"
                     expected_approval_pack_tuple="a2285429b91f73de067807ababb0780a088d5e7a|5d7218a9bd2ecc5d4561fe6164a6864e50cadb16|e814581988391fff1a4d388f58c80202c182c0bd|d5313d04a9d160c38e129217fb4aceae06afb068|54d69775049d6f0af12fe6ace2bfc5a8cf66ad81|71770a9e529e9af0c9ed5c72549b3a2f7ddcfb02|62500035ef60d94ccc6333f25cb3aa79ff5c3f21|253ecedebe58c31077a0baa7d2532adc46464f70|b4c26fea6a74ac9c1d3a442eb855cf63538fb5e2|ace7192e4a749f61a011f8e4293ccd1e053d648a|6b8425f6ed81258388c4e6bba39c80af0afa7fef|6a08d31b721b486950fd06df0ca3430fcbe8aabf|a2353502812251c10e36f8cd534de71c1dcca58b|ebe773d9eeab42ab1f896401f5b9c581f88d6709"
                     [[ "$approval_pack_tuple" == "$expected_approval_pack_tuple" ]] || {
-                      echo "Unreviewed Booking consent approval-pack architecture identity" >&2; exit 1; }
+                      echo CONSENT_ID_DRIFT >&2; exit 1; }
                     mode=booking-consent-approval-pack-architecture
                   else
                     candidate_decision_blob="$(git rev-parse "$mobile_candidate:docs/AYO_DECISION_LOG.md")"
                     candidate_roadmap_blob="$(git rev-parse "$mobile_candidate:docs/AYO_ROADMAP.md")"
                     if [[ "$candidate_decision_blob" == e814581988391fff1a4d388f58c80202c182c0bd \
                       || "$candidate_roadmap_blob" == d5313d04a9d160c38e129217fb4aceae06afb068 ]]; then
-                      echo "Missing Booking consent approval-pack architecture identity" >&2
+                      echo CONSENT_ID_MISSING >&2
                       exit 1
                     fi
                     architecture_path=docs/AYO_BOOKING_CONSENT_DOCUMENT_DELIVERY_CONTRACT_ARCHITECTURE.md
@@ -384,14 +384,14 @@ jobs:
                     architecture_tuple="$architecture_blob|$decision_blob|$roadmap_blob|$baseline_blob|$backend_tree|$migration_tree|$package_blob|$lockfile_blob"
                     expected_architecture_tuple="54d69775049d6f0af12fe6ace2bfc5a8cf66ad81|181226620a4eb7abca4c5eb785ecb965e9a82900|e459cd12961c5264dd7df8f1cbc5328e854f73a1|71770a9e529e9af0c9ed5c72549b3a2f7ddcfb02|62500035ef60d94ccc6333f25cb3aa79ff5c3f21|253ecedebe58c31077a0baa7d2532adc46464f70|b4c26fea6a74ac9c1d3a442eb855cf63538fb5e2|ace7192e4a749f61a011f8e4293ccd1e053d648a"
                     [[ "$architecture_tuple" == "$expected_architecture_tuple" ]] || {
-                      echo "Unreviewed consent document architecture identity" >&2; exit 1; }
+                      echo CONSENT_DOC_DRIFT >&2; exit 1; }
                     mode=booking-consent-document-delivery-architecture
                   else
                     decision_blob="$(git rev-parse "$mobile_candidate:docs/AYO_DECISION_LOG.md")"
                     roadmap_blob="$(git rev-parse "$mobile_candidate:docs/AYO_ROADMAP.md")"
                     if [[ "$decision_blob" == 181226620a4eb7abca4c5eb785ecb965e9a82900 \
                       || "$roadmap_blob" == e459cd12961c5264dd7df8f1cbc5328e854f73a1 ]]; then
-                      echo "Partial consent document architecture identity" >&2
+                      echo CONSENT_DOC_PARTIAL >&2
                       exit 1
                     fi
                     mode=mobile-booking-intent-foundation
@@ -402,7 +402,7 @@ jobs:
                   mode=booking-consent-policy-authority
                   ;;
                 *)
-                  echo "Unreviewed mobile identity for governed root tests tree" >&2
+                  echo MOBILE_ID_DRIFT >&2
                   exit 1
                   ;;
               esac
@@ -410,10 +410,10 @@ jobs:
               ;;
             *)
               candidate="$TESTED_COMMIT_SHA";fixed=fee08725153496edb2020d543c8cf24c317b48f6
-              expected_ci_governance_extraction_sha256="6dbccb6a32adb9312a14291c15da5df3""187b060228bf68f2db7fe18d72b26b48"
-              expected_registry_reconciliation_enablement_sha256="6dbccb6a32adb9312a14291c15da5df3""187b060228bf68f2db7fe18d72b26b48"
+              expected_ci_governance_extraction_sha256="7afe87e634433069bad860dc384f90d0""f2d10a7f1ec10e3567dc781df77ce55d"
+              expected_registry_reconciliation_enablement_sha256="7afe87e634433069bad860dc384f90d0""f2d10a7f1ec10e3567dc781df77ce55d"
               normalized="$(python tools/validate_ci_governance_evidence.py workflow-commitment --scope ap --workflow .github/workflows/ci.yml)";[[ "$(python tools/validate_ci_governance_evidence.py workflow-commitment --scope pip --workflow .github/workflows/ci.yml)" == "$p" ]]||exit 1
-              mapfile -t governed_paths < <(git diff --name-only "$fixed" "$candidate");eb=$(git merge-base $candidate refs/remotes/origin/main);reviewed=$candidate;[[ $(git show -s --format=%P $candidate|wc -w) == 2 ]]&&{ eb=$(git rev-parse $candidate^1);reviewed=$(git rev-parse $candidate^2);};mapfile -t enablement_paths < <(git diff --name-only "$eb" "$candidate")
+              mapfile -t governed_paths < <(git diff --name-only "$fixed" "$candidate");eb=$(git merge-base $candidate refs/remotes/origin/main);v=$candidate;[[ $(git show -s --format=%P $candidate|wc -w) == 2 ]]&&{ eb=$(git rev-parse $candidate^1);v=$(git rev-parse $candidate^2);};mapfile -t enablement_paths < <(git diff --name-only "$eb" "$candidate")
               helper_test="$(git rev-parse "$candidate:tests/governance/test_ci_governance_evidence.py" 2>/dev/null || true)"; rc="$(git rev-parse "$candidate":{tests/governance/test_ap_decision_registry.py,tests/governance/test_ci_trusted_comparison_base.py,tools/validate_ap_decision_registry.py} | tr '\n' ' ')"
               re='0f087ad3c2bc98e4737eb14d74409e7726564fc6 b0c411867b96b59dce0b214a3d19763588d58141 ba728c665a39aa916892bd5b087fe89ae6a17f21 '
               if [[ "${governed_paths[*]}" == '.github/workflows/ci.yml tests/governance/test_ci_governance_evidence.py tools/validate_ci_governance_evidence.py' \
@@ -426,8 +426,8 @@ jobs:
                 mode=ap-decision-registry-reconciliation-enablement
               elif [[ "${enablement_paths[*]}" == '.github/workflows/ci.yml tests/governance/test_ap_decision_registry.py tests/governance/test_ci_governance_evidence.py tests/governance/test_ci_trusted_comparison_base.py tools/validate_ap_decision_registry.py' && "$rc" == "$re" && "$helper_test" == a4a01bd0fdf1283e0f1f3eaa8b84ffa7e75e043b && "$(git rev-parse "$candidate":{docs/AYO_AP_HISTORICAL_PROVENANCE.json,docs/AYO_DECISION_ID_REGISTRY.json,docs/AYO_DECISION_LOG.md})" == $'2220b1feb90469c980e7661d366f5fd1fb1b616c\na8a9797f6b63612496f83f841cc089ca3bd37af4\n9becdd2034a1c42b39557ce34cd5d02874bfacae' ]]; then
                 mode=ap-decision-registry-forward-reservation-enablement
-              elif [[ "${enablement_paths[*]} $(git log -1 --format='%P %s' $reviewed)" == '.github/workflows/ci.yml tests/governance/test_ap_decision_registry.py 6b2e31ac44169655f6ea044ff3e5835569a390e3 ci: execute reservation context helper evidence' && $helper_test == a4a01bd0fdf1283e0f1f3eaa8b84ffa7e75e043b && $(git rev-parse $candidate:tests/governance/test_ap_decision_registry.py) == 98139cf19ac6afc287d4233cc53859bec95cc65e ]];then
-                mode=ap-decision-registry-forward-reservation-context
+              elif [[ "${enablement_paths[*]} $(git log -1 --format='%P %s' $v)" == '.github/workflows/ci.yml tests/governance/test_ap_decision_registry.py fceb2fa1e490b5e743d0925dba53b1299c8dfebe ci: distinguish authoritative main reservation context' && $(git rev-parse $candidate:tests/governance/test_ap_decision_registry.py) == ce0272440c3c2c526519ec0f6bd54fd6d90f9e70 ]];then
+                mode=ap-decision-registry-forward-reservation-main-context
               elif [[ "${enablement_paths[*]}" == docs/AYO_DECISION_ID_REGISTRY.json && "$rc" == "$re" ]]; then
                 mode=ap-decision-registry-forward-reservation
               else
@@ -473,13 +473,13 @@ jobs:
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && startsWith(steps.evidence_contract.outputs.mode, 'ap-decision-registry-forward-reservation')
         run: |
           set -euo pipefail
-          c=${{ env.TESTED_COMMIT_SHA }};m=${{ steps.evidence_contract.outputs.mode }};h=$c;p=($(git show -s --format=%P $c));if ((${#p[@]}==1));then b=$(git merge-base $h refs/remotes/origin/main);else h=${p[1]};b=${p[0]};fi
-          if [[ $m == *-context ]];then y=.github/workflows/ci.yml;f=--enablement-only;[[ $b == 721ebda0badccfffc603a78ccf63786955567e48 && $(git log -1 --format='%P %s' $h) == '6b2e31ac44169655f6ea044ff3e5835569a390e3 ci: execute reservation context helper evidence' && $(git rev-parse $h^^) == $b ]]||exit 1
+          c=${{ env.TESTED_COMMIT_SHA }};m=${{ steps.evidence_contract.outputs.mode }};z="${{ github.event_name }} ${{ github.ref }} ${{ github.event.before || '' }}";h=$c;p=($(git show -s --format=%P $c));if ((${#p[@]}==1));then b=$(git merge-base $h origin/main);t=$b;k=FEATURE_CANDIDATE;[[ $z == pull_request\ * || $z == push\ refs/heads/* && $z != push\ refs/heads/main\ * ]]||exit;else h=${p[1]};b=${p[0]};t=$c;k=AUTHORITATIVE_MAIN;[[ $z == "push refs/heads/main $b" ]]||exit;fi
+          if [[ $m == *-main-context ]];then y='.github/workflows/ci.yml tests/governance/test_ap_decision_registry.py';f=--enablement-only;[[ $b == fceb2fa1e490b5e743d0925dba53b1299c8dfebe && $(git log -1 --format='%P %s' $h) == "$b ci: distinguish authoritative main reservation context" ]]||exit 1
           elif [[ $m == *-enablement ]];then q=4a19af9eaa472d3f3c49c4fadc9f3cc540e08899;r=87c1651854b5944c5b749a02b0e281ab0e33dc4c;y='.github/workflows/ci.yml tests/governance/test_ci_governance_evidence.py';f=--enablement-only;[[ $b == 334ca80b3c9701a71756cccb00d4ce9dfd9b59f7 && $(git rev-parse $h^) == $r && $(git rev-parse $r^) == $q && $(git rev-parse $q^) == $b && $(git show -s --format=%s $h) == 'ci: stabilize reservation enablement evidence' ]]||exit 1
           else x=docs/AYO_DECISION_ID_REGISTRY.json;y=$x;f=--forward-reservation-only;[[ "$(git rev-parse $h^) $(git show -s --format=%s $h)" == "$b governance: reserve AP-099 and AP-100" ]]||exit 1;fi
           hp=$(git diff-tree --no-commit-id --name-only -r $h|tr '\n' ' '|sed 's/ $//');[[ $hp == "$y" ]]||exit 1
           uv run --locked python tools/validate_ap_decision_registry.py "$f" --baseline-registry <(git show $b:docs/AYO_DECISION_ID_REGISTRY.json) --baseline-provenance-manifest <(git show $b:docs/AYO_AP_HISTORICAL_PROVENANCE.json) --baseline-main-commit $b
-          if [[ $m == *-context || $m == ap-decision-registry-forward-reservation ]];then AYO_AP_TRUSTED_MAIN_SHA=$b uv run --locked pytest -q --no-cov tests/governance/test_ap_decision_registry.py;[[ $m != *-context ]]||uv run --locked pytest -q --no-cov tests/governance/test_ci_governance_evidence.py;elif [[ $m == *-enablement ]];then uv run --locked pytest -q --no-cov tests/governance/test_ci_governance_evidence.py;fi
+          if [[ $m == *-context || $m == ap-decision-registry-forward-reservation ]];then AYO_AP_REPOSITORY_CONTEXT=$k AYO_AP_TRUSTED_MAIN_SHA=$t uv run --locked pytest -q --no-cov tests/governance/test_ap_decision_registry.py;[[ $m != *-context ]]||uv run --locked pytest -q --no-cov tests/governance/test_ci_governance_evidence.py;elif [[ $m == *-enablement ]];then uv run --locked pytest -q --no-cov tests/governance/test_ci_governance_evidence.py;fi
           ! git ls-tree -r --name-only $c|grep -q '^institutional/founder-discovery/phase-5/'
       - name: Bind exact pip audit-toolchain remediation identity
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'pip-audit-toolchain-remediation'
