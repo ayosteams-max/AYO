@@ -12,15 +12,20 @@ from tools.validate_ci_governance_evidence import (
     WORKFLOW_MARKERS,
     EvidenceValidationError,
     WorkflowMarker,
+    candidate_only_secret_semantics,
     canonical_json,
     canonical_manifest,
+    classify_registry_git_provenance,
+    classify_reservation_secret_semantics,
     governed_workflow_commitment,
+    hex_byte_inventory,
     mypy_column_fingerprint,
     mypy_fingerprint,
     mypy_inventory,
     mypy_semantic_fingerprint,
     normalized_workflow_commitment,
     parse_mypy_diagnostics,
+    require_exact_secret_inventory,
     secret_fingerprint,
     secret_inventory,
     secret_semantic_inventory,
@@ -284,6 +289,152 @@ def test_secret_inventory_sorting_semantics_and_fingerprint() -> None:
 def test_secret_inventory_rejects_malformed_or_duplicate_input(results: object) -> None:
     with pytest.raises(EvidenceValidationError):
         secret_inventory(results)
+
+
+def test_governed_registry_git_provenance_preserves_raw_finding() -> None:
+    main = "".join(("078c9b62", "40c7b2ff", "c459adb7", "678a609a", "4ab7a3b5"))
+    digest = hashlib.sha1(main.encode()).hexdigest()
+    finding = (
+        "docs/AYO_DECISION_ID_REGISTRY.json",
+        "Hex High Entropy String",
+        digest,
+        False,
+    )
+    registry = {
+        "forward_identity_events": [
+            {"base_main_commit": main},
+            {"base_main_commit": main},
+        ]
+    }
+    governed, unreviewed = classify_reservation_secret_semantics(
+        (finding,),
+        registry,
+        main,
+        "c" * 40,
+        evidence_mode="ap-decision-registry-forward-reservation",
+        reservation_validated="true",
+        trusted_mode="verified-ap-registry-forward-reservation-base",
+    )
+    assert governed == (finding,) and unreviewed == ()
+    assert secret_fingerprint(unreviewed) == hashlib.sha256(b"").hexdigest()
+
+
+def test_candidate_only_secret_semantics_preserves_duplicates() -> None:
+    base = (("a", 1, "Detector", "0" * 40, False),)
+    candidate = (*base, ("b", 2, "Detector", "1" * 40, False))
+    assert candidate_only_secret_semantics(base, candidate) == (
+        ("b", "Detector", "1" * 40, False),
+    )
+
+
+def test_extracted_secret_inventory_mechanics_are_fail_closed() -> None:
+    assert hex_byte_inventory([0, 255], 2, "test") == "00ff"
+    with pytest.raises(EvidenceValidationError):
+        hex_byte_inventory([256], 1, "test")
+    item = ("a", 1, "Detector", "0" * 40, False)
+    require_exact_secret_inventory("test", (item,), (item,))
+    with pytest.raises(EvidenceValidationError):
+        require_exact_secret_inventory("test", (), (item,))
+
+
+@pytest.mark.parametrize(
+    ("mode", "validated", "trusted_mode"),
+    (
+        ("other", "true", "verified-ap-registry-forward-reservation-base"),
+        (
+            "ap-decision-registry-forward-reservation",
+            "",
+            "verified-ap-registry-forward-reservation-base",
+        ),
+        (
+            "ap-decision-registry-forward-reservation",
+            "false",
+            "verified-ap-registry-forward-reservation-base",
+        ),
+        ("ap-decision-registry-forward-reservation", "true", "verified-push-before"),
+    ),
+)
+def test_reservation_secret_semantics_requires_authenticated_mode(
+    mode: str, validated: str, trusted_mode: str
+) -> None:
+    main = "a1" * 20
+    finding = (
+        "docs/AYO_DECISION_ID_REGISTRY.json",
+        "Hex High Entropy String",
+        hashlib.sha1(main.encode()).hexdigest(),
+        False,
+    )
+    governed, unreviewed = classify_reservation_secret_semantics(
+        (finding,),
+        {"forward_identity_events": [{"base_main_commit": main}]},
+        main,
+        "b" * 40,
+        evidence_mode=mode,
+        reservation_validated=validated,
+        trusted_mode=trusted_mode,
+    )
+    assert governed == () and unreviewed == (finding,)
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        "path",
+        "field",
+        "detector",
+        "random",
+        "uppercase",
+        "missing",
+        "stale",
+        "extra",
+        "head",
+        "invalid",
+        "unreachable",
+    ),
+)
+def test_registry_git_provenance_fails_closed(mutation: str) -> None:
+    main = "a1" * 20
+    path = "docs/AYO_DECISION_ID_REGISTRY.json"
+    detector = "Hex High Entropy String"
+    identity = hashlib.sha1(main.encode()).hexdigest()
+    verified = False
+    registry: dict[str, object] = {
+        "forward_identity_events": [{"base_main_commit": main}]
+    }
+    head, trusted, valid, reachable = "b" * 40, main, True, True
+    if mutation == "path":
+        path = "other.json"
+    elif mutation == "field":
+        registry = {"forward_identity_events": [{"other": main}]}
+    elif mutation == "detector":
+        detector = "Secret Keyword"
+    elif mutation == "random":
+        identity = "d" * 40
+    elif mutation == "uppercase":
+        main = main.upper()
+        trusted = main
+    elif mutation == "missing":
+        trusted = ""
+    elif mutation == "stale":
+        trusted = "c" * 40
+    elif mutation == "extra":
+        registry["unrelated"] = main
+    elif mutation == "head":
+        head = main
+    elif mutation == "invalid":
+        valid = False
+    else:
+        reachable = False
+    governed, unreviewed = classify_registry_git_provenance(
+        ((path, detector, identity, verified),),
+        registry,
+        trusted,
+        head,
+        registry_validated=valid,
+        main_reachable=reachable,
+    )
+    assert governed == () and len(unreviewed) == 1
+    assert secret_fingerprint(unreviewed) != hashlib.sha256(b"").hexdigest()
 
 
 def test_manifest_requires_safe_sorted_unique_paths() -> None:
