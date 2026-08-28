@@ -398,6 +398,127 @@ def secret_semantic_inventory(
     )
 
 
+def candidate_only_secret_semantics(
+    base: Iterable[SecretFinding], candidate: Iterable[SecretFinding]
+) -> tuple[SecretSemantic, ...]:
+    """Return the deterministic multiset difference without choosing authority."""
+    base_items = Counter(secret_semantic_inventory(base))
+    candidate_items = Counter(secret_semantic_inventory(candidate))
+    return tuple(sorted((candidate_items - base_items).elements()))
+
+
+def hex_byte_inventory(value: Any, length: int, label: str) -> str:
+    if (
+        not isinstance(value, list)
+        or len(value) != length
+        or any(type(item) is not int or not 0 <= item <= 255 for item in value)
+    ):
+        raise EvidenceValidationError(f"malformed {label} byte inventory")
+    return bytes(value).hex()
+
+
+def require_exact_secret_inventory(
+    label: str,
+    actual: Iterable[SecretFinding],
+    expected: Iterable[SecretFinding],
+) -> None:
+    actual_items, expected_items = tuple(actual), tuple(expected)
+    if actual_items != expected_items:
+        actual_set, expected_set = set(actual_items), set(expected_items)
+        for prefix, items in (
+            ("EXPECTED_ONLY", expected_set - actual_set),
+            ("ACTUAL_ONLY", actual_set - expected_set),
+        ):
+            for item in sorted(items):
+                rendered = "|".join(
+                    str(value).lower() if isinstance(value, bool) else str(value)
+                    for value in item
+                )
+                print(f"{prefix}|{rendered}")
+        raise EvidenceValidationError(f"{label} semantic finding inventory drift")
+
+
+def classify_registry_git_provenance(
+    findings: Iterable[SecretSemantic],
+    registry: Mapping[str, Any],
+    trusted_main: str,
+    candidate_head: str,
+    *,
+    registry_validated: bool,
+    main_reachable: bool,
+) -> tuple[tuple[SecretSemantic, ...], tuple[SecretSemantic, ...]]:
+    """Separate validator-proven registry Git provenance from secret semantics."""
+    values = tuple(findings)
+    if not registry_validated or not main_reachable:
+        return (), tuple(sorted(values))
+    if (
+        not re.fullmatch(r"[0-9a-f]{40}", trusted_main)
+        or trusted_main == candidate_head
+    ):
+        return (), tuple(sorted(values))
+    events = registry.get("forward_identity_events")
+    if not isinstance(events, list) or not events:
+        return (), tuple(sorted(values))
+    approved = [
+        ("forward_identity_events", index, "base_main_commit")
+        for index, event in enumerate(events)
+        if isinstance(event, Mapping) and event.get("base_main_commit") == trusted_main
+    ]
+    locations: list[tuple[object, ...]] = []
+
+    def walk(value: Any, path: tuple[object, ...] = ()) -> None:
+        if isinstance(value, Mapping):
+            for key, child in value.items():
+                walk(child, path + (key,))
+        elif isinstance(value, list):
+            for index, child in enumerate(value):
+                walk(child, path + (index,))
+        elif value == trusted_main:
+            locations.append(path)
+
+    walk(registry)
+    if not approved or sorted(locations) != sorted(approved):
+        return (), tuple(sorted(values))
+    digest = hashlib.sha1(trusted_main.encode(), usedforsecurity=False).hexdigest()
+    target = (
+        "docs/AYO_DECISION_ID_REGISTRY.json",
+        "Hex High Entropy String",
+        digest,
+        False,
+    )
+    governed = tuple(item for item in values if item == target)
+    unreviewed = tuple(sorted(item for item in values if item != target))
+    return governed, unreviewed
+
+
+def classify_reservation_secret_semantics(
+    findings: Iterable[SecretSemantic],
+    registry: Mapping[str, Any],
+    trusted_main: str,
+    candidate_head: str,
+    *,
+    evidence_mode: str,
+    reservation_validated: str,
+    trusted_mode: str,
+) -> tuple[tuple[SecretSemantic, ...], tuple[SecretSemantic, ...]]:
+    """Apply typed provenance only after authenticated reservation admission."""
+    values = tuple(findings)
+    if (
+        evidence_mode != "ap-decision-registry-forward-reservation"
+        or reservation_validated != "true"
+        or trusted_mode != "verified-ap-registry-forward-reservation-base"
+    ):
+        return (), tuple(sorted(values))
+    return classify_registry_git_provenance(
+        values,
+        registry,
+        trusted_main,
+        candidate_head,
+        registry_validated=True,
+        main_reachable=True,
+    )
+
+
 def secret_fingerprint(findings: Iterable[SecretFinding | SecretSemantic]) -> str:
     rendered: list[str] = []
     for item in sorted(findings):

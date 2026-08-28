@@ -253,8 +253,8 @@ jobs:
         id: evidence_contract
         run: |
           set -euo pipefail
-          expected_helper_blob=287462f26399bdeb4964030fa5aac6170fb1a607
-          expected_ci_normalized_sha256="c2b7d76b5f829d63f82b1f827aa4ed21""525b886fcbbde6c53db331971151f9ed"
+          expected_helper_blob=34c82f0c7dba1778db5158cd922ce0d378f5e424
+          expected_ci_normalized_sha256="d28b146b3c137c2d693e486518e2f118""a847dd9a4e8024baaa085668b5122c55"
           p="$expected_ci_normalized_sha256"
           helper_blob="$(git rev-parse "$TESTED_COMMIT_SHA:tools/validate_ci_governance_evidence.py" 2>/dev/null || true)"
           [[ "$helper_blob" == "$expected_helper_blob" ]] || {
@@ -288,9 +288,9 @@ jobs:
               registry_test_blob="$(git rev-parse "$registry_candidate:tests/governance/test_ap_decision_registry.py")"
               registry_trusted_base_test_blob="$(git rev-parse "$registry_candidate:tests/governance/test_ci_trusted_comparison_base.py" 2>/dev/null || true)"
               registry_validator_blob="$(git rev-parse "$registry_candidate:tools/validate_ap_decision_registry.py")"
-          expected_ap_registry_ci_normalized_sha256="7afe87e634433069""bad860dc384f90d0""f2d10a7f1ec10e35""67dc781df77ce55d"
-          expected_ap_registry_active_state_ci_normalized_sha256="7afe87e634433069""bad860dc384f90d0""f2d10a7f1ec10e35""67dc781df77ce55d"
-          expected_ap_main_ci_sha256="7afe87e634433069bad860dc384f90d0""f2d10a7f1ec10e3567dc781df77ce55d"
+          expected_ap_registry_ci_normalized_sha256="4a932d411a83a081""4e2879a00d3cf669""a78a864b9c3d34c0""10d0473919d8e851"
+          expected_ap_registry_active_state_ci_normalized_sha256="4a932d411a83a081""4e2879a00d3cf669""a78a864b9c3d34c0""10d0473919d8e851"
+          expected_ap_main_ci_sha256="4a932d411a83a0814e2879a00d3cf669""a78a864b9c3d34c010d0473919d8e851"
               ap_registry_ci_normalized_sha256="$(python tools/validate_ci_governance_evidence.py workflow-commitment --scope ap --workflow .github/workflows/ci.yml)"
               if [[ "$registry_blob" == d0d84754a49e9f87f370ed0e7d49de026d8fc5bc \
                 && "$registry_decision_blob" == 8533182c326e3d625f96bdac1410dbdb2f774158 \
@@ -410,11 +410,11 @@ jobs:
               ;;
             *)
               candidate="$TESTED_COMMIT_SHA";fixed=fee08725153496edb2020d543c8cf24c317b48f6
-              expected_ci_governance_extraction_sha256="7afe87e634433069bad860dc384f90d0""f2d10a7f1ec10e3567dc781df77ce55d"
-              expected_registry_reconciliation_enablement_sha256="7afe87e634433069bad860dc384f90d0""f2d10a7f1ec10e3567dc781df77ce55d"
+              expected_ci_governance_extraction_sha256="4a932d411a83a0814e2879a00d3cf669""a78a864b9c3d34c010d0473919d8e851"
+              expected_registry_reconciliation_enablement_sha256="4a932d411a83a0814e2879a00d3cf669""a78a864b9c3d34c010d0473919d8e851"
               normalized="$(python tools/validate_ci_governance_evidence.py workflow-commitment --scope ap --workflow .github/workflows/ci.yml)";[[ "$(python tools/validate_ci_governance_evidence.py workflow-commitment --scope pip --workflow .github/workflows/ci.yml)" == "$p" ]]||exit 1
               mapfile -t governed_paths < <(git diff --name-only "$fixed" "$candidate");eb=$(git merge-base $candidate refs/remotes/origin/main);v=$candidate;[[ $(git show -s --format=%P $candidate|wc -w) == 2 ]]&&{ eb=$(git rev-parse $candidate^1);v=$(git rev-parse $candidate^2);};mapfile -t enablement_paths < <(git diff --name-only "$eb" "$candidate")
-              helper_test="$(git rev-parse "$candidate:tests/governance/test_ci_governance_evidence.py" 2>/dev/null || true)"; rc="$(git rev-parse "$candidate":{tests/governance/test_ap_decision_registry.py,tests/governance/test_ci_trusted_comparison_base.py,tools/validate_ap_decision_registry.py} | tr '\n' ' ')"
+              helper_test="$(git rev-parse "$candidate:tests/governance/test_ci_governance_evidence.py" 2>/dev/null || true)"; rc="$(git rev-parse "$candidate":{tests/governance/test_ap_decision_registry.py,tests/governance/test_ci_trusted_comparison_base.py,tools/validate_ap_decision_registry.py} | tr '\n' ' ')";d="$(git rev-parse "$candidate":{docs/AYO_AP_HISTORICAL_PROVENANCE.json,docs/AYO_DECISION_ID_REGISTRY.json,docs/AYO_DECISION_LOG.md}|tr '\n' ' ')"
               re='0f087ad3c2bc98e4737eb14d74409e7726564fc6 b0c411867b96b59dce0b214a3d19763588d58141 ba728c665a39aa916892bd5b087fe89ae6a17f21 '
               if [[ "${governed_paths[*]}" == '.github/workflows/ci.yml tests/governance/test_ci_governance_evidence.py tools/validate_ci_governance_evidence.py' \
                 && "$helper_test" == 39a019a6ceb79f08c3c532003c64104fbdb7fa89 \
@@ -424,10 +424,12 @@ jobs:
                 && "$normalized" == "$expected_registry_reconciliation_enablement_sha256" \
                 && "$(git rev-parse "$candidate":{docs/AYO_AP_HISTORICAL_PROVENANCE.json,docs/AYO_DECISION_ID_REGISTRY.json,docs/AYO_DECISION_LOG.md,tests/governance/test_ap_decision_registry.py,tools/validate_ap_decision_registry.py} | tr '\n' ' ')" == '2220b1feb90469c980e7661d366f5fd1fb1b616c a8a9797f6b63612496f83f841cc089ca3bd37af4 9becdd2034a1c42b39557ce34cd5d02874bfacae 8f72019b8a2f57cc6cdc0118d50a605836454804 6022cd091e7ce0c293f9a91a7c4b38701ea7ca05 ' ]]; then
                 mode=ap-decision-registry-reconciliation-enablement
-              elif [[ "${enablement_paths[*]}" == '.github/workflows/ci.yml tests/governance/test_ap_decision_registry.py tests/governance/test_ci_governance_evidence.py tests/governance/test_ci_trusted_comparison_base.py tools/validate_ap_decision_registry.py' && "$rc" == "$re" && "$helper_test" == a4a01bd0fdf1283e0f1f3eaa8b84ffa7e75e043b && "$(git rev-parse "$candidate":{docs/AYO_AP_HISTORICAL_PROVENANCE.json,docs/AYO_DECISION_ID_REGISTRY.json,docs/AYO_DECISION_LOG.md})" == $'2220b1feb90469c980e7661d366f5fd1fb1b616c\na8a9797f6b63612496f83f841cc089ca3bd37af4\n9becdd2034a1c42b39557ce34cd5d02874bfacae' ]]; then
+              elif [[ "${enablement_paths[*]}" == '.github/workflows/ci.yml tests/governance/test_ap_decision_registry.py tests/governance/test_ci_governance_evidence.py tests/governance/test_ci_trusted_comparison_base.py tools/validate_ap_decision_registry.py' && "$rc" == "$re" && "$helper_test" == a4a01bd0fdf1283e0f1f3eaa8b84ffa7e75e043b && "$d" == '2220b1feb90469c980e7661d366f5fd1fb1b616c a8a9797f6b63612496f83f841cc089ca3bd37af4 9becdd2034a1c42b39557ce34cd5d02874bfacae ' ]]; then
                 mode=ap-decision-registry-forward-reservation-enablement
               elif [[ "${enablement_paths[*]} $(git log -1 --format='%P %s' $v)" == '.github/workflows/ci.yml tests/governance/test_ap_decision_registry.py fceb2fa1e490b5e743d0925dba53b1299c8dfebe ci: distinguish authoritative main reservation context' && $(git rev-parse $candidate:tests/governance/test_ap_decision_registry.py) == ce0272440c3c2c526519ec0f6bd54fd6d90f9e70 ]];then
                 mode=ap-decision-registry-forward-reservation-main-context
+              elif [[ "${enablement_paths[*]} $(git log -1 --format='%P %s' $v) $helper_test $d" == '.github/workflows/ci.yml tests/governance/test_ci_governance_evidence.py tools/validate_ci_governance_evidence.py 078c9b6240c7b2ffc459adb7678a609a4ab7a3b5 ci: classify governed Git provenance in secret evidence 92aed7b54566657080b5c61f09ec60d1bea36c93 2220b1feb90469c980e7661d366f5fd1fb1b616c a8a9797f6b63612496f83f841cc089ca3bd37af4 9becdd2034a1c42b39557ce34cd5d02874bfacae ' && $normalized == $expected_ci_governance_extraction_sha256 ]];then
+                mode=ap-registry-git-provenance-secret-classification
               elif [[ "${enablement_paths[*]}" == docs/AYO_DECISION_ID_REGISTRY.json && "$rc" == "$re" ]]; then
                 mode=ap-decision-registry-forward-reservation
               else
@@ -471,6 +473,7 @@ jobs:
           uv run --locked pytest -q --no-cov tests/governance/test_ci_governance_evidence.py
       - name: Bind AP forward-reservation identity
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && startsWith(steps.evidence_contract.outputs.mode, 'ap-decision-registry-forward-reservation')
+        id: apr
         run: |
           set -euo pipefail
           c=${{ env.TESTED_COMMIT_SHA }};m=${{ steps.evidence_contract.outputs.mode }};z="${{ github.event_name }} ${{ github.ref }} ${{ github.event.before || '' }}";h=$c;p=($(git show -s --format=%P $c));if ((${#p[@]}==1));then b=$(git merge-base $h origin/main);t=$b;k=FEATURE_CANDIDATE;[[ $z == pull_request\ * || $z == push\ refs/heads/* && $z != push\ refs/heads/main\ * ]]||exit;else h=${p[1]};b=${p[0]};t=$c;k=AUTHORITATIVE_MAIN;[[ $z == "push refs/heads/main $b" ]]||exit;fi
@@ -481,6 +484,7 @@ jobs:
           uv run --locked python tools/validate_ap_decision_registry.py "$f" --baseline-registry <(git show $b:docs/AYO_DECISION_ID_REGISTRY.json) --baseline-provenance-manifest <(git show $b:docs/AYO_AP_HISTORICAL_PROVENANCE.json) --baseline-main-commit $b
           if [[ $m == *-context || $m == ap-decision-registry-forward-reservation ]];then AYO_AP_REPOSITORY_CONTEXT=$k AYO_AP_TRUSTED_MAIN_SHA=$t uv run --locked pytest -q --no-cov tests/governance/test_ap_decision_registry.py;[[ $m != *-context ]]||uv run --locked pytest -q --no-cov tests/governance/test_ci_governance_evidence.py;elif [[ $m == *-enablement ]];then uv run --locked pytest -q --no-cov tests/governance/test_ci_governance_evidence.py;fi
           ! git ls-tree -r --name-only $c|grep -q '^institutional/founder-discovery/phase-5/'
+          echo validated=true >>"$GITHUB_OUTPUT"
       - name: Bind exact pip audit-toolchain remediation identity
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'pip-audit-toolchain-remediation'
         env:
@@ -3953,12 +3957,15 @@ jobs:
           CONSENT_ARCHITECTURE_SECRET_CLEANUP_PATH: ${{ runner.temp }}/consent-document-architecture-secret-cleanup-v1.txt
           EVIDENCE_MODE: ${{ steps.evidence_contract.outputs.mode }}
           TRUSTED_SHA: ${{ steps.trusted_comparison_base.outputs.sha }}
+          AP_VALIDATED: ${{ steps.apr.outputs.validated }}
+          TRUSTED_MODE: ${{ steps.trusted_comparison_base.outputs.mode }}
+          CANDIDATE_HEAD: ${{ env.TESTED_COMMIT_SHA }}
           WORKFLOW_EVENT_NAME: ${{ github.event_name }}
         run: |
           set -euo pipefail
           evidence_mode="$EVIDENCE_MODE"
           g=false
-          [[ "$evidence_mode" == "ci-governance-evidence-extraction" || "$evidence_mode" == "ap-decision-registry-reconciliation-enablement" || "$evidence_mode" == ap-decision-registry-forward-reservation* ]] && g=true
+          [[ "$evidence_mode" == "ci-governance-evidence-extraction" || "$evidence_mode" == "ap-decision-registry-reconciliation-enablement" || "$evidence_mode" == ap-decision-registry-forward-reservation* || "$evidence_mode" == ap-registry-git-provenance-secret-classification ]] && g=true
           candidate_json=candidate-secrets.json
           base_json=base-secrets.json
           baseline_json=reviewed-secrets-baseline.json
@@ -4083,10 +4090,14 @@ jobs:
           from tools.validate_ci_governance_evidence import (
               BATCH2_ONLY_SECRET_PATHS,
               IMMEDIATE_STANDARD_SECRET_ADDITIONS,
-              canonical_json,
+              canonical_json as canonical,
+              candidate_only_secret_semantics,
+              classify_reservation_secret_semantics,
+              hex_byte_inventory as hex_bytes,
+              require_exact_secret_inventory as exact,
               reviewed_secret_inventory,
-              secret_fingerprint,
-              secret_inventory,
+              secret_fingerprint as fingerprint,
+              secret_inventory as scan_inventory,
           )
           VERSION = "1.5.0"
           BASELINE_KEYS = {"version", "plugins_used", "filters_used", "results", "inventory_fingerprint_bytes", "review"}
@@ -4098,29 +4109,6 @@ jobs:
               if not isinstance(value, dict):
                   raise SystemExit("secret baseline root must be an object")
               return value
-          def canonical(value):
-              return canonical_json(value)
-          def hex_bytes(value, length, label):
-              if (not isinstance(value, list) or len(value) != length
-                      or any(type(item) is not int or not 0 <= item <= 255 for item in value)):
-                  raise SystemExit(f"malformed {label} byte inventory")
-              return bytes(value).hex()
-          def scan_inventory(results):
-              return list(secret_inventory(results))
-          def fingerprint(items):
-              return secret_fingerprint(items)
-          def render(item):
-              p, n, t, h, v = item
-              return f"{p}|{n}|{t}|{h}|{str(v).lower()}"
-          def exact(label, actual, expected):
-              if actual == expected:
-                  return
-              a, e = set(actual), set(expected)
-              for item in sorted(e - a):
-                  print("EXPECTED_ONLY|" + render(item))
-              for item in sorted(a - e):
-                  print("ACTUAL_ONLY|" + render(item))
-              raise SystemExit(f"{label} semantic finding inventory drift")
           scan = load(os.environ["CANDIDATE_JSON"])
           baseline = load(os.environ["BASELINE_JSON"])
           if set(baseline) != BASELINE_KEYS:
@@ -4267,15 +4255,7 @@ jobs:
               selected = "unadmitted Mobile complete base/candidate inventory"
           elif mode == "pip-audit-toolchain-remediation":
               base = scan_inventory(load(os.environ["BASE_JSON"]).get("results"))
-              base_semantics = Counter(
-                  (path, detector, digest, verified)
-                  for path, _, detector, digest, verified in base
-              )
-              candidate_semantics = Counter(
-                  (path, detector, digest, verified)
-                  for path, _, detector, digest, verified in actual
-              )
-              candidate_only = candidate_semantics - base_semantics
+              candidate_only = candidate_only_secret_semantics(base, actual)
               if candidate_only:
                   raise SystemExit(
                       "pip-remediation introduced unreviewed secret-finding semantics"
@@ -4283,16 +4263,7 @@ jobs:
               selected = "pip-remediation no-new-secret semantic inventory"
           elif mode == "ap-decision-registry-main-landing":
               base = scan_inventory(load(os.environ["BASE_JSON"]).get("results"))
-              base_semantics = Counter(
-                  (path, detector, digest, verified)
-                  for path, _, detector, digest, verified in base
-              )
-              candidate_semantics = Counter(
-                  (path, detector, digest, verified)
-                  for path, _, detector, digest, verified in actual
-              )
-              candidate_only = candidate_semantics - base_semantics
-              candidate_only_items = sorted(candidate_only.elements())
+              candidate_only_items = candidate_only_secret_semantics(base, actual)
               candidate_only_payload = "\n".join(
                   f"{path}|{detector}|{digest}|{str(verified).lower()}"
                   for path, detector, digest, verified in candidate_only_items
@@ -4319,13 +4290,19 @@ jobs:
                       "AP-registry introduced unreviewed secret-finding semantics"
                   )
               selected = "AP-registry exact governed commit-SHA false-positive inventory"
-          elif mode in {"ap-registry-active-state-correction", "ap-registry-active-state-main-ci-correction", "ci-governance-evidence-extraction", "ap-decision-registry-reconciliation-enablement"} or mode.startswith("ap-decision-registry-forward-reservation"):
+          elif mode in {"ap-registry-active-state-correction", "ap-registry-active-state-main-ci-correction", "ci-governance-evidence-extraction", "ap-decision-registry-reconciliation-enablement", "ap-registry-git-provenance-secret-classification"} or mode.startswith("ap-decision-registry-forward-reservation"):
               source = load(os.environ["BASE_JSON"]); base = scan_inventory(source.get("results"))
-              sem = lambda x: Counter((p,t,h,v) for p,_,t,h,v in x)
-              candidate_only = sorted((sem(actual)-sem(base)).elements())
-              payload = "\n".join(f"{p}|{t}|{h}|{str(v).lower()}" for p,t,h,v in candidate_only)
-              observed = hashlib.sha256(payload.encode()).hexdigest()
-              eq = lambda k: canonical(source.get(k))==canonical(scan.get(k))
+              candidate_only = candidate_only_secret_semantics(base, actual)
+              if mode == "ap-decision-registry-forward-reservation":
+                  _, candidate_only = classify_reservation_secret_semantics(
+                      candidate_only,
+                      load("docs/AYO_DECISION_ID_REGISTRY.json"),
+                      os.environ["TRUSTED_SHA"], os.environ["CANDIDATE_HEAD"],
+                      evidence_mode=mode,
+                      reservation_validated=os.environ["AP_VALIDATED"],
+                      trusted_mode=os.environ["TRUSTED_MODE"],
+                  )
+              observed = fingerprint(candidate_only)
               expected = (5, "f758a3f743de40be4ac0320eac9f8abf0af34a4cb139567b3d977b858fef09b6") if mode == "ci-governance-evidence-extraction" else (0, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
               if (len(candidate_only), observed) != expected:
                   raise SystemExit(
