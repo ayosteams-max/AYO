@@ -80,6 +80,31 @@ class ClassifyArgs(TypedDict):
     reviewed_feature: bool
 
 
+class PrResolverArgs(TypedDict):
+    event: str
+    ref: str
+    mode: str
+    base: str
+    head: str
+    checked_out_head: str
+    reservation_validated: bool
+    base_is_ancestor: NotRequired[bool]
+    head_is_ancestor: NotRequired[bool]
+
+
+class ResolverAdmissionArgs(TypedDict):
+    base: str
+    parent_count: int
+    subject: str
+    paths: tuple[str, ...]
+    manifest_blob: str
+    registry_blob: str
+    decision_blob: str
+    trusted_test_blob: str
+    workflow_commitment: str
+    lifecycle_empty: bool
+
+
 ACTIVE_MODE = "ap-registry-active-state-correction"
 ACTIVE_BASE = "6b94c451" + "87af70f1" + "76d6a98d" + "40742187" + "ceaf43c8"
 ACTIVE_STATE = "32775104" + "60b5af71" + "773dda62" + "a4db69cd" + "739433f3"
@@ -120,6 +145,19 @@ RESERVATION_ENABLEMENT_BASE = (
     "334ca80b" + "3c9701a7" + "1756cccb" + "00d4ce9d" + "fd9b59f7"
 )
 RESERVATION_PATHS = ("docs/AYO_DECISION_ID_REGISTRY.json",)
+GENERIC_PR_MODE = "booking-complete-replay-equivalence"
+RESERVATION_RESOLVER = "verified-ap-registry-forward-reservation-base"
+RESOLVER_FIX_BASE = "4d27fa55" + "4ae93561" + "bc41daea" + "8c5615f7" + "fdca6a5f"
+RESOLVER_FIX_SUBJECT = "ci: fix reservation PR resolver self-admission"
+RESOLVER_FIX_PATHS = (
+    ".github/workflows/ci.yml",
+    "tests/governance/test_ci_trusted_comparison_base.py",
+)
+RESOLVER_FIX_MANIFEST = "2220b1fe" + "b90469c9" + "80e7661d" + "366f5fd1" + "fb1b616c"
+RESOLVER_FIX_REGISTRY = "a8a9797f" + "6b636124" + "96f83f84" + "1cc089ca" + "3bd37af4"
+RESOLVER_FIX_DECISION = "9becdd20" + "34a1c42b" + "39557ce3" + "4cd5d028" + "74bfacae"
+RESOLVER_FIX_TEST = "1" * 40
+RESOLVER_FIX_COMMITMENT = "2" * 64
 
 
 def _validate_reservation_paths(paths: tuple[str, ...]) -> None:
@@ -147,6 +185,49 @@ def _resolve_reservation_source(
     if mode == RESERVATION_ENABLEMENT_MODE and source != RESERVATION_ENABLEMENT_BASE:
         raise ValueError("reservation enablement base drift")
     return source
+
+
+def _resolve_pr_source(
+    *,
+    event: str,
+    ref: str,
+    mode: str,
+    base: str,
+    head: str,
+    checked_out_head: str,
+    reservation_validated: bool,
+    base_is_ancestor: bool = True,
+    head_is_ancestor: bool = True,
+) -> tuple[str, str]:
+    if event != "pull_request" or not re.fullmatch(r"refs/pull/[1-9][0-9]*/merge", ref):
+        raise ValueError("pull-request event/ref drift")
+    if mode not in {RESERVATION_MODE, GENERIC_PR_MODE}:
+        raise ValueError("unknown PR evidence mode")
+    for value in (base, head, checked_out_head):
+        if not re.fullmatch(r"[0-9a-f]{40}", value) or value == ZERO:
+            raise ValueError("pull-request identity drift")
+    if not base_is_ancestor or not head_is_ancestor:
+        raise ValueError("synthetic merge topology drift")
+    if mode == RESERVATION_MODE:
+        if not reservation_validated or head == base:
+            raise ValueError("reservation PR authority drift")
+        return base, RESERVATION_RESOLVER
+    return base, "pull-request-base"
+
+
+def _admits_resolver_fix(**values: Unpack[ResolverAdmissionArgs]) -> bool:
+    return (
+        values["base"] == RESOLVER_FIX_BASE
+        and values["parent_count"] == 1
+        and values["subject"] == RESOLVER_FIX_SUBJECT
+        and values["paths"] == RESOLVER_FIX_PATHS
+        and values["manifest_blob"] == RESOLVER_FIX_MANIFEST
+        and values["registry_blob"] == RESOLVER_FIX_REGISTRY
+        and values["decision_blob"] == RESOLVER_FIX_DECISION
+        and values["trusted_test_blob"] == RESOLVER_FIX_TEST
+        and values["workflow_commitment"] == RESOLVER_FIX_COMMITMENT
+        and values["lifecycle_empty"]
+    )
 
 
 def _require_commit(value: str) -> None:
@@ -526,6 +607,61 @@ def test_forward_reservation_trusted_source_positive_controls(
     )
 
 
+def test_forward_reservation_pr_uses_verified_resolver() -> None:
+    assert _resolve_pr_source(
+        event="pull_request",
+        ref="refs/pull/102/merge",
+        mode=RESERVATION_MODE,
+        base=AUTHORITATIVE_BASE,
+        head=HEAD,
+        checked_out_head="d" * 40,
+        reservation_validated=True,
+    ) == (AUTHORITATIVE_BASE, RESERVATION_RESOLVER)
+
+
+def test_generic_pr_resolver_is_unchanged() -> None:
+    assert _resolve_pr_source(
+        event="pull_request",
+        ref="refs/pull/7/merge",
+        mode=GENERIC_PR_MODE,
+        base=AUTHORITATIVE_BASE,
+        head=HEAD,
+        checked_out_head="d" * 40,
+        reservation_validated=False,
+    ) == (AUTHORITATIVE_BASE, "pull-request-base")
+
+
+@pytest.mark.parametrize(
+    "changes",
+    (
+        {"event": "push"},
+        {"ref": "refs/heads/feature"},
+        {"base": "not-a-sha"},
+        {"head": ZERO},
+        {"base_is_ancestor": False},
+        {"head_is_ancestor": False},
+        {"reservation_validated": False},
+        {"mode": "unknown"},
+        {"head": AUTHORITATIVE_BASE},
+    ),
+)
+def test_forward_reservation_pr_resolver_fails_closed(
+    changes: dict[str, object],
+) -> None:
+    values: PrResolverArgs = {
+        "event": "pull_request",
+        "ref": "refs/pull/102/merge",
+        "mode": RESERVATION_MODE,
+        "base": AUTHORITATIVE_BASE,
+        "head": HEAD,
+        "checked_out_head": "d" * 40,
+        "reservation_validated": True,
+    }
+    values.update(cast(PrResolverArgs, changes))
+    with pytest.raises(ValueError):
+        _resolve_pr_source(**values)
+
+
 @pytest.mark.parametrize(
     "values",
     (
@@ -576,9 +712,89 @@ def test_workflow_routes_forward_reservation_before_generic_push() -> None:
     generic = 'elif [[ -n "$EVENT_BEFORE" && "$EVENT_BEFORE" != "$zero" ]]'
     assert workflow.index(dedicated) < workflow.index(generic)
     assert "mode=verified-ap-registry-forward-reservation-base" in workflow
+    assert "AP_VALIDATED: ${{ steps.apr.outputs.validated }}" in workflow
+    assert "^refs/pull/[1-9][0-9]*/merge$" in workflow
+    assert (
+        "if [[ $EVIDENCE_MODE == ap-decision-registry-forward-reservation ]];then"
+        in workflow
+    )
+    assert "mode=ap-reservation-pr-resolver-self-admission-fix" in workflow
     assert "--forward-reservation-only" in workflow
     assert "x=docs/AYO_DECISION_ID_REGISTRY.json" in workflow
     assert "institutional/founder-discovery/phase-5/" in workflow
+
+
+def test_resolver_self_admission_uses_independent_exact_predicates() -> None:
+    workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
+    route = workflow.split(
+        "mode=ap-reservation-pr-resolver-self-admission-fix", maxsplit=1
+    )[0].rsplit("elif [[", maxsplit=1)[1]
+    assert "$d $(git rev-parse" not in route
+    assert 'read -r dm dr dl _<<<"$d"' in workflow
+    for predicate in (
+        '"${enablement_paths[*]}" ==',
+        "git show -s --format=%P $candidate",
+        "git rev-list --count $eb..$candidate",
+        "git show -s --format=%s $candidate",
+        '"$dm" ==',
+        '"$dr" ==',
+        '"$dl" ==',
+        "tests/governance/test_ci_trusted_comparison_base.py",
+        '"$normalized" == "$expected_ci_governance_extraction_sha256"',
+    ):
+        assert predicate in route
+
+
+def test_space_terminated_identity_rejects_an_added_separator() -> None:
+    generated = "decision-log-sha "
+    trusted_test = "trusted-test-sha"
+    exact = generated + trusted_test
+    defective = generated + " " + trusted_test
+    assert defective != exact
+    assert "  " in defective
+
+
+def _resolver_admission_arguments() -> ResolverAdmissionArgs:
+    return {
+        "base": RESOLVER_FIX_BASE,
+        "parent_count": 1,
+        "subject": RESOLVER_FIX_SUBJECT,
+        "paths": RESOLVER_FIX_PATHS,
+        "manifest_blob": RESOLVER_FIX_MANIFEST,
+        "registry_blob": RESOLVER_FIX_REGISTRY,
+        "decision_blob": RESOLVER_FIX_DECISION,
+        "trusted_test_blob": RESOLVER_FIX_TEST,
+        "workflow_commitment": RESOLVER_FIX_COMMITMENT,
+        "lifecycle_empty": True,
+    }
+
+
+def test_resolver_fix_self_admission_positive() -> None:
+    assert _admits_resolver_fix(**_resolver_admission_arguments())
+
+
+@pytest.mark.parametrize(
+    "change",
+    (
+        {"base": "3" * 40},
+        {"parent_count": 2},
+        {"subject": "ci: wrong subject"},
+        {"paths": tuple(reversed(RESOLVER_FIX_PATHS))},
+        {"paths": RESOLVER_FIX_PATHS + ("docs/EXTRA.md",)},
+        {"manifest_blob": "3" * 40},
+        {"registry_blob": "3" * 40},
+        {"decision_blob": "3" * 40},
+        {"trusted_test_blob": "3" * 40},
+        {"workflow_commitment": "3" * 64},
+        {"lifecycle_empty": False},
+    ),
+)
+def test_resolver_fix_self_admission_fails_closed(
+    change: dict[str, object],
+) -> None:
+    values = _resolver_admission_arguments()
+    values.update(cast(ResolverAdmissionArgs, change))
+    assert not _admits_resolver_fix(**values)
 
 
 def test_forward_reservation_path_positive_control() -> None:
