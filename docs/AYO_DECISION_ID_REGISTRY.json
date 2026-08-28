@@ -765,6 +765,29 @@
       "reconciliation_status": "PENDING_MAIN_REVIEW"
     }
   ],
-  "forward_identity_events": [],
+  "forward_identity_events": [
+    {
+      "event_id": "c7ebb9e70c6e54505ede040d9871b95a03c6835215dba86b55be514844ab84af",
+      "event_type": "RESERVED",
+      "ap_id": "AP-099",
+      "title": "AYO Founder Institutional Discovery Corpus Phase 5 Preservation Foundation",
+      "purpose": "Replacement forward permanent identity for the already-approved Phase 5 Preservation Foundation historically recorded under colliding AP-079. It grants no dual-corpus amendment authority, corpus receipt authority, or ingestion authority.",
+      "base_main_commit": "bb2f68c975c4905bdb3924cb58ccc8b5307cd98c",
+      "prior_event_id": null,
+      "authority": "FOUNDER_AND_CTO_APPROVED",
+      "approved_date": "2026-08-29"
+    },
+    {
+      "event_id": "8e7856e3ccd4644e288d832ba2c567dbb533c754ab241a4805024470a659500c",
+      "event_type": "RESERVED",
+      "ap_id": "AP-100",
+      "title": "AYO Founder Institutional Discovery Phase 5 Dual-Corpus and Source-Preservation Amendment",
+      "purpose": "Future authority for raw source artifact custody, source-unit inventory, canonical numbered corpus provenance, separate Discovery Intelligence preservation, extraction ledger, coverage semantics, and open-count Discovery Intelligence validation. Reservation alone grants no implementation or ingestion authority.",
+      "base_main_commit": "bb2f68c975c4905bdb3924cb58ccc8b5307cd98c",
+      "prior_event_id": null,
+      "authority": "FOUNDER_AND_CTO_APPROVED",
+      "approved_date": "2026-08-29"
+    }
+  ],
   "collision_reconciliations": []
 }
