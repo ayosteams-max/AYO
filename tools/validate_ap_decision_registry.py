@@ -102,6 +102,7 @@ AUTHORIZED_FORWARD_RESERVATIONS = {
     "AP-099": (AP_099_TITLE, AP_099_PURPOSE),
     "AP-100": (AP_100_TITLE, AP_100_PURPOSE),
 }
+FORWARD_RESERVATION_AUTHORITY = "FOUNDER_AND_CTO_APPROVED"
 PROVENANCE_CLASSES = frozenset(
     {"MAIN_REACHABLE", "REMOTE_REF_REACHABLE", "HISTORICAL_MANIFEST_ONLY"}
 )
@@ -363,6 +364,55 @@ def validate_authorized_forward_reservation(event: dict[str, Any]) -> None:
     ):
         raise RegistryValidationError(
             "forward reservation lacks exact AP-099/AP-100 authorization"
+        )
+
+
+def validate_forward_reservation_candidate(
+    registry: dict[str, Any],
+    baseline_registry: dict[str, Any],
+    decision_log_text: str,
+    baseline_main_commit: str,
+) -> None:
+    """Prove the exact registry-only AP-099/AP-100 reservation transition."""
+    if (
+        baseline_registry.get("schema_version") != 2
+        or baseline_registry.get("cutover", {}).get("status") != "ACTIVE"
+    ):
+        raise RegistryValidationError("reservation baseline is not ACTIVE schema v2")
+    if (
+        baseline_registry.get("forward_identity_events") != []
+        or baseline_registry.get("collision_reconciliations") != []
+    ):
+        raise RegistryValidationError("reservation baseline lifecycle is not empty")
+    without_new_events = dict(registry)
+    without_new_events["forward_identity_events"] = []
+    if without_new_events != baseline_registry:
+        raise RegistryValidationError(
+            "reservation candidate changes non-event registry data"
+        )
+    events = registry.get("forward_identity_events")
+    if not isinstance(events, list) or [item.get("ap_id") for item in events] != [
+        "AP-099",
+        "AP-100",
+    ]:
+        raise RegistryValidationError("reservation batch must be AP-099 then AP-100")
+    for item in events:
+        validate_authorized_forward_reservation(item)
+        if (
+            item.get("prior_event_id") is not None
+            or item.get("base_main_commit") != baseline_main_commit
+            or item.get("authority") != FORWARD_RESERVATION_AUTHORITY
+            or item.get("event_id") != event_id(item)
+        ):
+            raise RegistryValidationError(
+                "reservation event authority or provenance drift"
+            )
+    if any(
+        ap_id in {"AP-099", "AP-100"}
+        for ap_id, _ in parse_decision_headings(decision_log_text)
+    ):
+        raise RegistryValidationError(
+            "reservation candidate contains an allocation heading"
         )
 
 
@@ -821,8 +871,10 @@ def main(argv: list[str] | None = None) -> int:
         default=Path("docs/AYO_AP_HISTORICAL_PROVENANCE.json"),
     )
     parser.add_argument("--baseline-registry", type=Path)
+    parser.add_argument("--baseline-provenance-manifest", type=Path)
     parser.add_argument("--baseline-main-commit")
     parser.add_argument("--enablement-only", action="store_true")
+    parser.add_argument("--forward-reservation-only", action="store_true")
     args = parser.parse_args(argv)
     try:
         registry = _load_json(args.registry)
@@ -830,6 +882,11 @@ def main(argv: list[str] | None = None) -> int:
         decision = args.decision_log.read_text(encoding="utf-8")
         baseline = (
             _load_json(args.baseline_registry) if args.baseline_registry else None
+        )
+        baseline_manifest = (
+            _load_json(args.baseline_provenance_manifest)
+            if args.baseline_provenance_manifest
+            else None
         )
         report = validate_registry(
             registry,
@@ -840,9 +897,18 @@ def main(argv: list[str] | None = None) -> int:
             main_reachable=_git_main_reachable,
             durable_ref_reachable=lambda _sha: False,
             provenance_manifest=manifest,
+            baseline_provenance_manifest=baseline_manifest,
             resolve_commit=_git_commit_metadata,
             enablement_only=args.enablement_only,
         )
+        if args.forward_reservation_only:
+            if baseline is None or args.baseline_main_commit is None:
+                raise RegistryValidationError(
+                    "reservation admission requires an exact registry baseline"
+                )
+            validate_forward_reservation_candidate(
+                registry, baseline, decision, args.baseline_main_commit
+            )
     except (
         OSError,
         UnicodeError,

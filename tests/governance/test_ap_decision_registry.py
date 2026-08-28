@@ -15,6 +15,7 @@ from tools.validate_ap_decision_registry import (
     AP_100_PURPOSE,
     AP_100_TITLE,
     APPROVED_MANIFEST_ONLY,
+    FORWARD_RESERVATION_AUTHORITY,
     RegistryValidationError,
     effective_reconciliation_status,
     event_id,
@@ -22,6 +23,7 @@ from tools.validate_ap_decision_registry import (
     manifest_entry_id,
     reconciliation_id,
     validate_authorized_forward_reservation,
+    validate_forward_reservation_candidate,
     validate_registry,
 )
 
@@ -473,6 +475,161 @@ def test_exact_future_reservation_authorizations_only() -> None:
         validate_authorized_forward_reservation(event(ap_id="AP-101"))
 
 
+def reservation_candidate() -> tuple[dict[str, Any], dict[str, Any]]:
+    baseline = registry(allocation())
+    candidate = copy.deepcopy(baseline)
+    candidate["forward_identity_events"] = [
+        event(ap_id="AP-099", title=AP_099_TITLE, purpose=AP_099_PURPOSE),
+        event(ap_id="AP-100", title=AP_100_TITLE, purpose=AP_100_PURPOSE),
+    ]
+    return baseline, candidate
+
+
+def test_exact_forward_reservation_batch_is_accepted() -> None:
+    baseline, candidate = reservation_candidate()
+    validate(candidate, baseline=baseline)
+    validate_forward_reservation_candidate(candidate, baseline, "", BASE)
+    assert [item["ap_id"] for item in candidate["forward_identity_events"]] == [
+        "AP-099",
+        "AP-100",
+    ]
+    assert all(
+        item["event_type"] == "RESERVED"
+        and item["prior_event_id"] is None
+        and item["base_main_commit"] == BASE
+        and item["authority"] == FORWARD_RESERVATION_AUTHORITY
+        and item["event_id"] == event_id(item)
+        for item in candidate["forward_identity_events"]
+    )
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        "reverse",
+        "ap099_only",
+        "ap100_only",
+        "title",
+        "purpose",
+        "authority",
+        "base",
+        "event_id",
+        "duplicate",
+        "allocated",
+        "superseded",
+        "reconciliation",
+        "bootstrap",
+        "blocked",
+    ),
+)
+def test_forward_reservation_batch_drift_is_rejected(mutation: str) -> None:
+    baseline, candidate = reservation_candidate()
+    events = candidate["forward_identity_events"]
+    if mutation == "reverse":
+        events.reverse()
+    elif mutation == "ap099_only":
+        events.pop()
+    elif mutation == "ap100_only":
+        events.pop(0)
+    elif mutation in {"title", "purpose", "authority", "base"}:
+        field = {"base": "base_main_commit"}.get(mutation, mutation)
+        events[0][field] = "DRIFT"
+        events[0]["event_id"] = event_id(events[0])
+    elif mutation == "event_id":
+        events[0]["event_id"] = "0" * 64
+    elif mutation == "duplicate":
+        events[1] = copy.deepcopy(events[0])
+    elif mutation in {"allocated", "superseded"}:
+        events[0]["event_type"] = mutation.upper()
+        events[0]["event_id"] = event_id(events[0])
+    elif mutation == "reconciliation":
+        candidate["collision_reconciliations"] = [{}]
+    elif mutation == "bootstrap":
+        candidate["allocations"][0]["title"] = "DRIFT"
+    else:
+        candidate["blocked_unexplained_ranges"] = [
+            {"start": 99, "end": 100, "reason": "DRIFT"}
+        ]
+    with pytest.raises(RegistryValidationError):
+        validate_forward_reservation_candidate(candidate, baseline, "", BASE)
+
+
+def test_forward_reservation_batch_rejects_allocation_heading() -> None:
+    baseline, candidate = reservation_candidate()
+    with pytest.raises(RegistryValidationError, match="allocation heading"):
+        validate_forward_reservation_candidate(
+            candidate, baseline, heading(candidate["forward_identity_events"][0]), BASE
+        )
+
+
+@pytest.mark.parametrize("field", ("title", "purpose"))
+def test_ap100_forward_reservation_authority_drift_is_rejected(field: str) -> None:
+    baseline, candidate = reservation_candidate()
+    candidate["forward_identity_events"][1][field] = "DRIFT"
+    candidate["forward_identity_events"][1]["event_id"] = event_id(
+        candidate["forward_identity_events"][1]
+    )
+    with pytest.raises(RegistryValidationError, match="exact AP-099/AP-100"):
+        validate_forward_reservation_candidate(candidate, baseline, "", BASE)
+
+
+@pytest.mark.parametrize("index", (0, 1))
+def test_initial_forward_reservation_predecessor_is_null(index: int) -> None:
+    baseline, candidate = reservation_candidate()
+    candidate["forward_identity_events"][index]["prior_event_id"] = "b" * 64
+    candidate["forward_identity_events"][index]["event_id"] = event_id(
+        candidate["forward_identity_events"][index]
+    )
+    with pytest.raises(RegistryValidationError, match="authority or provenance drift"):
+        validate_forward_reservation_candidate(candidate, baseline, "", BASE)
+
+
+def test_forward_reservation_approved_date_must_be_well_formed() -> None:
+    baseline, candidate = reservation_candidate()
+    candidate["forward_identity_events"][0]["approved_date"] = "2026-8-27"
+    candidate["forward_identity_events"][0]["event_id"] = event_id(
+        candidate["forward_identity_events"][0]
+    )
+    with pytest.raises(RegistryValidationError, match="malformed approved_date"):
+        validate(candidate, baseline=baseline)
+
+
+@pytest.mark.parametrize("ap_id", ("AP-099", "AP-100"))
+def test_forward_reservation_batch_rejects_same_candidate_allocation(
+    ap_id: str,
+) -> None:
+    baseline, candidate = reservation_candidate()
+    reserved = next(
+        item for item in candidate["forward_identity_events"] if item["ap_id"] == ap_id
+    )
+    candidate["forward_identity_events"].append(
+        event(
+            "ALLOCATED",
+            ap_id=ap_id,
+            title=reserved["title"],
+            purpose=reserved["purpose"],
+            prior=reserved["event_id"],
+        )
+    )
+    with pytest.raises(RegistryValidationError, match="AP-099 then AP-100"):
+        validate_forward_reservation_candidate(candidate, baseline, "", BASE)
+
+
+def test_forward_reservation_batch_rejects_ap079_reconciliation() -> None:
+    baseline, candidate = reservation_candidate()
+    candidate["allocations"][0]["reconciliation_status"] = "RESOLVED"
+    candidate["collision_reconciliations"] = [{}]
+    with pytest.raises(RegistryValidationError, match="non-event registry data"):
+        validate_forward_reservation_candidate(candidate, baseline, "", BASE)
+
+
+def test_forward_reservation_batch_rejects_historical_collision_mutation() -> None:
+    baseline, candidate = reservation_candidate()
+    candidate["allocations"][0]["status"] = "ALLOCATED"
+    with pytest.raises(RegistryValidationError, match="non-event registry data"):
+        validate_forward_reservation_candidate(candidate, baseline, "", BASE)
+
+
 @pytest.mark.parametrize("kind", ["RESERVED", "ALLOCATED"])
 @pytest.mark.parametrize("ap_id", ["AP-099", "AP-100"])
 def test_enablement_candidate_rejects_future_identity_instantiation(
@@ -511,11 +668,10 @@ def test_mission2_workflow_binds_base_and_rejects_phase5_paths() -> None:
         Path(__file__).parents[2] / ".github" / "workflows" / "ci.yml"
     ).read_text(encoding="utf-8")
     exact_base = "".join(("dc564949", "c7d19e03", "84655251", "cb40bda3", "199ddace"))
-    start = workflow.index(f"base={exact_base}")
+    start = workflow.index(f"b={exact_base}")
     contract = workflow[start : workflow.index("          fi", start)]
-    assert f"base={exact_base}" in contract
-    assert 'git merge-base "$head" refs/remotes/origin/main' in contract
-    assert 'base="$(git merge-base' not in contract
+    assert f"b={exact_base}" in contract
+    assert 'git merge-base "$h" refs/remotes/origin/main' in contract
     registry_blob = "".join(
         ("2ffb2cfb", "9f6ac410", "cf4f75a7", "b4460ea9", "5fc117c2")
     )

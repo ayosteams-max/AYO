@@ -114,6 +114,39 @@ AGGREGATE_PATHS = (
     "docs/AYO_DECISION_ID_REGISTRY.json",
     "tests/governance/test_ci_trusted_comparison_base.py",
 )
+RESERVATION_MODE = "ap-decision-registry-forward-reservation"
+RESERVATION_ENABLEMENT_MODE = RESERVATION_MODE + "-enablement"
+RESERVATION_ENABLEMENT_BASE = (
+    "334ca80b" + "3c9701a7" + "1756cccb" + "00d4ce9d" + "fd9b59f7"
+)
+RESERVATION_PATHS = ("docs/AYO_DECISION_ID_REGISTRY.json",)
+
+
+def _validate_reservation_paths(paths: tuple[str, ...]) -> None:
+    if paths != RESERVATION_PATHS:
+        raise ValueError("reservation candidate path drift")
+
+
+def _resolve_reservation_source(
+    *, mode: str, event: str, ref: str, base: str, before: str, parents: tuple[str, ...]
+) -> str:
+    if mode not in {RESERVATION_MODE, RESERVATION_ENABLEMENT_MODE}:
+        raise ValueError("unknown reservation mode")
+    if event == "pull_request":
+        source = base
+    elif event == "push" and ref == "refs/heads/main":
+        if len(parents) != 2 or before != parents[0] or base != parents[0]:
+            raise ValueError("reservation merge source drift")
+        source = parents[0]
+    elif event == "push" and ref != "refs/heads/main":
+        if base not in parents:
+            raise ValueError("reservation feature source drift")
+        source = base
+    else:
+        raise ValueError("unsupported reservation context")
+    if mode == RESERVATION_ENABLEMENT_MODE and source != RESERVATION_ENABLEMENT_BASE:
+        raise ValueError("reservation enablement base drift")
+    return source
 
 
 def _require_commit(value: str) -> None:
@@ -451,6 +484,117 @@ def test_trusted_base_negative_controls(arguments: ResolveArgs) -> None:
 def test_downstream_replacement_is_rejected() -> None:
     with pytest.raises(ValueError):
         _consume(AUTHORITATIVE_BASE, PRIOR_BASE)
+
+
+@pytest.mark.parametrize(
+    ("mode", "event", "ref", "base", "before", "parents"),
+    (
+        (
+            RESERVATION_ENABLEMENT_MODE,
+            "pull_request",
+            "refs/pull/1/merge",
+            RESERVATION_ENABLEMENT_BASE,
+            "",
+            (RESERVATION_ENABLEMENT_BASE,),
+        ),
+        (
+            RESERVATION_MODE,
+            "push",
+            "refs/heads/agent/reserve",
+            "e" * 40,
+            "f" * 40,
+            ("e" * 40,),
+        ),
+        (
+            RESERVATION_MODE,
+            "push",
+            "refs/heads/main",
+            "e" * 40,
+            "e" * 40,
+            ("e" * 40, "f" * 40),
+        ),
+    ),
+)
+def test_forward_reservation_trusted_source_positive_controls(
+    mode: str, event: str, ref: str, base: str, before: str, parents: tuple[str, ...]
+) -> None:
+    assert (
+        _resolve_reservation_source(
+            mode=mode, event=event, ref=ref, base=base, before=before, parents=parents
+        )
+        == base
+    )
+
+
+@pytest.mark.parametrize(
+    "values",
+    (
+        dict(
+            mode="unknown",
+            event="push",
+            ref="refs/heads/feature",
+            base="e" * 40,
+            before="",
+            parents=("e" * 40,),
+        ),
+        dict(
+            mode=RESERVATION_ENABLEMENT_MODE,
+            event="pull_request",
+            ref="refs/pull/1/merge",
+            base="e" * 40,
+            before="",
+            parents=("e" * 40,),
+        ),
+        dict(
+            mode=RESERVATION_MODE,
+            event="push",
+            ref="refs/heads/feature",
+            base="e" * 40,
+            before="e" * 40,
+            parents=("f" * 40,),
+        ),
+        dict(
+            mode=RESERVATION_MODE,
+            event="push",
+            ref="refs/heads/main",
+            base="e" * 40,
+            before="f" * 40,
+            parents=("e" * 40, "f" * 40),
+        ),
+    ),
+)
+def test_forward_reservation_trusted_source_negative_controls(
+    values: dict[str, object],
+) -> None:
+    with pytest.raises(ValueError):
+        _resolve_reservation_source(**values)  # type: ignore[arg-type]
+
+
+def test_workflow_routes_forward_reservation_before_generic_push() -> None:
+    workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
+    dedicated = 'elif [[ "$EVIDENCE_MODE" == ap-decision-registry-forward-reservation*'
+    generic = 'elif [[ -n "$EVENT_BEFORE" && "$EVENT_BEFORE" != "$zero" ]]'
+    assert workflow.index(dedicated) < workflow.index(generic)
+    assert "mode=verified-ap-registry-forward-reservation-base" in workflow
+    assert "--forward-reservation-only" in workflow
+    assert "x=docs/AYO_DECISION_ID_REGISTRY.json" in workflow
+    assert "institutional/founder-discovery/phase-5/" in workflow
+
+
+def test_forward_reservation_path_positive_control() -> None:
+    _validate_reservation_paths(RESERVATION_PATHS)
+
+
+@pytest.mark.parametrize(
+    "extra_path",
+    (
+        "docs/UNAUTHORIZED.md",
+        "institutional/founder-discovery/phase-5/implementation.json",
+    ),
+)
+def test_forward_reservation_path_negative_controls(extra_path: str) -> None:
+    with pytest.raises(ValueError, match="path drift"):
+        _validate_reservation_paths(RESERVATION_PATHS + (extra_path,))
 
 
 def _active_arguments() -> ActiveArgs:
