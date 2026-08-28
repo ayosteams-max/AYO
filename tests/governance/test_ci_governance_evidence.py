@@ -129,9 +129,12 @@ def test_real_workflow_commitments_use_canonical_git_bytes() -> None:
     assert governed_workflow_commitment(crlf, "pip") != pip
 
 
-ENABLEMENT_BASE = "334ca80b3c9701a71756cccb00d4ce9dfd9b59f7"
-ENABLEMENT_FIRST = "4a19af9eaa472d3f3c49c4fadc9f3cc540e08899"
-ENABLEMENT_SUBJECT = "ci: bind workflow commitments to canonical Git bytes"
+ENABLEMENT_BASE = "".join(("334ca80b", "3c9701a7", "1756cccb", "00d4ce9d", "fd9b59f7"))
+ENABLEMENT_FIRST = "".join(("4a19af9e", "aa472d3f", "3c49c4fa", "dc9f3cc5", "40e08899"))
+ENABLEMENT_SECOND = "".join(
+    ("87c16518", "54b5944c", "5b749a02", "b0e281ab", "0e33dc4c")
+)
+ENABLEMENT_SUBJECT = "ci: stabilize reservation enablement evidence"
 ENABLEMENT_CORRECTION_PATHS = (
     ".github/workflows/ci.yml",
     "tests/governance/test_ci_governance_evidence.py",
@@ -148,23 +151,24 @@ ENABLEMENT_AGGREGATE_PATHS = (
 def _validate_enablement_correction(
     *,
     base: str = ENABLEMENT_BASE,
-    chain: tuple[str, ...] = (ENABLEMENT_FIRST, "c" * 40),
-    parent: str = ENABLEMENT_FIRST,
+    chain: tuple[str, ...] = (ENABLEMENT_FIRST, ENABLEMENT_SECOND, "c" * 40),
+    parent: str = ENABLEMENT_SECOND,
     subject: str = ENABLEMENT_SUBJECT,
     paths: tuple[str, ...] = ENABLEMENT_CORRECTION_PATHS,
     aggregate: tuple[str, ...] = ENABLEMENT_AGGREGATE_PATHS,
-    event_before: str = ENABLEMENT_FIRST,
+    event_before: str = ENABLEMENT_SECOND,
     trusted_source: str = ENABLEMENT_BASE,
 ) -> None:
     if (
         base != ENABLEMENT_BASE
-        or len(chain) != 2
+        or len(chain) != 3
         or chain[0] != ENABLEMENT_FIRST
-        or parent != ENABLEMENT_FIRST
+        or chain[1] != ENABLEMENT_SECOND
+        or parent != ENABLEMENT_SECOND
         or subject != ENABLEMENT_SUBJECT
         or paths != ENABLEMENT_CORRECTION_PATHS
         or aggregate != ENABLEMENT_AGGREGATE_PATHS
-        or event_before != ENABLEMENT_FIRST
+        or event_before != ENABLEMENT_SECOND
         or trusted_source != ENABLEMENT_BASE
     ):
         raise EvidenceValidationError("forward-reservation enablement correction drift")
@@ -178,7 +182,7 @@ def test_forward_reservation_enablement_correction_topology() -> None:
     ("field", "value"),
     (
         ("base", "b" * 40),
-        ("chain", (ENABLEMENT_FIRST, "c" * 40, "d" * 40)),
+        ("chain", (ENABLEMENT_FIRST, ENABLEMENT_SECOND, "c" * 40, "d" * 40)),
         ("parent", "b" * 40),
         ("subject", "wrong subject"),
         ("paths", ENABLEMENT_CORRECTION_PATHS + ("unexpected",)),
