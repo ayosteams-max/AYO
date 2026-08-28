@@ -130,7 +130,12 @@ def _repository_forward_context(
         text=True,
         encoding="utf-8",
     ).stdout.strip()
-    if trusted == head:
+    context = os.environ.get("AYO_AP_REPOSITORY_CONTEXT", "FEATURE_CANDIDATE")
+    if context not in {"FEATURE_CANDIDATE", "AUTHORITATIVE_MAIN"}:
+        raise RegistryValidationError("repository context is malformed")
+    if context == "AUTHORITATIVE_MAIN" and trusted != head:
+        raise RegistryValidationError("authoritative main context is mismatched")
+    if context == "FEATURE_CANDIDATE" and trusted == head:
         raise RegistryValidationError("candidate HEAD is not authoritative main")
 
     def load(path: str) -> dict[str, Any]:
@@ -168,6 +173,22 @@ def _repository_forward_context(
         trusted,
         reachable,
     )
+
+
+def _repository_context_from_ci(
+    event: str, ref: str, before: str, head: str, parents: list[str]
+) -> tuple[str, str]:
+    if len(parents) == 2 and (event, ref, before) == (
+        "push",
+        "refs/heads/main",
+        parents[0],
+    ):
+        return "AUTHORITATIVE_MAIN", head
+    if len(parents) == 1 and (
+        event == "pull_request" or (event == "push" and ref != "refs/heads/main")
+    ):
+        return "FEATURE_CANDIDATE", parents[0]
+    raise RegistryValidationError("repository CI context is not governed")
 
 
 @pytest.mark.parametrize("trusted", [None, "not-a-sha"])
@@ -221,10 +242,88 @@ def test_forward_repository_context_rejects_candidate_head(
         encoding="utf-8",
     ).stdout.strip()
     monkeypatch.setenv("AYO_AP_TRUSTED_MAIN_SHA", head)
+    monkeypatch.setenv("AYO_AP_REPOSITORY_CONTEXT", "FEATURE_CANDIDATE")
     value = registry(allocation())
     value["forward_identity_events"] = [event(base=head)]
     with pytest.raises(RegistryValidationError, match="candidate HEAD"):
         _repository_forward_context(root, value)
+
+
+def test_forward_repository_context_accepts_authoritative_main(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = Path(__file__).parents[2]
+    head = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=root,
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    ).stdout.strip()
+    monkeypatch.setenv("AYO_AP_TRUSTED_MAIN_SHA", head)
+    monkeypatch.setenv("AYO_AP_REPOSITORY_CONTEXT", "AUTHORITATIVE_MAIN")
+    value = registry(allocation())
+    value["forward_identity_events"] = [event(base=head)]
+    baseline, manifest, observed, reachable = _repository_forward_context(root, value)
+    assert baseline and manifest and observed == head
+    assert reachable(head, head)
+
+
+@pytest.mark.parametrize("context", ["AUTHORITATIVE_MAIN", "UNREVIEWED"])
+def test_forward_repository_context_rejects_wrong_authoritative_main(
+    monkeypatch: pytest.MonkeyPatch, context: str
+) -> None:
+    root = Path(__file__).parents[2]
+    head = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=root,
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    ).stdout.strip()
+    monkeypatch.setenv(
+        "AYO_AP_TRUSTED_MAIN_SHA",
+        subprocess.run(
+            ["git", "rev-parse", "HEAD^"],
+            cwd=root,
+            check=True,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        ).stdout.strip(),
+    )
+    monkeypatch.setenv("AYO_AP_REPOSITORY_CONTEXT", context)
+    value = registry(allocation())
+    value["forward_identity_events"] = [event(base=head)]
+    with pytest.raises(RegistryValidationError, match="context"):
+        _repository_forward_context(root, value)
+
+
+def test_repository_ci_context_classifies_governed_feature_and_main() -> None:
+    base, head = "a" * 40, "b" * 40
+    assert _repository_context_from_ci(
+        "pull_request", "refs/pull/1/merge", "", head, [base]
+    ) == ("FEATURE_CANDIDATE", base)
+    assert _repository_context_from_ci(
+        "push", "refs/heads/main", base, head, [base, "c" * 40]
+    ) == ("AUTHORITATIVE_MAIN", head)
+
+
+@pytest.mark.parametrize(
+    ("event", "ref", "before"),
+    (
+        ("pull_request", "refs/pull/1/merge", "a" * 40),
+        ("push", "refs/heads/feature", "a" * 40),
+        ("push", "refs/heads/main", "d" * 40),
+    ),
+)
+def test_repository_ci_context_rejects_unguarded_two_parent_authority(
+    event: str, ref: str, before: str
+) -> None:
+    with pytest.raises(RegistryValidationError, match="not governed"):
+        _repository_context_from_ci(event, ref, before, "b" * 40, ["a" * 40, "c" * 40])
 
 
 def provenance(value: dict[str, Any]) -> dict[str, Any]:
