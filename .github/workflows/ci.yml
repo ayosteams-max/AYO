@@ -254,7 +254,7 @@ jobs:
         run: |
           set -euo pipefail
           expected_helper_blob=34c82f0c7dba1778db5158cd922ce0d378f5e424
-          expected_ci_normalized_sha256="2b24aafbf0a16a7ca08c746a6832ed56""20bf0672ae5c4deb008dceebab00bbea"
+          expected_ci_normalized_sha256="43d8383fd4ecfdc021dbae652e1aa5b2""e41fe9ca8e903b0a34c9cd3d87bebf29"
           p="$expected_ci_normalized_sha256"
           helper_blob="$(git rev-parse "$TESTED_COMMIT_SHA:tools/validate_ci_governance_evidence.py" 2>/dev/null || true)"
           [[ "$helper_blob" == "$expected_helper_blob" ]] || {
@@ -288,9 +288,9 @@ jobs:
               registry_test_blob="$(git rev-parse "$registry_candidate:tests/governance/test_ap_decision_registry.py")"
               registry_trusted_base_test_blob="$(git rev-parse "$registry_candidate:tests/governance/test_ci_trusted_comparison_base.py" 2>/dev/null || true)"
               registry_validator_blob="$(git rev-parse "$registry_candidate:tools/validate_ap_decision_registry.py")"
-          expected_ap_registry_ci_normalized_sha256="581ef334552148f0""1c78a3c700176275""2794de8eb81d5171""8bf5cf3249371756"
-          expected_ap_registry_active_state_ci_normalized_sha256="581ef334552148f0""1c78a3c700176275""2794de8eb81d5171""8bf5cf3249371756"
-          expected_ap_main_ci_sha256="581ef334552148f01c78a3c700176275""2794de8eb81d51718bf5cf3249371756"
+          expected_ap_registry_ci_normalized_sha256="225dc6e7852352ec""1bc035fd6027ba01""62008cfa5a6853bf""d4b7ac8ce012f49d"
+          expected_ap_registry_active_state_ci_normalized_sha256="225dc6e7852352ec""1bc035fd6027ba01""62008cfa5a6853bf""d4b7ac8ce012f49d"
+          expected_ap_main_ci_sha256="225dc6e7852352ec1bc035fd6027ba01""62008cfa5a6853bfd4b7ac8ce012f49d"
               ap_registry_ci_normalized_sha256="$(python tools/validate_ci_governance_evidence.py workflow-commitment --scope ap --workflow .github/workflows/ci.yml)"
               if [[ "$registry_blob" == d0d84754a49e9f87f370ed0e7d49de026d8fc5bc \
                 && "$registry_decision_blob" == 8533182c326e3d625f96bdac1410dbdb2f774158 \
@@ -410,12 +410,12 @@ jobs:
               ;;
             *)
               candidate="$TESTED_COMMIT_SHA";fixed=fee08725153496edb2020d543c8cf24c317b48f6
-              expected_ci_governance_extraction_sha256="581ef334552148f01c78a3c700176275""2794de8eb81d51718bf5cf3249371756"
-              expected_registry_reconciliation_enablement_sha256="581ef334552148f01c78a3c700176275""2794de8eb81d51718bf5cf3249371756"
+              expected_ci_governance_extraction_sha256="225dc6e7852352ec1bc035fd6027ba01""62008cfa5a6853bfd4b7ac8ce012f49d"
+              expected_registry_reconciliation_enablement_sha256="225dc6e7852352ec1bc035fd6027ba01""62008cfa5a6853bfd4b7ac8ce012f49d"
               normalized="$(python tools/validate_ci_governance_evidence.py workflow-commitment --scope ap --workflow .github/workflows/ci.yml)";[[ "$(python tools/validate_ci_governance_evidence.py workflow-commitment --scope pip --workflow .github/workflows/ci.yml)" == "$p" ]]||exit 1
               mapfile -t governed_paths < <(git diff --name-only "$fixed" "$candidate");eb=$(git merge-base $candidate refs/remotes/origin/main);v=$candidate;[[ $(git show -s --format=%P $candidate|wc -w) == 2 ]]&&{ eb=$(git rev-parse $candidate^1);v=$(git rev-parse $candidate^2);};mapfile -t enablement_paths < <(git diff --name-only "$eb" "$candidate")
               helper_test="$(git rev-parse "$candidate:tests/governance/test_ci_governance_evidence.py" 2>/dev/null || true)"; rc="$(git rev-parse "$candidate":{tests/governance/test_ap_decision_registry.py,tests/governance/test_ci_trusted_comparison_base.py,tools/validate_ap_decision_registry.py} | tr '\n' ' ')";d="$(git rev-parse "$candidate":{docs/AYO_AP_HISTORICAL_PROVENANCE.json,docs/AYO_DECISION_ID_REGISTRY.json,docs/AYO_DECISION_LOG.md}|tr '\n' ' ')"
-              re='0f087ad3c2bc98e4737eb14d74409e7726564fc6 b0c411867b96b59dce0b214a3d19763588d58141 ba728c665a39aa916892bd5b087fe89ae6a17f21 '
+              re='ce0272440c3c2c526519ec0f6bd54fd6d90f9e70 b0c411867b96b59dce0b214a3d19763588d58141 ba728c665a39aa916892bd5b087fe89ae6a17f21 '
               if [[ "${governed_paths[*]}" == '.github/workflows/ci.yml tests/governance/test_ci_governance_evidence.py tools/validate_ci_governance_evidence.py' \
                 && "$helper_test" == 39a019a6ceb79f08c3c532003c64104fbdb7fa89 \
                 && "$normalized" == "$expected_ci_governance_extraction_sha256" ]]; then
@@ -430,6 +430,8 @@ jobs:
                 mode=ap-decision-registry-forward-reservation-main-context
               elif [[ "${enablement_paths[*]} $(git log -1 --format='%P %s' $v) $(git diff-tree --no-commit-id --name-only -r $v|tr '\n' ' ')$helper_test $d" == '.github/workflows/ci.yml tests/governance/test_ci_governance_evidence.py tools/validate_ci_governance_evidence.py 8ae8e7b694e1a295e293a0ca06a6bcf546348bc5 ci: route Git provenance mode to trusted MyPy source .github/workflows/ci.yml e87b3483b17f54ae207e5b549afe4db966a64565 2220b1feb90469c980e7661d366f5fd1fb1b616c a8a9797f6b63612496f83f841cc089ca3bd37af4 9becdd2034a1c42b39557ce34cd5d02874bfacae ' && $normalized == $expected_ci_governance_extraction_sha256 ]];then
                 mode=ap-registry-git-provenance-secret-classification
+              elif [[ "${enablement_paths[*]} $(git log -1 --format='%P %s' $v)$d" == '.github/workflows/ci.yml bb2f68c975c4905bdb3924cb58ccc8b5307cd98c ci: bind reservation selector to current governance blobs2220b1feb90469c980e7661d366f5fd1fb1b616c a8a9797f6b63612496f83f841cc089ca3bd37af4 9becdd2034a1c42b39557ce34cd5d02874bfacae ' && "$rc" == "$re" ]];then
+                mode=ap-forward-reservation-selector-binding-correction
               elif [[ "${enablement_paths[*]}" == docs/AYO_DECISION_ID_REGISTRY.json && "$rc" == "$re" ]]; then
                 mode=ap-decision-registry-forward-reservation
               else
@@ -1629,7 +1631,7 @@ jobs:
                 [[ "$EVENT_REF" == refs/heads/main && "$EVENT_BEFORE $a" == "$b $EVENT_HEAD_SHA" || "$EVENT_REF" != refs/heads/main && "$EVENT_BEFORE $a $(git merge-base "$EVENT_HEAD_SHA" "$a")" == "0bc9305b8acc448e297a308afc4e378e97169d01 $b $b" ]] || exit 1
                 comparison_sha="$b"
                 mode=verified-ap-registry-reconciliation-enablement-base
-              elif [[ "$EVIDENCE_MODE" == ap-decision-registry-forward-reservation* ]]; then
+              elif [[ "$EVIDENCE_MODE" == ap-decision-registry-forward-reservation* || "$EVIDENCE_MODE" == ap-forward-reservation-selector-binding-correction ]]; then
                 git fetch --no-tags origin main:refs/remotes/origin/coverage-main
                 a="$(git rev-parse refs/remotes/origin/coverage-main)"; p=($(git show -s --format=%P "$EVENT_HEAD_SHA"))
                 if [[ "$EVENT_REF" == refs/heads/main ]]; then
@@ -3838,7 +3840,7 @@ jobs:
             source_sha=a765a3e6c4a4e9202fb4f1a770e5a5daf2dec0b1
           elif [[ "$EVIDENCE_MODE" == "ci-governance-evidence-extraction" ]]; then
             source_sha=fee08725153496edb2020d543c8cf24c317b48f6
-          elif [[ "$EVIDENCE_MODE" == "ap-decision-registry-reconciliation-enablement" || "$EVIDENCE_MODE" == ap-decision-registry-forward-reservation* || "$EVIDENCE_MODE" == "ap-registry-git-provenance-secret-classification" ]]; then
+          elif [[ "$EVIDENCE_MODE" == "ap-decision-registry-reconciliation-enablement" || "$EVIDENCE_MODE" == ap-decision-registry-forward-reservation* || "$EVIDENCE_MODE" == "ap-registry-git-provenance-secret-classification" || "$EVIDENCE_MODE" == ap-forward-reservation-selector-binding-correction ]]; then
             source_sha="$(git merge-base "$TESTED_COMMIT_SHA" refs/remotes/origin/main)"
             [[ "$(git show -s --format=%P "$TESTED_COMMIT_SHA" | wc -w)" == 2 ]] && source_sha="$(git rev-parse "$TESTED_COMMIT_SHA^1")"
           fi
@@ -3883,7 +3885,7 @@ jobs:
                   for item in difference["candidate_only"]: print("CANDIDATE_ONLY|" + item.render())
                   raise SystemExit(label + " MyPy diagnostic population changed")
           mode = os.environ["EVIDENCE_MODE"]
-          active = {"ap-registry-active-state-correction", "ap-registry-active-state-main-ci-correction", "ci-governance-evidence-extraction", "ap-decision-registry-reconciliation-enablement", "ap-registry-git-provenance-secret-classification"}
+          active = {"ap-registry-active-state-correction", "ap-registry-active-state-main-ci-correction", "ci-governance-evidence-extraction", "ap-decision-registry-reconciliation-enablement", "ap-registry-git-provenance-secret-classification", "ap-forward-reservation-selector-binding-correction"}
           if mode.startswith("ap-decision-registry-forward-reservation"): active.add(mode)
           current = {"immediate-standard-public-contract", "booking-complete-replay-equivalence", "pip-audit-toolchain-remediation", "ap-decision-registry-main-landing", *active}
           capture = {"booking-consent-policy-authority", "mobile-booking-intent-foundation"}
@@ -3965,7 +3967,7 @@ jobs:
           set -euo pipefail
           evidence_mode="$EVIDENCE_MODE"
           g=false
-          [[ "$evidence_mode" == "ci-governance-evidence-extraction" || "$evidence_mode" == "ap-decision-registry-reconciliation-enablement" || "$evidence_mode" == ap-decision-registry-forward-reservation* || "$evidence_mode" == ap-registry-git-provenance-secret-classification ]] && g=true
+          [[ "$evidence_mode" == "ci-governance-evidence-extraction" || "$evidence_mode" == "ap-decision-registry-reconciliation-enablement" || "$evidence_mode" == ap-decision-registry-forward-reservation* || "$evidence_mode" == ap-registry-git-provenance-secret-classification || "$evidence_mode" == ap-forward-reservation-selector-binding-correction ]] && g=true
           candidate_json=candidate-secrets.json
           base_json=base-secrets.json
           baseline_json=reviewed-secrets-baseline.json
@@ -4105,27 +4107,27 @@ jobs:
               try:
                   value = json.loads(Path(path).read_text(encoding="utf-8"))
               except (OSError, UnicodeError, json.JSONDecodeError) as error:
-                  raise SystemExit(f"secret baseline parse failure: {error}") from error
+                  raise SystemExit(f"SECRET_PARSE:{error}") from error
               if not isinstance(value, dict):
-                  raise SystemExit("secret baseline root must be an object")
+                  raise SystemExit("SECRET_ROOT")
               return value
           scan = load(os.environ["CANDIDATE_JSON"])
           baseline = load(os.environ["BASELINE_JSON"])
           if set(baseline) != BASELINE_KEYS:
-              raise SystemExit(f"secret baseline top-level fields drifted: {sorted(baseline)}")
+              raise SystemExit(f"SECRET_FIELDS:{sorted(baseline)}")
           if os.environ["SCANNER_VERSION"] != VERSION or scan.get("version") != VERSION or baseline["version"] != VERSION:
-              raise SystemExit("detect-secrets version drift")
+              raise SystemExit("SECRET_VERSION")
           if canonical(scan.get("plugins_used")) != canonical(baseline["plugins_used"]):
               print("EXPECTED_PLUGINS|" + canonical(baseline["plugins_used"]))
               print("ACTUAL_PLUGINS|" + canonical(scan.get("plugins_used")))
-              raise SystemExit("detect-secrets plugin inventory drift")
+              raise SystemExit("SECRET_PLUGINS")
           if canonical(scan.get("filters_used")) != canonical(baseline["filters_used"]):
               print("EXPECTED_FILTERS|" + canonical(baseline["filters_used"]))
               print("ACTUAL_FILTERS|" + canonical(scan.get("filters_used")))
-              raise SystemExit("detect-secrets filter or path-exclusion drift")
+              raise SystemExit("SECRET_FILTERS")
           reviewed, classes = reviewed_secret_inventory(baseline["results"])
           if len(reviewed) != 34 or len(set(reviewed)) != 34:
-              raise SystemExit("reviewed finding count or uniqueness drift")
+              raise SystemExit("SECRET_COUNT")
           if len(classes) != 34 or any(
               not value or value not in {
                   "CI-only test fixture",
@@ -4143,11 +4145,11 @@ jobs:
               }
               for value in classes.values()
           ):
-              raise SystemExit(f"reviewed classification drift: {classes!r}")
+              raise SystemExit(f"SECRET_CLASS:{classes!r}")
           approved = hex_bytes(baseline["inventory_fingerprint_bytes"], 32, "inventory fingerprint")
           expected_approved = "7268878931a4c970cfc8f4cafe450c7c3f6bd6ae615988057e26cbcdb73efd49"
           if fingerprint(reviewed) != approved or approved != expected_approved:
-              raise SystemExit("reviewed baseline fingerprint drift")
+              raise SystemExit("SECRET_FINGERPRINT")
           review = baseline["review"]
           target = hex_bytes(review.get("target_sha_bytes"), 20, "review target SHA")
           expected_target = "c930121b0c72ddcf40ada720ab7c8110591844f6"
@@ -4155,7 +4157,7 @@ jobs:
                   or review.get("finding_count") != 34
                   or review.get("genuine_or_uncertain_findings") != 0
                   or review.get("future_updates_require_separate_security_review") is not True):
-              raise SystemExit("reviewed baseline governance metadata drift")
+              raise SystemExit("SECRET_METADATA")
           actual = scan_inventory(scan.get("results"))
           pre_batch2 = sorted(item for item in reviewed if item[0] not in BATCH2_ONLY_SECRET_PATHS)
           mode = os.environ["EVIDENCE_MODE"]
@@ -4164,7 +4166,7 @@ jobs:
               "courier-pickup-authorization-ordering",
           }:
               exact("exact reviewed inventory", actual, reviewed)
-              selected = "exact 34-finding inventory"
+              selected = "B2"
           elif mode in {
               "immediate-standard-public-contract",
               "booking-complete-replay-equivalence",
@@ -4177,14 +4179,14 @@ jobs:
                   or len(set(immediate_standard_reviewed)) != 42
               ):
                   raise SystemExit(
-                      "Immediate Standard reviewed finding count or uniqueness drift"
+                      "IS_SECRET_COUNT"
                   )
               exact(
-                  "Immediate Standard exact reviewed inventory",
+                  "IS_SECRETS",
                   actual,
                   immediate_standard_reviewed,
               )
-              selected = "exact 42-finding Immediate Standard inventory"
+              selected = "IS"
           elif mode == "booking-consent-policy-authority":
               base = scan_inventory(load(os.environ["BASE_JSON"]).get("results"))
               base_only = sorted(set(base) - set(actual))
@@ -4194,7 +4196,7 @@ jobs:
                   and item[1] == 4209 and item[4] is False
               ]
               boundary_result = "PASS" if len(boundary_matches) == 1 else "FAIL"
-              if boundary_result != "PASS": raise SystemExit("defensive boundary drift")
+              if boundary_result != "PASS": raise SystemExit("BC_BOUNDARY")
               lines = [
                   "BOOKING_CONSENT_INVENTORY_EVIDENCE_V1",
                   f"base_item_count={len(base)}",
@@ -4210,8 +4212,8 @@ jobs:
               ]
               block = "\n".join(lines) + "\n"; path = os.environ["BOOKING_CONSENT_SECRET_EVIDENCE_PATH"]
               with open(path, "x", encoding="utf-8", newline="\n") as output: output.write(block); output.flush(); os.fsync(output.fileno())
-              if open(path, encoding="utf-8", newline="").read() != block: raise SystemExit("inventory evidence retention failed")
-              selected = "unadmitted Booking consent base/candidate inventory"
+              if open(path, encoding="utf-8", newline="").read() != block: raise SystemExit("BC_RETENTION")
+              selected = "BC"
           elif mode == "mobile-booking-intent-foundation":
               base = scan_inventory(load(os.environ["BASE_JSON"]).get("results"))
               base_only = sorted(set(base) - set(actual))
@@ -4231,7 +4233,7 @@ jobs:
                   and not (base_workflow_semantics - candidate_workflow_semantics)
               ) else "FAIL"
               if boundary_result != "PASS":
-                  raise SystemExit("Mobile defensive artifact boundary drift")
+                  raise SystemExit("MB_BOUNDARY")
               lines = [
                   "MOBILE_SECRET_INVENTORY_V1",
                   f"scanner_version={VERSION}",
@@ -4251,16 +4253,16 @@ jobs:
               with path.open("x", encoding="utf-8", newline="\n") as output:
                   output.write(block); output.flush(); os.fsync(output.fileno())
               if path.read_text(encoding="utf-8") != block:
-                  raise SystemExit("Mobile secret inventory evidence retention failed")
-              selected = "unadmitted Mobile complete base/candidate inventory"
+                  raise SystemExit("MB_RETENTION")
+              selected = "MB"
           elif mode == "pip-audit-toolchain-remediation":
               base = scan_inventory(load(os.environ["BASE_JSON"]).get("results"))
               candidate_only = candidate_only_secret_semantics(base, actual)
               if candidate_only:
                   raise SystemExit(
-                      "pip-remediation introduced unreviewed secret-finding semantics"
+                      "PIP_SECRET_DRIFT"
                   )
-              selected = "pip-remediation no-new-secret semantic inventory"
+              selected = "PIP"
           elif mode == "ap-decision-registry-main-landing":
               base = scan_inventory(load(os.environ["BASE_JSON"]).get("results"))
               candidate_only_items = candidate_only_secret_semantics(base, actual)
@@ -4287,10 +4289,10 @@ jobs:
                   != expected_candidate_only_fingerprint
               ):
                   raise SystemExit(
-                      "AP-registry introduced unreviewed secret-finding semantics"
+                      "AP_SECRET_DRIFT"
                   )
-              selected = "AP-registry exact governed commit-SHA false-positive inventory"
-          elif mode in {"ap-registry-active-state-correction", "ap-registry-active-state-main-ci-correction", "ci-governance-evidence-extraction", "ap-decision-registry-reconciliation-enablement", "ap-registry-git-provenance-secret-classification"} or mode.startswith("ap-decision-registry-forward-reservation"):
+              selected = "AP"
+          elif mode in {"ap-registry-active-state-correction", "ap-registry-active-state-main-ci-correction", "ci-governance-evidence-extraction", "ap-decision-registry-reconciliation-enablement", "ap-registry-git-provenance-secret-classification", "ap-forward-reservation-selector-binding-correction"} or mode.startswith("ap-decision-registry-forward-reservation"):
               source = load(os.environ["BASE_JSON"]); base = scan_inventory(source.get("results"))
               candidate_only = candidate_only_secret_semantics(base, actual)
               if mode == "ap-decision-registry-forward-reservation":
@@ -4306,9 +4308,9 @@ jobs:
               expected = (5, "f758a3f743de40be4ac0320eac9f8abf0af34a4cb139567b3d977b858fef09b6") if mode == "ci-governance-evidence-extraction" else (0, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
               if (len(candidate_only), observed) != expected:
                   raise SystemExit(
-                      "AP-registry active-state introduced unreviewed secret semantics"
+                      "AP0_SECRET_DRIFT"
                   )
-              selected = "AP-registry active-state no-new-secret semantic inventory"
+              selected = "AP0"
           elif mode == "booking-consent-document-delivery-architecture":
               base = scan_inventory(load(os.environ["BASE_JSON"]).get("results"))
               base_only = sorted(set(base) - set(actual))
@@ -4316,7 +4318,7 @@ jobs:
               base_workflow = Counter((p, t, h, v) for p, _, t, h, v in base if p == ".github/workflows/ci.yml")
               candidate_workflow = Counter((p, t, h, v) for p, _, t, h, v in actual if p == ".github/workflows/ci.yml")
               boundary = "PASS" if base_workflow and not (base_workflow - candidate_workflow) else "FAIL"
-              if boundary != "PASS": raise SystemExit("Consent architecture defensive boundary drift")
+              if boundary != "PASS": raise SystemExit("CA_BOUNDARY")
               lines = [
                   "SECRET_INVENTORY_V1", f"scanner_version={VERSION}",
                   f"base_item_count={len(base)}", f"candidate_item_count={len(actual)}",
@@ -4329,20 +4331,20 @@ jobs:
               path = Path(os.environ["CONSENT_ARCHITECTURE_STAGED_EVIDENCE"])
               with path.open("x", encoding="utf-8", newline="\n") as output:
                   output.write(block); output.flush(); os.fsync(output.fileno())
-              if path.read_bytes() != block.encode(): raise SystemExit("Consent architecture inventory retention failed")
-              selected = "unadmitted consent architecture complete inventory"
+              if path.read_bytes() != block.encode(): raise SystemExit("CA_RETENTION")
+              selected = "CA"
           elif mode == "pre-batch2":
-              exact("pre-Batch-2 reviewed projection", actual, pre_batch2)
-              selected = "pre-Batch-2 exact 11-finding projection"
+              exact("B1_SECRETS", actual, pre_batch2)
+              selected = "B1"
           else:
-              raise SystemExit(f"unknown governed secret evidence mode: {mode}")
-          print("detect-secrets version:", VERSION)
-          print("Enabled plugins:", canonical(scan["plugins_used"]))
-          print("Enabled filters:", canonical(scan["filters_used"]))
-          print("Selected reviewed state:", selected)
-          print("Raw findings/fingerprint:", len(actual), fingerprint(actual))
-          print("Batch 2 reviewed findings/fingerprint:", len(reviewed), approved)
-          print("Exact reviewed secret-finding contract: PASS")
+              raise SystemExit(f"SECRET_MODE:{mode}")
+          print("secret-version:", VERSION)
+          print("plugins:", canonical(scan["plugins_used"]))
+          print("filters:", canonical(scan["filters_used"]))
+          print("state:", selected)
+          print("raw:", len(actual), fingerprint(actual))
+          print("reviewed:", len(reviewed), approved)
+          print("secret-contract: PASS")
           PY
           if [[ "$evidence_mode" == "booking-consent-document-delivery-architecture" ]]; then
             [[ -f "$architecture_staged_evidence" && ! -L "$architecture_staged_evidence" ]] || exit 1
