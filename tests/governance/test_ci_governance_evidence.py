@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -98,6 +99,112 @@ def test_governed_workflow_commitment_reproduces_real_marker_inventory() -> None
     expected = hashlib.sha256(independently_normalized).hexdigest()
     assert governed_workflow_commitment(canonical, "ap") == expected
     assert governed_workflow_commitment(canonical, "ap") == expected
+
+
+def _staged_workflow_bytes() -> bytes:
+    return subprocess.run(
+        ["git", "show", ":.github/workflows/ci.yml"],
+        check=True,
+        stdout=subprocess.PIPE,
+    ).stdout
+
+
+def _embedded_marker_value(data: bytes, marker: WorkflowMarker) -> str:
+    match = re.search(marker.pattern, data)
+    assert match is not None
+    return b"".join(re.findall(rb'"([0-9a-f]+)"', match.group())).decode("ascii")
+
+
+def test_real_workflow_commitments_use_canonical_git_bytes() -> None:
+    canonical = _staged_workflow_bytes()
+    ap = governed_workflow_commitment(canonical, "ap")
+    pip = governed_workflow_commitment(canonical, "pip")
+    assert _embedded_marker_value(canonical, WORKFLOW_MARKERS[0]) == pip
+    assert all(
+        _embedded_marker_value(canonical, marker) == ap
+        for marker in WORKFLOW_MARKERS[1:]
+    )
+    crlf = canonical.replace(b"\n", b"\r\n")
+    assert governed_workflow_commitment(crlf, "ap") != ap
+    assert governed_workflow_commitment(crlf, "pip") != pip
+
+
+ENABLEMENT_BASE = "".join(("334ca80b", "3c9701a7", "1756cccb", "00d4ce9d", "fd9b59f7"))
+ENABLEMENT_FIRST = "".join(("4a19af9e", "aa472d3f", "3c49c4fa", "dc9f3cc5", "40e08899"))
+ENABLEMENT_SECOND = "".join(
+    ("87c16518", "54b5944c", "5b749a02", "b0e281ab", "0e33dc4c")
+)
+ENABLEMENT_SUBJECT = "ci: stabilize reservation enablement evidence"
+ENABLEMENT_CORRECTION_PATHS = (
+    ".github/workflows/ci.yml",
+    "tests/governance/test_ci_governance_evidence.py",
+)
+ENABLEMENT_AGGREGATE_PATHS = (
+    ".github/workflows/ci.yml",
+    "tests/governance/test_ap_decision_registry.py",
+    "tests/governance/test_ci_governance_evidence.py",
+    "tests/governance/test_ci_trusted_comparison_base.py",
+    "tools/validate_ap_decision_registry.py",
+)
+
+
+def _validate_enablement_correction(
+    *,
+    base: str = ENABLEMENT_BASE,
+    chain: tuple[str, ...] = (ENABLEMENT_FIRST, ENABLEMENT_SECOND, "c" * 40),
+    parent: str = ENABLEMENT_SECOND,
+    subject: str = ENABLEMENT_SUBJECT,
+    paths: tuple[str, ...] = ENABLEMENT_CORRECTION_PATHS,
+    aggregate: tuple[str, ...] = ENABLEMENT_AGGREGATE_PATHS,
+    event_before: str = ENABLEMENT_SECOND,
+    trusted_source: str = ENABLEMENT_BASE,
+) -> None:
+    if (
+        base != ENABLEMENT_BASE
+        or len(chain) != 3
+        or chain[0] != ENABLEMENT_FIRST
+        or chain[1] != ENABLEMENT_SECOND
+        or parent != ENABLEMENT_SECOND
+        or subject != ENABLEMENT_SUBJECT
+        or paths != ENABLEMENT_CORRECTION_PATHS
+        or aggregate != ENABLEMENT_AGGREGATE_PATHS
+        or event_before != ENABLEMENT_SECOND
+        or trusted_source != ENABLEMENT_BASE
+    ):
+        raise EvidenceValidationError("forward-reservation enablement correction drift")
+
+
+def test_forward_reservation_enablement_correction_topology() -> None:
+    _validate_enablement_correction()
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (
+        ("base", "b" * 40),
+        ("chain", (ENABLEMENT_FIRST, ENABLEMENT_SECOND, "c" * 40, "d" * 40)),
+        ("parent", "b" * 40),
+        ("subject", "wrong subject"),
+        ("paths", ENABLEMENT_CORRECTION_PATHS + ("unexpected",)),
+        ("aggregate", ENABLEMENT_AGGREGATE_PATHS + ("unexpected",)),
+        (
+            "aggregate",
+            ENABLEMENT_AGGREGATE_PATHS + ("docs/AYO_DECISION_ID_REGISTRY.json",),
+        ),
+        (
+            "aggregate",
+            ENABLEMENT_AGGREGATE_PATHS
+            + ("institutional/founder-discovery/phase-5/implementation.json",),
+        ),
+        ("event_before", "b" * 40),
+        ("trusted_source", ENABLEMENT_FIRST),
+    ),
+)
+def test_forward_reservation_enablement_correction_rejects_drift(
+    field: str, value: object
+) -> None:
+    with pytest.raises(EvidenceValidationError, match="correction drift"):
+        _validate_enablement_correction(**{field: value})  # type: ignore[arg-type]
 
 
 def test_governed_workflow_commitment_rejects_unsupported_scope() -> None:

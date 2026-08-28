@@ -1,5 +1,4 @@
 name: Backend CI
-
 on:
   push:
   pull_request:
@@ -17,14 +16,11 @@ on:
         description: Exact approved Batch 1 reconciliation head
         required: true
         type: string
-
 permissions:
   contents: read
-
 concurrency:
   group: backend-ci-${{ github.ref }}
   cancel-in-progress: true
-
 jobs:
   quality-and-security:
     runs-on: ubuntu-latest
@@ -56,7 +52,6 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.target_sha || github.sha }}
-
       - name: Verify trusted-main Batch 1 dispatch authority
         if: github.event_name == 'workflow_dispatch'
         env:
@@ -81,7 +76,6 @@ jobs:
             echo "Approved Batch 1 SHA input mismatch" >&2
             exit 1
           fi
-
           permission="$(curl --fail --show-error --silent \
             -H "Authorization: Bearer $GH_TOKEN" \
             -H "Accept: application/vnd.github+json" \
@@ -92,7 +86,6 @@ jobs:
             admin|maintain|write) ;;
             *) echo "Triggering actor lacks repository write authority: $permission" >&2; exit 1 ;;
           esac
-
           remote_main="$(curl --fail --show-error --silent \
             -H "Authorization: Bearer $GH_TOKEN" \
             -H "Accept: application/vnd.github+json" \
@@ -103,7 +96,6 @@ jobs:
             echo "Expected base is not the exact authoritative main at execution" >&2
             exit 1
           fi
-
           read -ra target_parents <<< "$(git show -s --format=%P "$TARGET_SHA")"
           if [[ "${#target_parents[@]}" -ne 2 \
             || "${target_parents[0]}" != "$EXPECTED_BASE_SHA" \
@@ -111,7 +103,6 @@ jobs:
             echo "Canonical landing parent topology mismatch" >&2
             exit 1
           fi
-
           merge_tree="$(git merge-tree --write-tree "$EXPECTED_BASE_SHA" "$APPROVED_BATCH1_SHA")"
           if [[ "$merge_tree" == *$'\n'* ]] || ! git cat-file -e "$merge_tree^{tree}"; then
             echo "Canonical merge is conflicted or did not produce one tree" >&2
@@ -144,7 +135,6 @@ jobs:
             echo "Signature or noncanonical encoding header detected" >&2
             exit 1
           fi
-
           mapfile -t approved_manifest < <(git diff --name-only "$APPROVED_BATCH1_BASE" "$APPROVED_BATCH1_ORIGINAL")
           mapfile -t target_manifest < <(git diff --name-only "$EXPECTED_BASE_SHA" "$TARGET_SHA")
           if [[ "${#approved_manifest[@]}" -ne 235 || "${#target_manifest[@]}" -ne 235 ]]; then
@@ -193,7 +183,6 @@ jobs:
             echo "cryptography version mismatch" >&2
             exit 1
           fi
-
           echo "Workflow source main SHA: $GITHUB_SHA"
           echo "Expected base SHA: $EXPECTED_BASE_SHA"
           echo "Approved Batch 1 SHA: $APPROVED_BATCH1_SHA"
@@ -203,31 +192,25 @@ jobs:
           echo "Landing tree hash: $merge_tree"
           echo "Manifest fingerprint: $manifest_fingerprint"
           git checkout --detach "$TARGET_SHA"
-
       - name: Establish governed post-Batch-1 validation contract
         run: |
           echo "Certified Batch 2 coverage baseline: 77.19024018299658%"
           echo "Coverage regression floor: 77.19024018299658%"
           echo "Coverage improvement target: 70%"
           echo "Governed Batch 2 test, migration, typing and secret contracts apply to every event"
-
       - name: Set up Python
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version-file: .python-version
-
       - name: Install uv
         run: python -m pip install "uv==0.11.28"
-
       - name: Install locked dependencies
         run: uv sync --locked --all-groups
-
       - name: Verify PostgreSQL 17 and PostGIS 3.5
         id: postgis
         run: |
           uv run --locked python - <<'PY'
           import psycopg
-
           with psycopg.connect(
               host="127.0.0.1",
               dbname="ayo_test",
@@ -253,7 +236,6 @@ jobs:
                   cursor.execute("SELECT 1 FROM pg_roles WHERE rolname = 'ayo_runtime'")
                   if cursor.fetchone() is None:
                       cursor.execute("CREATE ROLE ayo_runtime NOLOGIN")
-
           print(f"PostgreSQL server version: {server_version}")
           print(f"PostGIS extension version: {postgis_version}")
           print(f"PostGIS full version: {postgis_full_version}")
@@ -266,14 +248,13 @@ jobs:
               raise SystemExit("PostGIS geometry type is unavailable")
           PY
           echo "ready=true" >> "$GITHUB_OUTPUT"
-
       - name: Select exact governed evidence contract
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true'
         id: evidence_contract
         run: |
           set -euo pipefail
           expected_helper_blob=287462f26399bdeb4964030fa5aac6170fb1a607
-          expected_ci_normalized_sha256="aabedc312984b5cfbccfc77fd8173dcd""0d281fa662befe7209510814c135044b"
+          expected_ci_normalized_sha256="e0d57fad4338ce5af9c96e541f1e78a5""872514060a0f16c8391e5391db0d6d77"
           p="$expected_ci_normalized_sha256"
           helper_blob="$(git rev-parse "$TESTED_COMMIT_SHA:tools/validate_ci_governance_evidence.py" 2>/dev/null || true)"
           [[ "$helper_blob" == "$expected_helper_blob" ]] || {
@@ -307,9 +288,9 @@ jobs:
               registry_test_blob="$(git rev-parse "$registry_candidate:tests/governance/test_ap_decision_registry.py")"
               registry_trusted_base_test_blob="$(git rev-parse "$registry_candidate:tests/governance/test_ci_trusted_comparison_base.py" 2>/dev/null || true)"
               registry_validator_blob="$(git rev-parse "$registry_candidate:tools/validate_ap_decision_registry.py")"
-              expected_ap_registry_ci_normalized_sha256="6da968ea89b46101""0c2be073e2c40982""1750d918c618aab4""15913468bdabf0d3"
-              expected_ap_registry_active_state_ci_normalized_sha256="6da968ea89b46101""0c2be073e2c40982""1750d918c618aab4""15913468bdabf0d3"
-              expected_ap_main_ci_sha256="6da968ea89b461010c2be073e2c40982""1750d918c618aab415913468bdabf0d3"
+              expected_ap_registry_ci_normalized_sha256="59e9d0e5e0f393fa""c518371c61e2d986""9010016b16b5faea""f158a763e5911392"
+              expected_ap_registry_active_state_ci_normalized_sha256="59e9d0e5e0f393fa""c518371c61e2d986""9010016b16b5faea""f158a763e5911392"
+              expected_ap_main_ci_sha256="59e9d0e5e0f393fac518371c61e2d986""9010016b16b5faeaf158a763e5911392"
               ap_registry_ci_normalized_sha256="$(python tools/validate_ci_governance_evidence.py workflow-commitment --scope ap --workflow .github/workflows/ci.yml)"
               if [[ "$registry_blob" == d0d84754a49e9f87f370ed0e7d49de026d8fc5bc \
                 && "$registry_decision_blob" == 8533182c326e3d625f96bdac1410dbdb2f774158 \
@@ -428,17 +409,13 @@ jobs:
               fi
               ;;
             *)
-              candidate="$TESTED_COMMIT_SHA"
-              fixed=fee08725153496edb2020d543c8cf24c317b48f6
-              expected_ci_governance_extraction_sha256="6da968ea89b461010c2be073e2c40982""1750d918c618aab415913468bdabf0d3"
-              expected_registry_reconciliation_enablement_sha256="6da968ea89b461010c2be073e2c40982""1750d918c618aab415913468bdabf0d3"
-              normalized="$(python tools/validate_ci_governance_evidence.py workflow-commitment --scope ap --workflow .github/workflows/ci.yml)"
-              [[ "$(python tools/validate_ci_governance_evidence.py workflow-commitment --scope pip --workflow .github/workflows/ci.yml)" == "$p" ]] || exit 1
-              mapfile -t governed_paths < <(git diff --name-only "$fixed" "$candidate")
-              enablement_base="$(git merge-base "$candidate" refs/remotes/origin/main)"
-              [[ "$(git show -s --format=%P "$candidate" | wc -w)" == 2 ]] && enablement_base="$(git rev-parse "$candidate^1")"
-              mapfile -t enablement_paths < <(git diff --name-only "$enablement_base" "$candidate")
-              helper_test="$(git rev-parse "$candidate:tests/governance/test_ci_governance_evidence.py" 2>/dev/null || true)"
+              candidate="$TESTED_COMMIT_SHA";fixed=fee08725153496edb2020d543c8cf24c317b48f6
+              expected_ci_governance_extraction_sha256="59e9d0e5e0f393fac518371c61e2d986""9010016b16b5faeaf158a763e5911392"
+              expected_registry_reconciliation_enablement_sha256="59e9d0e5e0f393fac518371c61e2d986""9010016b16b5faeaf158a763e5911392"
+              normalized="$(python tools/validate_ci_governance_evidence.py workflow-commitment --scope ap --workflow .github/workflows/ci.yml)";[[ "$(python tools/validate_ci_governance_evidence.py workflow-commitment --scope pip --workflow .github/workflows/ci.yml)" == "$p" ]]||exit 1
+              mapfile -t governed_paths < <(git diff --name-only "$fixed" "$candidate"); enablement_base="$(git merge-base "$candidate" refs/remotes/origin/main)"; [[ "$(git show -s --format=%P "$candidate" | wc -w)" == 2 ]] && enablement_base="$(git rev-parse "$candidate^1")"; mapfile -t enablement_paths < <(git diff --name-only "$enablement_base" "$candidate")
+              helper_test="$(git rev-parse "$candidate:tests/governance/test_ci_governance_evidence.py" 2>/dev/null || true)"; rc="$(git rev-parse "$candidate":{tests/governance/test_ap_decision_registry.py,tests/governance/test_ci_trusted_comparison_base.py,tools/validate_ap_decision_registry.py} | tr '\n' ' ')"
+              re='0f087ad3c2bc98e4737eb14d74409e7726564fc6 b0c411867b96b59dce0b214a3d19763588d58141 ba728c665a39aa916892bd5b087fe89ae6a17f21 '
               if [[ "${governed_paths[*]}" == '.github/workflows/ci.yml tests/governance/test_ci_governance_evidence.py tools/validate_ci_governance_evidence.py' \
                 && "$helper_test" == 39a019a6ceb79f08c3c532003c64104fbdb7fa89 \
                 && "$normalized" == "$expected_ci_governance_extraction_sha256" ]]; then
@@ -447,18 +424,17 @@ jobs:
                 && "$normalized" == "$expected_registry_reconciliation_enablement_sha256" \
                 && "$(git rev-parse "$candidate":{docs/AYO_AP_HISTORICAL_PROVENANCE.json,docs/AYO_DECISION_ID_REGISTRY.json,docs/AYO_DECISION_LOG.md,tests/governance/test_ap_decision_registry.py,tools/validate_ap_decision_registry.py} | tr '\n' ' ')" == '2220b1feb90469c980e7661d366f5fd1fb1b616c a8a9797f6b63612496f83f841cc089ca3bd37af4 9becdd2034a1c42b39557ce34cd5d02874bfacae 8f72019b8a2f57cc6cdc0118d50a605836454804 6022cd091e7ce0c293f9a91a7c4b38701ea7ca05 ' ]]; then
                 mode=ap-decision-registry-reconciliation-enablement
+              elif [[ "${enablement_paths[*]}" == '.github/workflows/ci.yml tests/governance/test_ap_decision_registry.py tests/governance/test_ci_governance_evidence.py tests/governance/test_ci_trusted_comparison_base.py tools/validate_ap_decision_registry.py' && "$rc" == "$re" && "$helper_test" == a4a01bd0fdf1283e0f1f3eaa8b84ffa7e75e043b && "$(git rev-parse "$candidate":{docs/AYO_AP_HISTORICAL_PROVENANCE.json,docs/AYO_DECISION_ID_REGISTRY.json,docs/AYO_DECISION_LOG.md})" == $'2220b1feb90469c980e7661d366f5fd1fb1b616c\na8a9797f6b63612496f83f841cc089ca3bd37af4\n9becdd2034a1c42b39557ce34cd5d02874bfacae' ]]; then
+                mode=ap-decision-registry-forward-reservation-enablement
+              elif [[ "${enablement_paths[*]}" == docs/AYO_DECISION_ID_REGISTRY.json && "$rc" == "$re" ]]; then
+                mode=ap-decision-registry-forward-reservation
               else
                 exit 1
               fi
               ;;
           esac
-          echo "mode=$mode" >> "$GITHUB_OUTPUT"
-          echo "tests_tree=$tests_tree" >> "$GITHUB_OUTPUT"
-          echo "mobile_tests_tree=$mobile_tests_tree" >> "$GITHUB_OUTPUT"
-          echo "mobile_tree=$mobile_tree" >> "$GITHUB_OUTPUT"
-          echo "Governed evidence mode: $mode"
-          echo "Governed tests tree: $tests_tree"
-
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"; echo "tests_tree=$tests_tree" >> "$GITHUB_OUTPUT"; echo "mobile_tests_tree=$mobile_tests_tree" >> "$GITHUB_OUTPUT"; echo "mobile_tree=$mobile_tree" >> "$GITHUB_OUTPUT"
+          echo $mode
       - name: Bind exact CI governance enablement identity
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && (steps.evidence_contract.outputs.mode == 'ci-governance-evidence-extraction' || steps.evidence_contract.outputs.mode == 'ap-decision-registry-reconciliation-enablement')
         env:
@@ -469,54 +445,39 @@ jobs:
           EVIDENCE_MODE: ${{ steps.evidence_contract.outputs.mode }}
         run: |
           set -euo pipefail
-          candidate="$CANDIDATE_SHA"
-          fixed=fee08725153496edb2020d543c8cf24c317b48f6
-          head="$candidate"
-          mapfile -t parents < <(git show -s --format=%P "$candidate" | tr ' ' '\n')
-          if [[ "${#parents[@]}" -eq 2 ]]; then
-            head="${parents[1]}"
-            [[ "$EVENT_NAME" == push && "$EVENT_REF" == refs/heads/main \
-              && "$EVENT_BEFORE" == "${parents[0]}" \
-              && "$(git rev-parse "$candidate^{tree}")" == "$(git rev-parse "$head^{tree}")" ]] || {
-              echo GOV_MERGE_DRIFT >&2; exit 1; }
-          elif [[ "${#parents[@]}" -ne 1 ]]; then
-            echo GOV_PARENT_DRIFT >&2; exit 1
-          fi
+          c="$CANDIDATE_SHA"; h="$c"; f=fee08725153496edb2020d543c8cf24c317b48f6
+          mapfile -t p < <(git show -s --format=%P "$c" | tr ' ' '\n')
+          if [[ "${#p[@]}" == 2 ]]; then h="${p[1]}"; [[ "$EVENT_NAME $EVENT_REF $EVENT_BEFORE $(git rev-parse "$c^{tree}")" == "push refs/heads/main ${p[0]} $(git rev-parse "$h^{tree}")" ]] || exit 1; else [[ "${#p[@]}" == 1 ]] || exit 1; fi
           if [[ "$EVIDENCE_MODE" == ci-governance-evidence-extraction ]]; then
-            base="$fixed"
-            subject='ci: remove synthetic secret detector noise'
-            expected=(.github/workflows/ci.yml tests/governance/test_ci_governance_evidence.py tools/validate_ci_governance_evidence.py)
-            head_expected=("${expected[@]:0:2}")
-            mapfile -t chain < <(git rev-list --reverse "$base..$head")
-            [[ "${chain[*]}" == "62baef5cb7dad6e5250d81194f4b2c1cfbf35776 3fad19fcfa975ed8998620fa56358e8f367bddf2 4cc7b4c0e93a934b6bd936c58edc20492a338c14 0a71314e1d3b1a71062e03298194bf1d3e732ccc $head" ]] || {
-              echo GOV_CHAIN_DRIFT >&2; exit 1; }
+            b="$f"; s='ci: remove synthetic secret detector noise'; x=(.github/workflows/ci.yml tests/governance/test_ci_governance_evidence.py tools/validate_ci_governance_evidence.py); y=("${x[@]:0:2}")
+            [[ "$(git rev-list --reverse "$b..$h" | tr '\n' ' ')" == "62baef5cb7dad6e5250d81194f4b2c1cfbf35776 3fad19fcfa975ed8998620fa56358e8f367bddf2 4cc7b4c0e93a934b6bd936c58edc20492a338c14 0a71314e1d3b1a71062e03298194bf1d3e732ccc $h " ]] || exit 1
           else
-            base=dc564949c7d19e0384655251cb40bda3199ddace
-            [[ "${#parents[@]}" -eq 2 && "${parents[0]}" == "$base" || "$(git merge-base "$head" refs/remotes/origin/main)" == "$base" ]] || exit 1
-            subject='governance: normalize provenance lineage and trusted base'
-            expected=(.github/workflows/ci.yml docs/AYO_AP_HISTORICAL_PROVENANCE.json docs/AYO_DECISION_ID_REGISTRY.json docs/AYO_DECISION_LOG.md tests/governance/test_ap_decision_registry.py tools/validate_ap_decision_registry.py)
-            head_expected=(.github/workflows/ci.yml tests/governance/test_ap_decision_registry.py tools/validate_ap_decision_registry.py)
-            [[ "$(git rev-parse "$head^" "$head^^" "$head^^^")" == $'0bc9305b8acc448e297a308afc4e378e97169d01\nfc2953e0d1905514d2f6b45130429fa14a161f26\ndc564949c7d19e0384655251cb40bda3199ddace' ]] || exit 1
-            [[ "$(git rev-parse "$base:docs/AYO_DECISION_ID_REGISTRY.json")" == 2ffb2cfb9f6ac410cf4f75a7b4460ea95fc117c2 ]] || exit 1
+            b=dc564949c7d19e0384655251cb40bda3199ddace; s='governance: normalize provenance lineage and trusted base'
+            [[ "${#p[@]}" == 2 && "${p[0]}" == "$b" || "$(git merge-base "$h" refs/remotes/origin/main)" == "$b" ]] || exit 1
+            x=(.github/workflows/ci.yml docs/AYO_AP_HISTORICAL_PROVENANCE.json docs/AYO_DECISION_ID_REGISTRY.json docs/AYO_DECISION_LOG.md tests/governance/test_ap_decision_registry.py tools/validate_ap_decision_registry.py); y=(.github/workflows/ci.yml tests/governance/test_ap_decision_registry.py tools/validate_ap_decision_registry.py)
+            [[ "$(git rev-parse "$h^" "$h^^" "$h^^^")" == $'0bc9305b8acc448e297a308afc4e378e97169d01\nfc2953e0d1905514d2f6b45130429fa14a161f26\ndc564949c7d19e0384655251cb40bda3199ddace' && "$(git rev-parse "$b:docs/AYO_DECISION_ID_REGISTRY.json")" == 2ffb2cfb9f6ac410cf4f75a7b4460ea95fc117c2 ]] || exit 1
           fi
-          [[ "$(git merge-base "$head" "$base")" == "$base" \
-            && "$(git show -s --format=%s "$head")" == "$subject" ]] || {
-            echo GOV_ANCESTRY_DRIFT >&2; exit 1; }
-          mapfile -t head_paths < <(git diff-tree --no-commit-id --name-only -r "$head")
-          mapfile -t aggregate < <(git diff --name-only "$base" "$candidate")
-          [[ "${head_paths[*]}" == "${head_expected[*]}" \
-            && "${aggregate[*]}" == "${expected[*]}" ]] || {
-            echo GOV_PATH_DRIFT >&2; exit 1; }
-          git diff --quiet "$base" "$candidate" -- BACKEND database/migrations AYO-Mobile \
-            .secrets.baseline pyproject.toml uv.lock || {
-            echo GOV_SURFACE_DRIFT >&2; exit 1; }
+          [[ "$(git merge-base "$h" "$b") $(git show -s --format=%s "$h")" == "$b $s" ]] || exit 1
+          mapfile -t hp < <(git diff-tree --no-commit-id --name-only -r "$h"); mapfile -t ap < <(git diff --name-only "$b" "$c")
+          [[ "${hp[*]}" == "${y[*]}" && "${ap[*]}" == "${x[*]}" ]] || exit 1
+          git diff --quiet "$b" "$c" -- BACKEND database/migrations AYO-Mobile .secrets.baseline pyproject.toml uv.lock || exit 1
           if [[ "$EVIDENCE_MODE" != ci-* ]]; then
             git fetch --no-tags origin refs/heads/agent/booking-consent-ethiopia-written-decision-pack refs/heads/backend-certification-checkpoint
-            uv run --locked python tools/validate_ap_decision_registry.py --enablement-only --baseline-registry <(git show "$base:docs/AYO_DECISION_ID_REGISTRY.json") --baseline-main-commit "$base"
+            uv run --locked python tools/validate_ap_decision_registry.py --enablement-only --baseline-registry <(git show "$b:docs/AYO_DECISION_ID_REGISTRY.json") --baseline-main-commit "$b"
           fi
-          git ls-tree -r --name-only "$candidate" | grep -q '^institutional/founder-discovery/phase-5/' && exit 1
+          git ls-tree -r --name-only "$c" | grep -q '^institutional/founder-discovery/phase-5/' && exit 1
           uv run --locked pytest -q --no-cov tests/governance/test_ci_governance_evidence.py
-
+      - name: Bind AP forward-reservation identity
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && startsWith(steps.evidence_contract.outputs.mode, 'ap-decision-registry-forward-reservation')
+        run: |
+          set -euo pipefail
+          c=${{ env.TESTED_COMMIT_SHA }}; m=${{ steps.evidence_contract.outputs.mode }}; h=$c; p=($(git show -s --format=%P $c)); if ((${#p[@]}==1));then b=$(git merge-base $h refs/remotes/origin/main);else h=${p[1]};b=${p[0]};fi
+          if [[ $m == *-enablement ]];then q=4a19af9eaa472d3f3c49c4fadc9f3cc540e08899;r=87c1651854b5944c5b749a02b0e281ab0e33dc4c;x='.github/workflows/ci.yml tests/governance/test_ap_decision_registry.py tests/governance/test_ci_governance_evidence.py tests/governance/test_ci_trusted_comparison_base.py tools/validate_ap_decision_registry.py';y='.github/workflows/ci.yml tests/governance/test_ci_governance_evidence.py';f=--enablement-only;[[ $b == 334ca80b3c9701a71756cccb00d4ce9dfd9b59f7 && $(git rev-parse $h^) == $r && $(git rev-parse $r^) == $q && $(git rev-parse $q^) == $b && $(git show -s --format=%s $h) == 'ci: stabilize reservation enablement evidence' ]]||exit 1
+          else x=docs/AYO_DECISION_ID_REGISTRY.json;y=$x;f=--forward-reservation-only;[[ "$(git rev-parse $h^) $(git show -s --format=%s $h)" == "$b governance: reserve AP-099 and AP-100" ]]||exit 1;fi
+          hp=$(git diff-tree --no-commit-id --name-only -r $h|tr '\n' ' '|sed 's/ $//');ap=$(git diff --name-only $b $c|tr '\n' ' '|sed 's/ $//');[[ "$hp" == "$y" && "$ap" == "$x" ]]||exit 1
+          uv run --locked python tools/validate_ap_decision_registry.py "$f" --baseline-registry <(git show $b:docs/AYO_DECISION_ID_REGISTRY.json) --baseline-provenance-manifest <(git show $b:docs/AYO_AP_HISTORICAL_PROVENANCE.json) --baseline-main-commit $b
+          [[ $m != *-enablement ]]||uv run --locked pytest -q --no-cov tests/governance/test_ci_governance_evidence.py
+          ! git ls-tree -r --name-only $c|grep -q '^institutional/founder-discovery/phase-5/'
       - name: Bind exact pip audit-toolchain remediation identity
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'pip-audit-toolchain-remediation'
         env:
@@ -575,7 +536,6 @@ jobs:
             alembic.ini .python-version .secrets.baseline tests || {
             echo "pip-remediation executable or controlled-tree drift" >&2; exit 1; }
           echo "Exact pip audit-toolchain remediation identity: PASS"
-
       - name: Bind exact AP decision-registry landing identity
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'ap-decision-registry-main-landing'
         env:
@@ -646,7 +606,6 @@ jobs:
             docs/AYO_DECISION_ID_REGISTRY.json || {
             echo "AP-registry activation state drift" >&2; exit 1; }
           echo "Exact AP decision-registry landing identity: PASS"
-
       - name: Bind exact AP registry active-state correction identity
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && (steps.evidence_contract.outputs.mode == 'ap-registry-active-state-correction' || steps.evidence_contract.outputs.mode == 'ap-registry-active-state-main-ci-correction')
         env:
@@ -728,7 +687,6 @@ jobs:
           import json
           import os
           import subprocess
-
           def load(commit: str) -> dict:
               content = subprocess.run(
                   ["git", "show", f"{commit}:docs/AYO_DECISION_ID_REGISTRY.json"],
@@ -741,7 +699,6 @@ jobs:
               if not isinstance(value, dict):
                   raise SystemExit("AP registry root must be an object")
               return value
-
           base = load(os.environ["BASE_SHA"])
           candidate = load(os.environ["CANDIDATE_SHA"])
           if base.get("cutover", {}).get("status") != "READY_FOR_MAIN_ACTIVATION":
@@ -771,14 +728,12 @@ jobs:
             docs/AYO_DECISION_LOG.md tools/validate_ap_decision_registry.py || {
             echo "AP-registry active-state controlled-surface drift" >&2; exit 1; }
           echo "Exact AP registry active-state correction identity: PASS"
-
       - name: Validate AP decision registry candidate
-        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && (steps.evidence_contract.outputs.mode == 'ap-decision-registry-main-landing' || steps.evidence_contract.outputs.mode == 'ap-registry-active-state-correction' || steps.evidence_contract.outputs.mode == 'ap-registry-active-state-main-ci-correction' || steps.evidence_contract.outputs.mode == 'ap-decision-registry-reconciliation-enablement')
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && contains(fromJSON('["ap-decision-registry-main-landing","ap-registry-active-state-correction","ap-registry-active-state-main-ci-correction","ap-decision-registry-reconciliation-enablement","ap-decision-registry-forward-reservation-enablement","ap-decision-registry-forward-reservation"]'), steps.evidence_contract.outputs.mode)
         run: |
           set -euo pipefail
           uv run --locked python tools/validate_ap_decision_registry.py
           uv run --locked pytest -q --no-cov tests/governance/test_ap_decision_registry.py
-
       - name: Bind exact Courier Pickup Idempotency V1 candidate identity
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'courier-pickup-idempotency-v1'
         run: |
@@ -787,7 +742,6 @@ jobs:
           import hashlib
           import os
           import subprocess
-
           expected = {
               "base": "4eda7c5e80907eba9b60c20d64561087ef50c84b",
               "candidate": "3e89c5f62640515158acc5bb99bf77d661dbf187",
@@ -842,7 +796,6 @@ jobs:
           print("Courier Pickup Idempotency V1 exact candidate identity: PASS")
           print("Courier Pickup ten-path manifest fingerprint:", fingerprint)
           PY
-
       - name: Bind exact Courier Pickup authorization-ordering candidate identity
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'courier-pickup-authorization-ordering'
         run: |
@@ -850,7 +803,6 @@ jobs:
           uv run --locked python - <<'PY'
           import hashlib
           import subprocess
-
           expected = {
               "base": "65ff78430315c2d10bc40a0f3edafced6cec3ad2",
               "candidate": "f764189398f70d7e9fecdb217362a26e0ac09f35",
@@ -883,12 +835,10 @@ jobs:
               paths[3]: "c253c67026694e966dc6d36b55e949858e58fef9",
               paths[4]: "7ea9bac56969120d7258efa0bf8a0cbfcd53ffc1",
           }
-
           def git(*args):
               return subprocess.run(
                   ["git", *args], check=True, capture_output=True, text=True,
               ).stdout.strip()
-
           base, head = expected["base"], expected["candidate"]
           if git("rev-parse", head) != head or git("merge-base", base, head) != base:
               raise SystemExit("reviewed authorization-ordering candidate ancestry drift")
@@ -938,7 +888,6 @@ jobs:
           print("Courier Pickup authorization-ordering candidate identity: PASS")
           print("Courier Pickup authorization-ordering manifest fingerprint:", fingerprint)
           PY
-
       - name: Preflight consent document architecture authority before tooling
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'booking-consent-document-delivery-architecture'
         env:
@@ -1003,7 +952,6 @@ jobs:
           git diff --quiet "$base" "$candidate" -- BACKEND tests database/migrations AYO-Mobile .secrets.baseline || {
             echo "Consent architecture executable boundary drift" >&2; exit 1; }
           echo "Consent document architecture authority before tooling: PASS"
-
       - name: Preflight Booking consent approval-pack architecture authority before tooling
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'booking-consent-approval-pack-architecture'
         env:
@@ -1136,19 +1084,15 @@ jobs:
             pyproject.toml uv.lock alembic.ini .python-version .secrets.baseline || {
             echo "Approval-pack executable dependency configuration boundary drift" >&2; exit 1; }
           echo "Booking consent approval-pack architecture authority before tooling: PASS"
-
       - name: Verify lock file is current
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
         run: uv lock --check
-
       - name: Check formatting
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
         run: uv run --locked ruff format --check .
-
       - name: Lint
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
         run: uv run --locked ruff check .
-
       - name: Preflight Mobile Booking candidate authority before tooling
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'mobile-booking-intent-foundation'
         env:
@@ -1217,7 +1161,6 @@ jobs:
             AYO-Mobile/eslint.config.js AYO-Mobile/tsconfig.json .secrets.baseline || {
             echo "Mobile pre-tooling immutable boundary drift" >&2; exit 1; }
           echo "Mobile Booking candidate authority before tooling: PASS"
-
       - name: Set up governed Mobile Booking Node runtime
         if: success() && steps.evidence_contract.outputs.mode == 'mobile-booking-intent-foundation'
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -1225,7 +1168,6 @@ jobs:
           node-version: 24.18.0
           cache: npm
           cache-dependency-path: AYO-Mobile/package-lock.json
-
       - name: Install locked Mobile Booking dependencies without lifecycle scripts
         if: success() && steps.evidence_contract.outputs.mode == 'mobile-booking-intent-foundation'
         working-directory: AYO-Mobile
@@ -1241,7 +1183,6 @@ jobs:
           [[ -z "$(git status --porcelain --untracked-files=all -- .)" ]]
           node --version
           npm --version
-
       - name: Capture Mobile Booking Node Jest TypeScript and lint evidence
         if: success() && steps.evidence_contract.outputs.mode == 'mobile-booking-intent-foundation'
         working-directory: AYO-Mobile
@@ -1277,7 +1218,6 @@ jobs:
           EVIDENCE_ROOT="$EVIDENCE_ROOT" python - <<'PY'
           import hashlib, json, os, re, subprocess
           from pathlib import Path
-
           root = Path(os.environ["EVIDENCE_ROOT"])
           node_version = subprocess.run(["node", "--version"], check=True, capture_output=True, text=True).stdout.strip()
           if not re.fullmatch(r"v[0-9]+(?:\.[0-9]+){2}", node_version): raise SystemExit("Node version output drift")
@@ -1450,7 +1390,6 @@ jobs:
           for path in root.glob("*.log"): path.unlink()
           for path in root.glob("*.tap*"): path.unlink()
           PY
-
       - name: Capture Mobile Booking npm dependency audit evidence
         if: success() && steps.evidence_contract.outputs.mode == 'mobile-booking-intent-foundation'
         working-directory: AYO-Mobile
@@ -1503,7 +1442,6 @@ jobs:
           if path.read_text(encoding="utf-8") != block: raise SystemExit("npm audit evidence retention failed")
           for name in ("npm-version.txt", "npm-audit-all.json", "npm-audit-production.json", "npm-audit-all.err", "npm-audit-production.err"): (root / name).unlink(missing_ok=True)
           PY
-
       - name: Verify Mobile Booking preview-only source safety
         if: success() && steps.evidence_contract.outputs.mode == 'mobile-booking-intent-foundation'
         env:
@@ -1513,7 +1451,6 @@ jobs:
           EVIDENCE_PATH="$EVIDENCE_PATH" python - <<'PY'
           import hashlib, json, os, re, subprocess
           from pathlib import Path
-
           production = [
               Path("AYO-Mobile/contexts/booking-intent.tsx"),
               *sorted(Path("AYO-Mobile/domain").glob("booking-*.ts")),
@@ -1569,7 +1506,6 @@ jobs:
           if path.read_text(encoding="utf-8") != block:
               raise SystemExit("Mobile source-safety evidence retention failed")
           PY
-
       - name: Verify exact historical non-PostgreSQL debt
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'pre-batch2'
         run: |
@@ -1585,17 +1521,14 @@ jobs:
           import hashlib
           import os
           import xml.etree.ElementTree as ET
-
           expected = {
               "tests/test_app.py::test_openapi_preserves_current_route_inventory": "legacy_routes",
               "tests/test_migration_foundation.py::test_migration_history_has_one_expected_head": "legacy_head",
               "tests/test_ride_flow.py::test_complete_current_ride_happy_path": "legacy_404",
               "tests/test_ride_flow.py::test_invalid_transition_remains_rejected": "legacy_ride_id",
           }
-
           def node_id(case):
               return f"{case.get('classname').replace('.', '/')}.py::{case.get('name')}"
-
           def signature(text):
               if "Extra items in the right set" in text and "/api/driver-offers/decline" in text:
                   return "legacy_routes"
@@ -1606,7 +1539,6 @@ jobs:
               if "KeyError: 'ride_id'" in text:
                   return "legacy_ride_id"
               return "unrecognized"
-
           cases = ET.parse("historical-nonpostgresql.xml").getroot().findall(".//testcase")
           actual = {}
           for case in cases:
@@ -1620,7 +1552,6 @@ jobs:
               diagnostic = failure if failure is not None else error
               text = " ".join((diagnostic.get("message", ""), diagnostic.text or ""))
               actual[node_id(case)] = signature(text)
-
           if int(os.environ["PYTEST_STATUS"]) != 1:
               raise SystemExit("focused pytest status was not the expected test-failure status 1")
           if actual != expected:
@@ -1633,7 +1564,6 @@ jobs:
           print(normalized)
           print("Historical non-PostgreSQL diagnostic fingerprint:", fingerprint)
           PY
-
       - name: Resolve trusted comparison base
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true'
         id: trusted_comparison_base
@@ -1650,90 +1580,33 @@ jobs:
           set -euo pipefail
           zero=0000000000000000000000000000000000000000
           checked_out_head="$(git rev-parse HEAD)"
-
           require_commit() {
-            local sha="$1"
-            local label="$2"
-            if [[ ! "$sha" =~ ^[0-9a-f]{40}$ ]] || [[ "$sha" == "$zero" ]]; then
-              echo "$label is absent, malformed, or all-zero: $sha" >&2
-              exit 1
-            fi
-            git cat-file -e "$sha^{commit}" 2>/dev/null || {
-              echo "$label does not identify an available commit: $sha" >&2
-              exit 1
-            }
+            local sha="$1"; [[ "$sha" =~ ^[0-9a-f]{40}$ && "$sha" != "$zero" ]] || exit 1
+            git cat-file -e "$sha^{commit}" 2>/dev/null || exit 1
           }
-
           case "$EVENT_NAME" in
             pull_request)
               require_commit "$PR_BASE_SHA" "pull-request base SHA"
               require_commit "$PR_HEAD_SHA" "pull-request head SHA"
-              git merge-base --is-ancestor "$PR_BASE_SHA" "$checked_out_head" || {
-                echo "pull-request base is not an ancestor of the tested merge tree" >&2
-                exit 1
-              }
-              git merge-base --is-ancestor "$PR_HEAD_SHA" "$checked_out_head" || {
-                echo "pull-request head is not an ancestor of the tested merge tree" >&2
-                exit 1
-              }
-              comparison_sha="$PR_BASE_SHA"
-              mode=pull-request-base
+              git merge-base --is-ancestor "$PR_BASE_SHA" "$checked_out_head" && git merge-base --is-ancestor "$PR_HEAD_SHA" "$checked_out_head" || exit 1
+              comparison_sha="$PR_BASE_SHA"; mode=pull-request-base
               ;;
             push)
               require_commit "$EVENT_HEAD_SHA" "pushed head SHA"
-              if [[ "$checked_out_head" != "$EVENT_HEAD_SHA" ]]; then
-                echo "checked-out head does not equal the pushed head" >&2
-                exit 1
-              fi
+              [[ "$checked_out_head" == "$EVENT_HEAD_SHA" ]] || exit 1
               if [[ "$EVIDENCE_MODE" == "ap-registry-active-state-correction" ]]; then
-                expected_base=6b94c45187af70f176d6a98d40742187ceaf43c8
-                feature=a6e4bb52bf765e9846c75b7b32454aac9c97453d
-                merged=a765a3e6c4a4e9202fb4f1a770e5a5daf2dec0b1
-                tree=610c6b04125dcb67bb5089ae83246e22c9e6c456
-                git fetch --no-tags origin \
-                  refs/heads/main:refs/remotes/origin/coverage-main
-                authoritative_main="$(git rev-parse refs/remotes/origin/coverage-main)"
-                require_commit "$authoritative_main" "authoritative remote main SHA"
-                expected_paths=(.github/workflows/ci.yml docs/AYO_DECISION_ID_REGISTRY.json tests/governance/test_ci_trusted_comparison_base.py)
-                if [[ "$EVENT_HEAD_SHA" == "$merged" ]]; then
-                  mapfile -t parents < <(git show -s --format=%P "$EVENT_HEAD_SHA" | tr ' ' '\n')
-                  [[ "$EVENT_REF" == refs/heads/main && "$EVENT_BEFORE" == "$expected_base" \
-                    && "$authoritative_main" == "$merged" && "${parents[*]}" == "$expected_base $feature" \
-                    && "$(git merge-base "$feature" "$expected_base")" == "$expected_base" \
-                    && "$(git rev-parse "$EVENT_HEAD_SHA^{tree}")" == "$tree" \
-                    && "$(git rev-parse "$feature^{tree}")" == "$tree" ]] || {
-                    echo "AP active-state main-merge drift" >&2; exit 1; }
-                else
-                  [[ "$EVENT_HEAD_SHA" == "$feature" && "$authoritative_main" == "$expected_base" ]] || {
-                    echo AP_STATE_FEATURE_DRIFT >&2; exit 1; }
-                fi
-                mapfile -t aggregate_paths < <(git diff --name-only "$expected_base" "$EVENT_HEAD_SHA")
-                [[ "${aggregate_paths[*]}" == "${expected_paths[*]}" ]] || { echo AP_STATE_SCOPE_DRIFT >&2; exit 1; }
-                comparison_sha="$expected_base"
-                mode=verified-ap-registry-active-state-base
+                b=6b94c45187af70f176d6a98d40742187ceaf43c8; f=a6e4bb52bf765e9846c75b7b32454aac9c97453d; m=a765a3e6c4a4e9202fb4f1a770e5a5daf2dec0b1; t=610c6b04125dcb67bb5089ae83246e22c9e6c456
+                git fetch --no-tags origin main:refs/remotes/origin/coverage-main; a="$(git rev-parse refs/remotes/origin/coverage-main)"; require_commit "$a" main
+                if [[ "$EVENT_HEAD_SHA" == "$m" ]]; then p=($(git show -s --format=%P "$EVENT_HEAD_SHA")); [[ "$EVENT_REF $EVENT_BEFORE $a ${p[*]} $(git merge-base "$f" "$b") $(git rev-parse "$EVENT_HEAD_SHA^{tree}" "$f^{tree}")" == "refs/heads/main $b $m $b $f $b $t $t" ]] || exit 1; else [[ "$EVENT_HEAD_SHA $a" == "$f $b" ]] || exit 1; fi
+                [[ "$(git diff --name-only "$b" "$EVENT_HEAD_SHA" | tr '\n' ' ')" == '.github/workflows/ci.yml docs/AYO_DECISION_ID_REGISTRY.json tests/governance/test_ci_trusted_comparison_base.py ' ]] || exit 1
+                comparison_sha="$b"; mode=verified-ap-registry-active-state-base
               elif [[ "$EVIDENCE_MODE" == "ap-registry-active-state-main-ci-correction" ]]; then
-                expected_base=a765a3e6c4a4e9202fb4f1a770e5a5daf2dec0b1
-                r=2dd80f73ee3e8db4d91e517ec2b516240b3c51a5
-                git fetch --no-tags origin refs/heads/main:refs/remotes/origin/coverage-main
-                authoritative_main="$(git rev-parse refs/remotes/origin/coverage-main)"
-                mapfile -t parents < <(git show -s --format=%P "$EVENT_HEAD_SHA" | tr ' ' '\n')
-                correction_head="$EVENT_HEAD_SHA"
+                b=a765a3e6c4a4e9202fb4f1a770e5a5daf2dec0b1; r=2dd80f73ee3e8db4d91e517ec2b516240b3c51a5
+                git fetch --no-tags origin main:refs/remotes/origin/coverage-main; a="$(git rev-parse refs/remotes/origin/coverage-main)"; p=($(git show -s --format=%P "$EVENT_HEAD_SHA")); h="$EVENT_HEAD_SHA"
                 if [[ "$EVENT_REF" == refs/heads/main ]]; then
-                  [[ "${#parents[@]}" -eq 2 && "${parents[0]}" == "$EVENT_BEFORE" \
-                    && "$EVENT_BEFORE" == "$expected_base" && "$authoritative_main" == "$EVENT_HEAD_SHA" ]] || {
-                    echo AP_MAIN_CI_SOURCE_DRIFT >&2; exit 1; }
-                  correction_head="${parents[1]}"
-                  [[ "$(git rev-parse "$EVENT_HEAD_SHA^{tree}")" == "$(git rev-parse "$correction_head^{tree}")" ]] || {
-                    echo AP_MAIN_CI_MERGE_CONTENT >&2; exit 1; }
-                else
-                  [[ "${#parents[@]}" -eq 1 && "${parents[0]}" == "$r" \
-                    && "$authoritative_main" == "$expected_base" ]] || {
-                    echo AP_MAIN_CI_SOURCE_DRIFT >&2; exit 1; }
-                fi
-                [[ "$(git rev-parse "$correction_head^")" == "$r" ]] || {
-                  echo AP_MAIN_CI_ANCESTRY_DRIFT >&2; exit 1; }
-                comparison_sha="$expected_base"
-                mode=verified-ap-registry-main-ci-base
+                  [[ "${#p[@]} ${p[0]} $EVENT_BEFORE $a" == "2 $b $b $EVENT_HEAD_SHA" ]] || exit 1; h="${p[1]}"; [[ "$(git rev-parse "$EVENT_HEAD_SHA^{tree}")" == "$(git rev-parse "$h^{tree}")" ]] || exit 1
+                else [[ "${#p[@]} ${p[0]} $a" == "1 $r $b" ]] || exit 1; fi
+                [[ "$(git rev-parse "$h^")" == "$r" ]] || exit 1; comparison_sha="$b"; mode=verified-ap-registry-main-ci-base
               elif [[ "$EVIDENCE_MODE" == ci-governance-evidence-extraction ]]; then
                 b=fee08725153496edb2020d543c8cf24c317b48f6
                 git fetch --no-tags origin refs/heads/main:refs/remotes/origin/coverage-main
@@ -1749,54 +1622,35 @@ jobs:
                 [[ "$EVENT_REF" == refs/heads/main && "$EVENT_BEFORE $a" == "$b $EVENT_HEAD_SHA" || "$EVENT_REF" != refs/heads/main && "$EVENT_BEFORE $a $(git merge-base "$EVENT_HEAD_SHA" "$a")" == "0bc9305b8acc448e297a308afc4e378e97169d01 $b $b" ]] || exit 1
                 comparison_sha="$b"
                 mode=verified-ap-registry-reconciliation-enablement-base
+              elif [[ "$EVIDENCE_MODE" == ap-decision-registry-forward-reservation* ]]; then
+                git fetch --no-tags origin main:refs/remotes/origin/coverage-main
+                a="$(git rev-parse refs/remotes/origin/coverage-main)"; p=($(git show -s --format=%P "$EVENT_HEAD_SHA"))
+                if [[ "$EVENT_REF" == refs/heads/main ]]; then
+                  [[ "${#p[@]} $EVENT_BEFORE $a $(git rev-parse "$EVENT_HEAD_SHA^{tree}")" == "2 ${p[0]} $EVENT_HEAD_SHA $(git rev-parse "${p[1]}^{tree}")" ]] || exit 1; comparison_sha="${p[0]}"
+                else [[ "$a $(git merge-base "$EVENT_HEAD_SHA" "$a")" == "$a $a" ]] || exit 1; comparison_sha="$a"; fi
+                [[ "$EVIDENCE_MODE" != ap-decision-registry-forward-reservation-enablement || "$comparison_sha" == 334ca80b3c9701a71756cccb00d4ce9dfd9b59f7 && ( "$EVENT_REF" == refs/heads/main || "$EVENT_BEFORE" == 87c1651854b5944c5b749a02b0e281ab0e33dc4c ) ]] || exit 1
+                mode=verified-ap-registry-forward-reservation-base
               elif [[ -n "$EVENT_BEFORE" && "$EVENT_BEFORE" != "$zero" ]]; then
                 require_commit "$EVENT_BEFORE" "push before SHA"
-                git merge-base --is-ancestor "$EVENT_BEFORE" "$EVENT_HEAD_SHA" || {
-                  echo "push before SHA is not an ancestor of the pushed head" >&2
-                  exit 1
-                }
-                comparison_sha="$EVENT_BEFORE"
-                mode=verified-push-before
+                git merge-base --is-ancestor "$EVENT_BEFORE" "$EVENT_HEAD_SHA" || exit 1
+                comparison_sha="$EVENT_BEFORE"; mode=verified-push-before
               elif [[ "$EVIDENCE_MODE" == "booking-consent-policy-authority" \
                 || "$EVIDENCE_MODE" == "mobile-booking-intent-foundation" \
                 || "$EVIDENCE_MODE" == "booking-consent-document-delivery-architecture" \
                 || "$EVIDENCE_MODE" == "booking-consent-approval-pack-architecture" ]]; then
                 if [[ "$EVIDENCE_MODE" == "booking-consent-approval-pack-architecture" ]]; then
-                  expected_base=6aa98a78953531b637413e54b3afa93c721ae863
-                  label="Booking consent approval-pack architecture"
-                  first_push_mode=verified-booking-consent-approval-pack-first-push-base
+                  expected_base=6aa98a78953531b637413e54b3afa93c721ae863; first_push_mode=verified-booking-consent-approval-pack-first-push-base
                 elif [[ "$EVIDENCE_MODE" == "booking-consent-document-delivery-architecture" ]]; then
-                  expected_base=cadaa30c47ccbb849bf428c14576298b26ee6323
-                  label="Booking consent document delivery architecture"
-                  first_push_mode=verified-consent-document-architecture-first-push-base
+                  expected_base=cadaa30c47ccbb849bf428c14576298b26ee6323; first_push_mode=verified-consent-document-architecture-first-push-base
                 elif [[ "$EVIDENCE_MODE" == "mobile-booking-intent-foundation" ]]; then
-                  expected_base=ee6650d7f6304e73c31aee8a1ab709cd3be1fbf0
-                  label="Mobile Booking intent foundation"
-                  first_push_mode=verified-mobile-booking-intent-first-push-base
+                  expected_base=ee6650d7f6304e73c31aee8a1ab709cd3be1fbf0; first_push_mode=verified-mobile-booking-intent-first-push-base
                 else
-                  expected_base=6613a936b0fe896308682c8fe038708876a06c02
-                  label="Booking consent authority"
-                  first_push_mode=verified-booking-consent-first-push-base
+                  expected_base=6613a936b0fe896308682c8fe038708876a06c02; first_push_mode=verified-booking-consent-first-push-base
                 fi
-                git fetch --no-tags origin \
-                  refs/heads/main:refs/remotes/origin/coverage-main
-                authoritative_main="$(git rev-parse refs/remotes/origin/coverage-main)"
-                require_commit "$authoritative_main" "authoritative remote main SHA"
-                if [[ "$authoritative_main" != "$expected_base" ]]; then
-                  echo "$label first-push remote main drift" >&2
-                  exit 1
-                fi
-                merge_base="$(git merge-base "$EVENT_HEAD_SHA" "$authoritative_main")"
-                if [[ "$merge_base" != "$expected_base" ]]; then
-                  echo "$label first-push merge-base drift" >&2
-                  exit 1
-                fi
-                git merge-base --is-ancestor "$expected_base" "$EVENT_HEAD_SHA" || {
-                  echo "$label first-push base is not an ancestor" >&2
-                  exit 1
-                }
-                comparison_sha="$expected_base"
-                mode="$first_push_mode"
+                git fetch --no-tags origin main:refs/remotes/origin/coverage-main
+                a="$(git rev-parse refs/remotes/origin/coverage-main)"; require_commit "$a" main
+                [[ "$a $(git merge-base "$EVENT_HEAD_SHA" "$a")" == "$expected_base $expected_base" ]] && git merge-base --is-ancestor "$expected_base" "$EVENT_HEAD_SHA" || exit 1
+                comparison_sha="$expected_base"; mode="$first_push_mode"
               else
                 mapfile -t parents < <(git show -s --format='%P' "$EVENT_HEAD_SHA" | tr ' ' '\n')
                 if [[ "${#parents[@]}" -ne 1 ]]; then
@@ -1846,7 +1700,6 @@ jobs:
               exit 1
               ;;
           esac
-
           require_commit "$comparison_sha" "resolved trusted comparison base"
           git merge-base --is-ancestor "$comparison_sha" "$checked_out_head" || {
             echo "resolved trusted comparison base is not an ancestor of the tested tree" >&2
@@ -1856,7 +1709,6 @@ jobs:
           echo "mode=$mode" >> "$GITHUB_OUTPUT"
           echo "Trusted comparison mode: $mode"
           echo "Trusted comparison base SHA: $comparison_sha"
-
       - name: Bind exact Booking replay-equivalence candidate identity
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'booking-complete-replay-equivalence'
         env:
@@ -1952,7 +1804,6 @@ jobs:
             fi
           done
           echo "Booking replay-equivalence exact candidate identity: PASS"
-
       - name: Bind exact Booking consent-policy-authority candidate identity
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'booking-consent-policy-authority'
         env:
@@ -2064,7 +1915,6 @@ jobs:
             fi
           done
           echo "Booking consent-policy-authority exact candidate identity: PASS"
-
       - name: Bind exact Mobile Booking intent foundation candidate identity
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'mobile-booking-intent-foundation'
         env:
@@ -2169,7 +2019,6 @@ jobs:
           git diff --quiet "$expected_base" "$candidate" -- BACKEND || {
             echo "Mobile Booking intent backend diff is nonempty" >&2; exit 1; }
           echo "Mobile Booking intent exact candidate identity: PASS"
-
       - name: Bind exact consent document architecture candidate identity
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'booking-consent-document-delivery-architecture'
         env:
@@ -2220,7 +2069,6 @@ jobs:
             && "$(git rev-parse "$candidate:docs/AYO_ROADMAP.md")" == e459cd12961c5264dd7df8f1cbc5328e854f73a1 ]] || {
             echo "Consent architecture documentation identity drift" >&2; exit 1; }
           echo "Consent document architecture exact candidate identity: PASS"
-
       - name: Bind exact Booking consent approval-pack architecture candidate identity
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'booking-consent-approval-pack-architecture'
         env:
@@ -2304,7 +2152,6 @@ jobs:
             && "$(git rev-parse "$candidate:docs/AYO_BOOKING_CONSENT_DOCUMENT_DELIVERY_CONTRACT_ARCHITECTURE.md")" == 54d69775049d6f0af12fe6ace2bfc5a8cf66ad81 ]] || {
             echo "Approval-pack documentation identity drift" >&2; exit 1; }
           echo "Booking consent approval-pack architecture exact candidate identity: PASS"
-
       - name: Bind tested Courier Pickup tree to trusted authoritative base
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'courier-pickup-idempotency-v1'
         id: courier_pickup_v1_content
@@ -2317,7 +2164,6 @@ jobs:
           import hashlib
           import os
           import subprocess
-
           expected_paths = [
               "BACKEND/courier_pickup/application.py",
               "BACKEND/courier_pickup/idempotency.py",
@@ -2392,7 +2238,6 @@ jobs:
           print("Courier Pickup tested content is exactly bound to trusted base:", base)
           print("Courier Pickup tested ten-path manifest fingerprint:", fingerprint)
           PY
-
       - name: Bind tested Courier Pickup authorization-ordering tree to trusted base
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'courier-pickup-authorization-ordering'
         id: courier_pickup_authorization_ordering_content
@@ -2405,7 +2250,6 @@ jobs:
           import hashlib
           import os
           import subprocess
-
           expected_paths = [
               "BACKEND/courier_pickup/application.py",
               "BACKEND/routes/courier_pickup.py",
@@ -2426,12 +2270,10 @@ jobs:
               "migrations": "3997d1a4022db4cb844b3283b454682eeb0420f2",
               "manifest": "0ac039f011a6b88c472ad84af9770e98abc0c50fee2518a36515e04a3cd1bf5d",
           }
-
           def git(*args):
               return subprocess.run(
                   ["git", *args], check=True, capture_output=True, text=True,
               ).stdout.strip()
-
           head = os.environ["TESTED_HEAD_SHA"]
           base = os.environ["PUBLISHED_PREDECESSOR_SHA"]
           if not head or not base or git("merge-base", head, base) != base:
@@ -2464,7 +2306,6 @@ jobs:
           print("Authorization-ordering tested content bound to trusted base:", base)
           print("Authorization-ordering tested five-path fingerprint:", fingerprint)
           PY
-
       - name: Test all admitted non-PostgreSQL behavior with coverage
         id: backend_broad_regression
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && (steps.evidence_contract.outputs.mode == 'pre-batch2' || steps.evidence_contract.outputs.mode == 'booking-complete-replay-equivalence' || steps.evidence_contract.outputs.mode == 'booking-consent-policy-authority' || steps.evidence_contract.outputs.mode == 'mobile-booking-intent-foundation')
@@ -2499,7 +2340,6 @@ jobs:
           import re
           import subprocess
           import xml.etree.ElementTree as ET
-
           approved_tree = "5c4895867a7cbf7537158ba41fa7a5361d1ddf31"
           approved_fingerprint = "a9d406113b3fa3ebf75fe6d6b3ce7ddd8011e8d5ff0ee807f971e1499634b2ac"
           expected_deselections = {
@@ -2585,7 +2425,6 @@ jobs:
               "BACKEND/services/ayo_ai.py",
               "BACKEND/services/ride_store.py",
           }
-
           tested_sha = os.environ["TESTED_COMMIT_SHA"]
           backend_tree = subprocess.run(
               ["git", "rev-parse", "HEAD:BACKEND"],
@@ -2593,7 +2432,6 @@ jobs:
               capture_output=True,
               text=True,
           ).stdout.strip()
-
           junit = ET.parse("pytest-results.xml").getroot()
           cases = junit.findall(".//testcase")
           failures = [case for case in cases if case.find("failure") is not None]
@@ -2608,7 +2446,6 @@ jobs:
           passed = len(cases) - len(failures) - len(errors) - len(skipped_cases)
           def node_id(case):
               return f"{case.get('classname').replace('.', '/')}.py::{case.get('name')}"
-
           case_nodes = [node_id(case) for case in cases]
           if len(case_nodes) != len(set(case_nodes)):
               raise SystemExit("duplicate governed pytest node in JUnit inventory")
@@ -2725,7 +2562,6 @@ jobs:
               }
               if actual_inventory != expected_inventory:
                   raise SystemExit(f"Batch 1 test inventory drift: {actual_inventory!r}")
-
           log = open("batch1-coverage.log", encoding="utf-8").read()
           deselected_matches = re.findall(r"(\d+) deselected", log)
           matched_deselections = int(deselected_matches[-1]) if deselected_matches else 0
@@ -2750,7 +2586,6 @@ jobs:
               )
           if expected_status == 1 and "FAIL Required test coverage of 70% not reached" not in log:
               raise SystemExit("the unchanged 70% target was not the sole reported failure")
-
           normalized = []
           collected = set()
           for path, evidence in sorted(coverage["files"].items()):
@@ -2767,7 +2602,6 @@ jobs:
           fingerprint = hashlib.sha256(
               json.dumps(normalized, separators=(",", ":"), sort_keys=True).encode()
           ).hexdigest()
-
           zero_coverage = {
               path[path.find("BACKEND/"):]
               for path, evidence in coverage["files"].items()
@@ -2879,7 +2713,6 @@ jobs:
           actual_deselections = set(actual_deselection_order)
           if actual_deselections != expected_deselections:
               raise SystemExit(f"Batch 1 governed deselection drift: {sorted(actual_deselections)!r}")
-
           print("Batch 1 tested SHA:", tested_sha)
           print("Batch 1 BACKEND tree:", backend_tree)
           deselection_summary = (
@@ -3009,7 +2842,6 @@ jobs:
               if open(path, encoding="utf-8", newline="").read() != block:
                   raise SystemExit("Booking consent broad evidence retention failed")
           PY
-
       - name: Remove Mobile Booking backend regression intermediates
         if: always() && steps.evidence_contract.outputs.mode == 'mobile-booking-intent-foundation'
         env:
@@ -3047,7 +2879,6 @@ jobs:
               echo "Mobile Booking backend-intermediate cleanup failed" >&2; exit 1; }
           done
           echo "Mobile Booking backend regression intermediates removed"
-
       - name: Verify exact Batch 2 test and coverage contract
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'batch2'
         env:
@@ -3064,12 +2895,10 @@ jobs:
           import os
           import subprocess
           import xml.etree.ElementTree as ET
-
           expected_test_fingerprint = "da81616eed7a8bdbcc548682c6e6a7ffd13f98c14b13f8963e6e62160a2bf7e9"
           expected_coverage_fingerprint = "8d17d39c72f23f8c123b06a5c3abba06512aa57e143a9c2bcc5a2f30d2949bcb"
           expected_xfail = "tests/test_services.py::test_cash_commission_is_not_lost_on_repeated_wallet_refresh"
           expected_xfail_reason = "Known prototype defect: cash commission is destructively netted twice"
-
           cases = ET.parse("batch2-results.xml").getroot().findall(".//testcase")
           inventory = []
           passed = failed = errors = skipped = xfailed = 0
@@ -3111,7 +2940,6 @@ jobs:
               raise SystemExit("Batch 2 production tree drift")
           if subprocess.run(["git", "cat-file", "-e", "HEAD:tests/test_ride_flow.py"]).returncode == 0:
               raise SystemExit("obsolete ride-flow test was restored")
-
           coverage = json.load(open("batch2-coverage.json", encoding="utf-8"))
           totals = coverage["totals"]
           exact_totals = (
@@ -3131,7 +2959,6 @@ jobs:
               raise SystemExit(f"Batch 2 coverage fingerprint drift: {coverage_fingerprint}")
           if totals["percent_covered"] < 77.19024018299658:
               raise SystemExit("coverage fell below the certified Batch 2 floor")
-
           compare_sha = os.environ.get("TRUSTED_COMPARISON_BASE_SHA", "")
           if not compare_sha:
               raise SystemExit("Batch 2 authoritative base binding is missing")
@@ -3203,7 +3030,6 @@ jobs:
           print("Coverage regression floor: 77.19024018299658%")
           print("Coverage strategic target: 70%")
           PY
-
       - name: Verify exact Courier Pickup Idempotency V1 test and coverage contract
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'courier-pickup-idempotency-v1'
         env:
@@ -3224,7 +3050,6 @@ jobs:
           import subprocess
           import xml.etree.ElementTree as ET
           from pathlib import Path
-
           expected_xfail = "tests/test_services.py::test_cash_commission_is_not_lost_on_repeated_wallet_refresh"
           expected_reason = "Known prototype defect: cash commission is destructively netted twice"
           nodes = sorted(
@@ -3236,7 +3061,6 @@ jobs:
           test_fingerprint = hashlib.sha256("\n".join(nodes).encode()).hexdigest()
           if test_fingerprint != "bca01756759be5ccb56571d874a015cb8c2d952fad68c75f85c49b02c235bf09":
               raise SystemExit(f"Courier Pickup test inventory drift: {test_fingerprint}")
-
           cases = ET.parse("courier-pickup-results.xml").getroot().findall(".//testcase")
           passed = failed = errors = skipped = xfailed = 0
           xfail_nodes = {}
@@ -3262,7 +3086,6 @@ jobs:
               )
           if set(xfail_nodes) != {expected_xfail} or expected_reason not in xfail_nodes[expected_xfail]:
               raise SystemExit(f"Courier Pickup xfail drift: {xfail_nodes!r}")
-
           coverage = json.loads(Path("courier-pickup-coverage.json").read_text())
           totals = coverage["totals"]
           exact = (
@@ -3287,7 +3110,6 @@ jobs:
               raise SystemExit(f"Courier Pickup coverage fingerprint drift: {coverage_fingerprint}")
           if totals["percent_covered"] < 77.56604919526268:
               raise SystemExit("Courier Pickup coverage fell below its reviewed floor")
-
           compare_sha = os.environ.get("CONTENT_COMPARISON_BASE_SHA", "")
           classification = os.environ.get("CONTENT_CLASSIFICATION", "")
           expected_statements = {
@@ -3348,7 +3170,6 @@ jobs:
               f"{expected_statements} covered, 0 uncovered"
           )
           PY
-
       - name: Verify exact Courier Pickup authorization-ordering test and coverage contract
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'courier-pickup-authorization-ordering'
         env:
@@ -3374,7 +3195,6 @@ jobs:
           import subprocess
           import xml.etree.ElementTree as ET
           from pathlib import Path
-
           def inventory(path):
               nodes = sorted(
                   line.strip() for line in Path(path).read_text().splitlines() if "::" in line
@@ -3382,7 +3202,6 @@ jobs:
               if len(nodes) != len(set(nodes)):
                   raise SystemExit(f"duplicate collected node in {path}")
               return nodes, hashlib.sha256("\n".join(nodes).encode()).hexdigest()
-
           contracts = {
               "authorization-ordering-all-collect.txt": (735, "547c64c3f22891df88d77a02f56894b24ae8423135f9a12fe5fed87725f1cbf2"),
               "authorization-ordering-nonpostgresql-collect.txt": (508, "888c1fcbda58d8de06d04d15bd29eca0804813a5636412156fe3494280ce82c8"),
@@ -3392,7 +3211,6 @@ jobs:
               nodes, fingerprint = inventory(path)
               if (len(nodes), fingerprint) != expected:
                   raise SystemExit(f"authorization-ordering inventory drift in {path}: {(len(nodes), fingerprint)!r}")
-
           expected_xfail = "tests/test_services.py::test_cash_commission_is_not_lost_on_repeated_wallet_refresh"
           expected_reason = "Known prototype defect: cash commission is destructively netted twice"
           cases = ET.parse("authorization-ordering-results.xml").getroot().findall(".//testcase")
@@ -3418,7 +3236,6 @@ jobs:
               raise SystemExit(f"authorization-ordering outcomes drift: {(passed, failed, errors, skipped, xfailed)!r}")
           if set(xfail_nodes) != {expected_xfail} or expected_reason not in xfail_nodes[expected_xfail]:
               raise SystemExit(f"authorization-ordering governed xfail drift: {xfail_nodes!r}")
-
           coverage = json.loads(Path("authorization-ordering-coverage.json").read_text())
           totals = coverage["totals"]
           exact = (
@@ -3445,7 +3262,6 @@ jobs:
           baseline = 77.56604919526268
           if totals["percent_covered"] - baseline != 0.21594564305522113:
               raise SystemExit("authorization-ordering coverage increase drift")
-
           compare_sha = os.environ.get("CONTENT_COMPARISON_BASE_SHA", "")
           classification = os.environ.get("CONTENT_CLASSIFICATION", "")
           if classification != "courier-pickup-authorization-ordering":
@@ -3501,11 +3317,9 @@ jobs:
           print("Authorization-ordering coverage fingerprint:", coverage_fingerprint)
           print("Authorization-ordering changed executable statements: 11 covered, 0 uncovered")
           PY
-
       - name: Verify PostgreSQL 17/PostGIS integration tests without skips
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-policy-authority' && steps.evidence_contract.outputs.mode != 'mobile-booking-intent-foundation' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
         run: uv run --locked pytest -m "integration and not migration" --no-cov -q
-
       - name: Capture Booking consent authority PostgreSQL evidence
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'booking-consent-policy-authority'
         env:
@@ -3546,7 +3360,6 @@ jobs:
           if open(path, encoding="utf-8", newline="").read() != block: raise SystemExit("PostgreSQL evidence retention failed")
           PY
           rm booking-consent-postgresql-collect.txt booking-consent-postgresql.xml
-
       - name: Capture Mobile Booking backend PostgreSQL regression evidence
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'mobile-booking-intent-foundation'
         env:
@@ -3563,7 +3376,6 @@ jobs:
             uv run --locked python - <<'PY'
           import hashlib, os, xml.etree.ElementTree as ET
           from pathlib import Path
-
           nodes = sorted(
               line.strip() for line in Path(os.environ["COLLECT_FILE"]).read_text().splitlines()
               if "::" in line
@@ -3598,7 +3410,6 @@ jobs:
           if path.read_text(encoding="utf-8") != block:
               raise SystemExit("Mobile regression PostgreSQL evidence retention failed")
           PY
-
       - name: Verify exact Courier Pickup PostgreSQL inventory
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'courier-pickup-idempotency-v1'
         run: |
@@ -3631,7 +3442,6 @@ jobs:
           print("Courier Pickup PostgreSQL nodes: 190 passed")
           print("Courier Pickup PostgreSQL inventory fingerprint:", fingerprint)
           PY
-
       - name: Verify exact Courier Pickup authorization-ordering PostgreSQL inventory
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'courier-pickup-authorization-ordering'
         run: |
@@ -3643,7 +3453,6 @@ jobs:
           import hashlib
           import xml.etree.ElementTree as ET
           from pathlib import Path
-
           nodes = sorted(
               line.strip() for line in Path("authorization-ordering-postgresql-collect.txt").read_text().splitlines()
               if "::" in line
@@ -3665,7 +3474,6 @@ jobs:
           print("Authorization-ordering PostgreSQL nodes: 193 passed")
           print("Authorization-ordering PostgreSQL fingerprint:", fingerprint)
           PY
-
       - name: Install and verify PostgreSQL 17 client
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
         id: pg_client
@@ -3682,7 +3490,6 @@ jobs:
           echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
           /usr/lib/postgresql/17/bin/pg_dump --version | grep -Eq '^pg_dump \(PostgreSQL\) 17(\.|$)'
           echo "ready=true" >> "$GITHUB_OUTPUT"
-
       - name: Initialize and verify canonical migration head
         if: (success() || failure()) && steps.pg_client.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
         id: canonical_schema
@@ -3693,7 +3500,6 @@ jobs:
         run: |
           uv run --locked python - <<'PY'
           import psycopg
-
           with psycopg.connect(
               host="127.0.0.1", dbname="postgres", user="ayo_test",
               password="ayo_test_password", autocommit=True,
@@ -3723,13 +3529,11 @@ jobs:
               raise SystemExit('CI database is not at the canonical migration head')
           "
           echo "ready=true" >> "$GITHUB_OUTPUT"
-
       - name: Certify PostgreSQL backup and restore
         if: (success() || failure()) && steps.canonical_schema.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
         env:
           AYO_TEST_DATABASE_URL: postgresql+psycopg://ayo_test:ayo_test_password@127.0.0.1:5432/ayo_certification
         run: uv run --locked python database/certify_restore.py
-
       - name: Certify Migration 0055 and 0056 round trip
         if: (success() || failure()) && steps.canonical_schema.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
         env:
@@ -3743,11 +3547,9 @@ jobs:
           import json
           import os
           import time
-
           import psycopg
           from alembic import command
           from sqlalchemy import text
-
           from BACKEND.persistence.config import DatabaseSettings
           from BACKEND.persistence.engine import create_postgres_engine
           from BACKEND.persistence.migrations import (
@@ -3757,7 +3559,6 @@ jobs:
               alembic_config,
               expected_schema_revision,
           )
-
           admin = dict(host="127.0.0.1", user="ayo_test", password="ayo_test_password")
           with psycopg.connect(dbname="postgres", autocommit=True, **admin) as connection:
               connection.execute("DROP DATABASE IF EXISTS ayo_roundtrip")
@@ -3768,13 +3569,11 @@ jobs:
                   "SELECT 1 FROM pg_roles WHERE rolname = 'ayo_runtime'"
               ).fetchone() is None:
                   connection.execute("CREATE ROLE ayo_runtime NOLOGIN")
-
           engine = create_postgres_engine(
               DatabaseSettings(application_name="ayo-ci-migration-roundtrip")
           )
           runner = MigrationRunner(engine)
           expected_head = expected_schema_revision()
-
           def downgrade_with_migration_lock(revision):
               with engine.connect() as connection:
                   deadline = time.monotonic() + 30.0
@@ -3805,7 +3604,6 @@ jobs:
                               {"lock_id": MIGRATION_LOCK_ID},
                           )
                           connection.commit()
-
           def revision_and_fingerprint():
               with engine.connect() as connection:
                   revision = connection.execute(
@@ -3825,7 +3623,6 @@ jobs:
                   [tuple(row) for row in rows], separators=(",", ":"), default=str
               )
               return revision, hashlib.sha256(payload.encode()).hexdigest()
-
           try:
               runner.upgrade("20260723_0054")
               revision_0054, fingerprint_0054 = revision_and_fingerprint()
@@ -3851,7 +3648,6 @@ jobs:
                   or reupgraded_fingerprint_0055 != fingerprint_0055
               ):
                   raise SystemExit("Migration 0055 re-upgrade schema drift")
-
               runner.upgrade("20260724_0056")
               revision_0056, fingerprint_0056 = revision_and_fingerprint()
               downgrade_with_migration_lock("20260723_0055")
@@ -3871,10 +3667,8 @@ jobs:
                   or reupgraded_fingerprint_0056 != fingerprint_0056
               ):
                   raise SystemExit("Migration 0056 re-upgrade schema drift")
-
               runner.upgrade(expected_head)
               final_revision, _ = revision_and_fingerprint()
-
               readiness = SchemaVersionReadinessChecker(engine).check()
               if (
                   not readiness.ready
@@ -3935,13 +3729,11 @@ jobs:
                   print("Round-trip active connections after cleanup: 0")
                   print("Round-trip ayo_runtime dependencies after cleanup: 0")
           PY
-
       - name: Remove certification databases before downstream suites
         if: (success() || failure()) && steps.pg_client.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
         run: |
           uv run --locked python - <<'PY'
           import psycopg
-
           admin = dict(
               host="127.0.0.1", dbname="postgres", user="ayo_test",
               password="ayo_test_password", autocommit=True,
@@ -4007,7 +3799,6 @@ jobs:
           print("ayo_runtime active sessions between gates: 0")
           print("ayo_runtime dependencies outside ayo_test: 0")
           PY
-
       - name: Verify Batch 1 typing evidence equivalence
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outcome == 'success' && steps.evidence_contract.outputs.mode != 'booking-consent-document-delivery-architecture' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
         env:
@@ -4040,7 +3831,7 @@ jobs:
             source_sha=a765a3e6c4a4e9202fb4f1a770e5a5daf2dec0b1
           elif [[ "$EVIDENCE_MODE" == "ci-governance-evidence-extraction" ]]; then
             source_sha=fee08725153496edb2020d543c8cf24c317b48f6
-          elif [[ "$EVIDENCE_MODE" == "ap-decision-registry-reconciliation-enablement" ]]; then
+          elif [[ "$EVIDENCE_MODE" == "ap-decision-registry-reconciliation-enablement" || "$EVIDENCE_MODE" == ap-decision-registry-forward-reservation* ]]; then
             source_sha="$(git merge-base "$TESTED_COMMIT_SHA" refs/remotes/origin/main)"
             [[ "$(git show -s --format=%P "$TESTED_COMMIT_SHA" | wc -w)" == 2 ]] && source_sha="$(git rev-parse "$TESTED_COMMIT_SHA^1")"
           fi
@@ -4074,7 +3865,6 @@ jobs:
               mypy_semantic_fingerprint, mypy_semantic_movement,
               parse_mypy_diagnostics,
           )
-
           roots = (os.environ["SOURCE_DIR"], str(Path.cwd()))
           def read(path, *, empty=False, raw=False):
               return list(parse_mypy_diagnostics(Path(path).read_text(encoding="utf-8"), roots=roots, allow_empty=empty, collapse_message_whitespace=not raw))
@@ -4085,14 +3875,12 @@ jobs:
                   for item in difference["source_only"]: print("SOURCE_ONLY|" + item.render())
                   for item in difference["candidate_only"]: print("CANDIDATE_ONLY|" + item.render())
                   raise SystemExit(label + " MyPy diagnostic population changed")
-
           mode = os.environ["EVIDENCE_MODE"]
-          active = {"ap-registry-active-state-correction", "ap-registry-active-state-main-ci-correction", "ci-governance-evidence-extraction", "ap-decision-registry-reconciliation-enablement"}
+          active = {"ap-registry-active-state-correction", "ap-registry-active-state-main-ci-correction", "ci-governance-evidence-extraction", "ap-decision-registry-reconciliation-enablement", "ap-decision-registry-forward-reservation-enablement", "ap-decision-registry-forward-reservation"}
           current = {"immediate-standard-public-contract", "booking-complete-replay-equivalence", "pip-audit-toolchain-remediation", "ap-decision-registry-main-landing", *active}
           capture = {"booking-consent-policy-authority", "mobile-booking-intent-foundation"}
           clean = {"batch2": 447, "courier-pickup-idempotency-v1": 450, "courier-pickup-authorization-ordering": 452}
           if mode not in {"pre-batch2", *current, *capture, *clean}: raise SystemExit(f"unknown governed MyPy mode: {mode}")
-
           source_strict, candidate_strict = read("source-strict.txt"), read("candidate-strict.txt")
           if mode in current or mode in {"pre-batch2", "batch2"}: equal("strict backend", source_strict, candidate_strict)
           elif mode in capture:
@@ -4105,14 +3893,12 @@ jobs:
               if values != expected: raise SystemExit("Courier Pickup strict MyPy fingerprint drift")
               expected_moved = ((("BACKEND/courier_pickup/application.py", "no-any-return", 'Returning Any from function declared to return "CourierPickupView" '), ((32, 13), (48, 13), (59, 13), (217, 17), (246, 13)), ((33, 13), (49, 13), (60, 13), (231, 17), (268, 13))),)
               if moved != (expected_moved if mode == "courier-pickup-idempotency-v1" else ()): raise SystemExit("Courier Pickup reviewed MyPy movement drift")
-
           strict = mypy_inventory(candidate_strict)
           current_strict = {"diagnostics": 383, "files": 54, "codes": {"no-any-return": 198, "no-untyped-call": 115, "no-untyped-def": 63, "redundant-cast": 4, "type-arg": 3}, "fingerprint": "a7018245b4e9086aeca1d39d47903e5e98d0b62d"}
           if mode in current and strict != current_strict: raise SystemExit("current-main strict MyPy evidence drift")
           if mode not in current | capture:
               if strict["diagnostics"] != 387 or strict["files"] != 52 or strict["codes"] != {"no-any-return": 199, "no-untyped-call": 120, "no-untyped-def": 61, "redundant-cast": 4, "type-arg": 3}: raise SystemExit("historical strict MyPy evidence drift")
               if mode in {"pre-batch2", "batch2"} and strict["fingerprint"] != "6257a24b9c057c822e45a041519a849c471f6c48": raise SystemExit("historical strict MyPy fingerprint drift")
-
           source_configured = read("source-configured.txt", empty=mode == "courier-pickup-authorization-ordering")
           candidate_configured = read("candidate-configured.txt", empty=mode in clean)
           if mode in clean:
@@ -4154,7 +3940,6 @@ jobs:
           fi
           rm -rf "$source_dir" "$mypy_root" source-strict.txt candidate-strict.txt \
             source-configured.txt candidate-configured.txt
-
       - name: Scan exact candidate for secrets
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outcome == 'success' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
         env:
@@ -4169,7 +3954,7 @@ jobs:
           set -euo pipefail
           evidence_mode="$EVIDENCE_MODE"
           g=false
-          [[ "$evidence_mode" == "ci-governance-evidence-extraction" || "$evidence_mode" == "ap-decision-registry-reconciliation-enablement" ]] && g=true
+          [[ "$evidence_mode" == "ci-governance-evidence-extraction" || "$evidence_mode" == "ap-decision-registry-reconciliation-enablement" || "$evidence_mode" == ap-decision-registry-forward-reservation* ]] && g=true
           candidate_json=candidate-secrets.json
           base_json=base-secrets.json
           baseline_json=reviewed-secrets-baseline.json
@@ -4299,10 +4084,8 @@ jobs:
               secret_fingerprint,
               secret_inventory,
           )
-
           VERSION = "1.5.0"
           BASELINE_KEYS = {"version", "plugins_used", "filters_used", "results", "inventory_fingerprint_bytes", "review"}
-
           def load(path):
               try:
                   value = json.loads(Path(path).read_text(encoding="utf-8"))
@@ -4311,26 +4094,20 @@ jobs:
               if not isinstance(value, dict):
                   raise SystemExit("secret baseline root must be an object")
               return value
-
           def canonical(value):
               return canonical_json(value)
-
           def hex_bytes(value, length, label):
               if (not isinstance(value, list) or len(value) != length
                       or any(type(item) is not int or not 0 <= item <= 255 for item in value)):
                   raise SystemExit(f"malformed {label} byte inventory")
               return bytes(value).hex()
-
           def scan_inventory(results):
               return list(secret_inventory(results))
-
           def fingerprint(items):
               return secret_fingerprint(items)
-
           def render(item):
               p, n, t, h, v = item
               return f"{p}|{n}|{t}|{h}|{str(v).lower()}"
-
           def exact(label, actual, expected):
               if actual == expected:
                   return
@@ -4340,7 +4117,6 @@ jobs:
               for item in sorted(a - e):
                   print("ACTUAL_ONLY|" + render(item))
               raise SystemExit(f"{label} semantic finding inventory drift")
-
           scan = load(os.environ["CANDIDATE_JSON"])
           baseline = load(os.environ["BASELINE_JSON"])
           if set(baseline) != BASELINE_KEYS:
@@ -4355,7 +4131,6 @@ jobs:
               print("EXPECTED_FILTERS|" + canonical(baseline["filters_used"]))
               print("ACTUAL_FILTERS|" + canonical(scan.get("filters_used")))
               raise SystemExit("detect-secrets filter or path-exclusion drift")
-
           reviewed, classes = reviewed_secret_inventory(baseline["results"])
           if len(reviewed) != 34 or len(set(reviewed)) != 34:
               raise SystemExit("reviewed finding count or uniqueness drift")
@@ -4381,7 +4156,6 @@ jobs:
           expected_approved = "7268878931a4c970cfc8f4cafe450c7c3f6bd6ae615988057e26cbcdb73efd49"
           if fingerprint(reviewed) != approved or approved != expected_approved:
               raise SystemExit("reviewed baseline fingerprint drift")
-
           review = baseline["review"]
           target = hex_bytes(review.get("target_sha_bytes"), 20, "review target SHA")
           expected_target = "c930121b0c72ddcf40ada720ab7c8110591844f6"
@@ -4390,7 +4164,6 @@ jobs:
                   or review.get("genuine_or_uncertain_findings") != 0
                   or review.get("future_updates_require_separate_security_review") is not True):
               raise SystemExit("reviewed baseline governance metadata drift")
-
           actual = scan_inventory(scan.get("results"))
           pre_batch2 = sorted(item for item in reviewed if item[0] not in BATCH2_ONLY_SECRET_PATHS)
           mode = os.environ["EVIDENCE_MODE"]
@@ -4542,7 +4315,7 @@ jobs:
                       "AP-registry introduced unreviewed secret-finding semantics"
                   )
               selected = "AP-registry exact governed commit-SHA false-positive inventory"
-          elif mode in {"ap-registry-active-state-correction", "ap-registry-active-state-main-ci-correction", "ci-governance-evidence-extraction", "ap-decision-registry-reconciliation-enablement"}:
+          elif mode in {"ap-registry-active-state-correction", "ap-registry-active-state-main-ci-correction", "ci-governance-evidence-extraction", "ap-decision-registry-reconciliation-enablement", "ap-decision-registry-forward-reservation-enablement", "ap-decision-registry-forward-reservation"}:
               source = load(os.environ["BASE_JSON"]); base = scan_inventory(source.get("results"))
               sem = lambda x: Counter((p,t,h,v) for p,_,t,h,v in x)
               candidate_only = sorted((sem(actual)-sem(base)).elements())
@@ -4582,7 +4355,6 @@ jobs:
               selected = "pre-Batch-2 exact 11-finding projection"
           else:
               raise SystemExit(f"unknown governed secret evidence mode: {mode}")
-
           print("detect-secrets version:", VERSION)
           print("Enabled plugins:", canonical(scan["plugins_used"]))
           print("Enabled filters:", canonical(scan["filters_used"]))
@@ -4597,7 +4369,6 @@ jobs:
           else
             rm -f candidate-secrets.json base-secrets.json reviewed-secrets-baseline.json
           fi
-
       - name: Capture Booking consent approval-pack neutral secret inventory
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'booking-consent-approval-pack-architecture'
         env:
@@ -4626,7 +4397,6 @@ jobs:
           base_json="$scan_dir/base.json"
           baseline_json="$scan_dir/baseline.json"
           staged_evidence="$scan_dir/neutral-evidence.txt"
-
           cleanup_approval_pack_scan() {
             local rc=$? cleanup_failed=0
             trap - EXIT
@@ -4650,7 +4420,6 @@ jobs:
             exit "$rc"
           }
           trap cleanup_approval_pack_scan EXIT
-
           mkdir -- "$candidate_root" "$base_root"
           rm -f -- "$APPROVAL_PACK_SECRET_EVIDENCE_PATH" "$APPROVAL_PACK_SECRET_CLEANUP_PATH"
           git archive "$CANDIDATE_SHA" | tar -x -C "$candidate_root"
@@ -4669,7 +4438,6 @@ jobs:
             uv tool run --from 'detect-secrets==1.5.0' detect-secrets scan \
               --all-files --exclude-files '^\.git/'
           ) > "$base_json"
-
           SCANNER_VERSION="$scanner_version" CANDIDATE_JSON="$candidate_json" \
             BASE_JSON="$base_json" BASELINE_JSON="$baseline_json" \
             STAGED_EVIDENCE="$staged_evidence" uv run --locked python - <<'PY'
@@ -4682,9 +4450,7 @@ jobs:
               secret_fingerprint,
               secret_inventory,
           )
-
           VERSION = "1.5.0"
-
           def load(name):
               try:
                   value = json.loads(Path(os.environ[name]).read_text(encoding="utf-8"))
@@ -4693,16 +4459,12 @@ jobs:
               if not isinstance(value, dict):
                   raise SystemExit(f"Approval-pack scanner {name} root malformed")
               return value
-
           def canonical(value):
               return canonical_json(value)
-
           def inventory(scan):
               return list(secret_inventory(scan.get("results")))
-
           def digest(items):
               return secret_fingerprint(items)
-
           candidate_scan = load("CANDIDATE_JSON")
           base_scan = load("BASE_JSON")
           baseline = load("BASELINE_JSON")
@@ -4715,7 +4477,6 @@ jobs:
                   raise SystemExit(f"Approval-pack {label} plugin inventory drift")
               if canonical(scan.get("filters_used")) != canonical(baseline.get("filters_used")):
                   raise SystemExit(f"Approval-pack {label} filter inventory drift")
-
           base = inventory(base_scan)
           candidate = inventory(candidate_scan)
           base_only = sorted(set(base) - set(candidate))
@@ -4756,14 +4517,12 @@ jobs:
           [[ -f "$staged_evidence" && ! -L "$staged_evidence" ]] || {
             echo "Approval-pack neutral scanner evidence missing" >&2; exit 1; }
           mv -- "$staged_evidence" "$APPROVAL_PACK_SECRET_EVIDENCE_PATH"
-
       - name: Verify shared certification dependencies survived MyPy
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true'
         run: |
           set -euo pipefail
           .venv/bin/python - <<'PY'
           from importlib import import_module, metadata
-
           required_modules = {
               "alembic": "alembic",
               "sqlalchemy": "sqlalchemy",
@@ -4784,34 +4543,27 @@ jobs:
               )
           print("Shared certification dependency environment: PASS")
           PY
-
       - name: Verify audit suite against PostgreSQL 17/PostGIS without skips
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
         run: uv run --locked pytest -m audit --no-cov -q
-
       - name: Verify session persistence suite without skips
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
         run: uv run --locked pytest -m session_persistence --no-cov -q
-
       - name: Verify authentication foundation without skips
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
         run: uv run --locked pytest -m authentication --no-cov -q
-
       - name: Verify authorization foundation without skips
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
         run: uv run --locked pytest -m authorization --no-cov -q
-
       - name: Verify support foundation without skips
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
         run: uv run --locked pytest -m support --no-cov -q
-
       - name: Verify exact historical migration-suite debt
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'pre-batch2'
         run: |
           uv run --locked python -c "import psycopg; connection = psycopg.connect(host='127.0.0.1', dbname='postgres', user='ayo_test', password='ayo_test_password', autocommit=True); connection.execute('DROP DATABASE IF EXISTS ayo_certification'); connection.close()"
           uv run --locked python - <<'PY'
           import psycopg
-
           admin = dict(
               host="127.0.0.1",
               dbname="postgres",
@@ -4853,7 +4605,6 @@ jobs:
           import os
           import re
           import xml.etree.ElementTree as ET
-
           prefix = "tests/integration/test_migrations.py::"
           expected_failures = {
               prefix + "test_upgrade_empty_database_matches_metadata_and_postgresql_17": "obsolete_table_inventory",
@@ -4874,10 +4625,8 @@ jobs:
               prefix + "test_runtime_role_has_append_read_but_not_mutation_privileges",
               prefix + "test_migration_lock_has_bounded_wait",
           }
-
           def node_id(case):
               return f"{case.get('classname').replace('.', '/')}.py::{case.get('name')}"
-
           def signature(text):
               if (
                   "Extra items in the left set" in text
@@ -4887,7 +4636,6 @@ jobs:
               if 'role "ayo_runtime" does not exist' in text:
                   return "missing_ayo_runtime"
               return "unrecognized"
-
           failures = {}
           errors = {}
           passes = set()
@@ -4912,7 +4660,6 @@ jobs:
               diagnostic = failure
               text = " ".join((diagnostic.get("message", ""), diagnostic.text or ""))
               failures[node] = signature(text)
-
           if int(os.environ["PYTEST_STATUS"]) != 1:
               raise SystemExit("migration pytest status was not the expected test-failure status 1")
           if errors:
@@ -4949,14 +4696,12 @@ jobs:
           print("Historical migration diagnostic fingerprint:", fingerprint)
           PY
           echo "Historical migration debt contract matched"
-
       - name: Verify exact Batch 2 migration inventory
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'batch2'
         run: |
           set -euo pipefail
           uv run --locked python - <<'PY'
           import psycopg
-
           admin = dict(
               host="127.0.0.1", dbname="postgres", user="ayo_test",
               password="ayo_test_password", autocommit=True,
@@ -5004,7 +4749,6 @@ jobs:
           uv run --locked python - <<'PY'
           import hashlib
           import xml.etree.ElementTree as ET
-
           cases = ET.parse("batch2-migrations.xml").getroot().findall(".//testcase")
           inventory = []
           failures = errors = skipped = 0
@@ -5027,7 +4771,6 @@ jobs:
           print("Batch 2 migration nodes: 33 passed")
           print("Batch 2 migration inventory fingerprint:", fingerprint)
           PY
-
       - name: Verify exact Courier Pickup Migration 0057 inventory
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && (steps.evidence_contract.outputs.mode == 'courier-pickup-idempotency-v1' || steps.evidence_contract.outputs.mode == 'courier-pickup-authorization-ordering')
         run: |
@@ -5060,17 +4803,14 @@ jobs:
           print("Courier Pickup migration nodes: 34 passed")
           print("Courier Pickup migration inventory fingerprint:", fingerprint)
           PY
-
       - name: Verify single-source trusted comparison base controls
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true'
         run: uv run --locked pytest -q --no-cov tests/governance/test_ci_trusted_comparison_base.py
-
       - name: Verify Courier Pickup authorization-ordering admission negative controls
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true'
         run: |
           uv run --locked python - <<'PY'
           import copy
-
           def rejected(label, verifier, value):
               try:
                   verifier(value)
@@ -5078,7 +4818,6 @@ jobs:
                   print(f"NEGATIVE PASS: {label}")
                   return
               raise SystemExit(f"authorization-ordering negative control admitted: {label}")
-
           identity = {
               "base": "65ff78430315c2d10bc40a0f3edafced6cec3ad2",
               "head": "f764189398f70d7e9fecdb217362a26e0ac09f35",
@@ -5104,7 +4843,6 @@ jobs:
           ):
               changed = copy.deepcopy(identity); changed[key] = value
               rejected(label, verify_identity, changed)
-
           tests = {"nodes": 735, "passed": 734, "failed": 0, "errors": 0,
                    "skipped": 0, "xfailed": 1,
                    "fingerprint": "547c64c3f22891df88d77a02f56894b24ae8423135f9a12fe5fed87725f1cbf2"}
@@ -5116,7 +4854,6 @@ jobs:
           ):
               changed = copy.deepcopy(tests); changed[key] = value
               rejected(label, verify_tests, changed)
-
           postgres = {"nodes": 193, "failed": 0, "errors": 0, "skipped": 0,
                       "geometry": True,
                       "fingerprint": "b9560620f1c59faf8b97602094ac21cdadec48e76436b70bd3123fad1f68ba15"}
@@ -5128,7 +4865,6 @@ jobs:
           ):
               changed = copy.deepcopy(postgres); changed[key] = value
               rejected(label, verify_postgres, changed)
-
           coverage = {"percentage": 77.7819948383179, "baseline": 77.56604919526268,
                       "changed": 11, "uncovered": 0,
                       "fingerprint": "440c72ce71a28596dd8b69a2c60c7d9ce3b4d08b249178c313768c002f29bcb2"}
@@ -5141,7 +4877,6 @@ jobs:
           ):
               changed = copy.deepcopy(coverage); changed[key] = value
               rejected(label, verify_coverage, changed)
-
           typing = {"configured_files": 452, "configured_issues": 0,
                     "strict_errors": 387, "strict_files": 52,
                     "column": "dd2500cc517d85c23082df73782d09bee4ee5836ec33003a2393ac2adf55b000",
@@ -5154,7 +4889,6 @@ jobs:
           ):
               changed = copy.deepcopy(typing); changed[key] = value
               rejected(label, verify_typing, changed)
-
           cleanup = {"databases": 0, "connections": 0, "sessions": 0,
                      "roles": 0, "dependencies": 0}
           def verify_cleanup(value): assert value == cleanup
@@ -5162,13 +4896,11 @@ jobs:
           rejected("cleanup failure", verify_cleanup, changed)
           print("Courier Pickup authorization-ordering negative controls: PASS")
           PY
-
       - name: Verify Courier Pickup Idempotency V1 admission negative controls
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true'
         run: |
           uv run --locked python - <<'PY'
           import copy
-
           def rejected(label, verifier, value):
               try:
                   verifier(value)
@@ -5176,7 +4908,6 @@ jobs:
                   print(f"NEGATIVE PASS: {label}")
                   return
               raise SystemExit(f"Courier Pickup negative control admitted: {label}")
-
           identity = {
               "base": "4eda7c5e80907eba9b60c20d64561087ef50c84b",
               "candidate": "3e89c5f62640515158acc5bb99bf77d661dbf187",
@@ -5200,7 +4931,6 @@ jobs:
           ):
               changed = copy.deepcopy(identity); changed[key] = value
               rejected(label, verify_identity, changed)
-
           tests = {"collected": 719, "passed": 718, "failed": 0, "errors": 0,
                    "skipped": 0, "xfailed": 1,
                    "fingerprint": "bca01756759be5ccb56571d874a015cb8c2d952fad68c75f85c49b02c235bf09"}
@@ -5213,7 +4943,6 @@ jobs:
           ):
               changed = copy.deepcopy(tests); changed[key] = value
               rejected(label, verify_tests, changed)
-
           postgres = {"nodes": 190, "failed": 0, "errors": 0, "skipped": 0,
                       "geometry": True,
                       "fingerprint": "2667515aef3df16257f44a4890a361d85f37b46bcde3badde6175a2c67650b90"}
@@ -5225,7 +4954,6 @@ jobs:
           ):
               changed = copy.deepcopy(postgres); changed[key] = value
               rejected(label, verify_postgres, changed)
-
           migration = {"head": "20260805_0057", "nodes": 34, "failed": 0,
                        "errors": 0, "skipped": 0,
                        "fingerprint": "2155ff49595db8a8aefdc8813f5a03d8dea0123361b9be1f58d17cbd5474d7dc"}
@@ -5237,7 +4965,6 @@ jobs:
           ):
               changed = copy.deepcopy(migration); changed[key] = value
               rejected(label, verify_migration, changed)
-
           coverage = {"statements": 21826, "missed": 3983, "branches": 4518,
                       "partial": 1003, "covered_lines": 17843,
                       "covered_branches": 2591, "percentage": 77.56604919526268,
@@ -5251,7 +4978,6 @@ jobs:
           ):
               changed = copy.deepcopy(coverage); changed[key] = value
               rejected(label, verify_coverage, changed)
-
           typing = {"configured_files": 450, "configured_errors": 0,
                     "strict_errors": 387, "strict_files": 52,
                     "column_fingerprint": "04aa83367515fea79e35c40566050d168022308de12e93bb1a48d792d14074b8",
@@ -5264,7 +4990,6 @@ jobs:
           ):
               changed = copy.deepcopy(typing); changed[key] = value
               rejected(label, verify_typing, changed)
-
           replay = {"digest_version": 1, "snapshot_version": 1,
                     "snapshot_complete": True, "outbox_messages": 1,
                     "authorization_rechecked": True}
@@ -5278,7 +5003,6 @@ jobs:
           ):
               changed = copy.deepcopy(replay); changed[key] = value
               rejected(label, verify_replay, changed)
-
           lifecycle = {"databases": 0, "connections": 0, "runtime_sessions": 0,
                        "runtime_roles": 0, "cross_database_dependencies": 0,
                        "cleanup_after_failure": True, "event_contract": "shared"}
@@ -5292,14 +5016,12 @@ jobs:
               rejected(label, verify_lifecycle, changed)
           print("Courier Pickup Idempotency V1 negative admission controls: PASS")
           PY
-
       - name: Verify Batch 2 admission negative controls
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true'
         run: |
           uv run --locked python - <<'PY'
           import copy
           import hashlib
-
           def rejected(label, verifier, value):
               try:
                   verifier(value)
@@ -5307,7 +5029,6 @@ jobs:
                   print(f"NEGATIVE PASS: {label}")
                   return
               raise SystemExit(f"negative control was admitted: {label}")
-
           test_contract = {
               "passed": 688, "failed": 0, "errors": 0,
               "skipped": 0, "xfailed": 1,
@@ -5324,7 +5045,6 @@ jobs:
           ):
               changed = copy.deepcopy(test_contract); changed[key] = value
               rejected(label, verify_test, changed)
-
           migration_contract = {"nodes": 33, "failed": 0, "errors": 0, "skipped": 0,
               "fingerprint": "1144bd5b79cf560eb0628c6010baf59bb5a7d2a82349a66d5446e053436bc831"}
           def verify_migration(value):
@@ -5336,7 +5056,6 @@ jobs:
           ):
               changed = copy.deepcopy(migration_contract); changed[key] = value
               rejected(label, verify_migration, changed)
-
           coverage_contract = {"statements": 21736, "missed": 4036, "branches": 4494,
               "partial": 997, "percentage": 77.19024018299658,
               "fingerprint": "8d17d39c72f23f8c123b06a5c3abba06512aa57e143a9c2bcc5a2f30d2949bcb"}
@@ -5346,7 +5065,6 @@ jobs:
           rejected("coverage below floor", verify_coverage, changed)
           changed = copy.deepcopy(coverage_contract); changed["fingerprint"] = "0" * 64
           rejected("coverage fingerprint drift", verify_coverage, changed)
-
           typing_contract = {"configured_errors": 0, "configured_files": 447,
               "strict_errors": 387, "strict_files": 52,
               "strict_fingerprint": "6257a24b9c057c822e45a041519a849c471f6c48"}
@@ -5356,7 +5074,6 @@ jobs:
           rejected("configured MyPy issue", verify_typing, changed)
           changed = copy.deepcopy(typing_contract); changed["strict_errors"] += 1
           rejected("strict MyPy drift", verify_typing, changed)
-
           secret_contract = {"count": 34,
               "fingerprint": "7268878931a4c970cfc8f4cafe450c7c3f6bd6ae615988057e26cbcdb73efd49",
               "version": "1.5.0", "independent": True}
@@ -5370,7 +5087,6 @@ jobs:
           ):
               changed = copy.deepcopy(secret_contract); changed[key] = value
               rejected(label, verify_secret, changed)
-
           environment = {"geometry": True, "ayo_runtime_dependencies": 0,
               "tree_clean": True, "event_contract": "shared"}
           def verify_environment(value):
@@ -5383,7 +5099,6 @@ jobs:
           ):
               changed = copy.deepcopy(environment); changed[key] = value
               rejected(label, verify_environment, changed)
-
           production_identity = {
               "base_sha": "cb202d1ec2e6ad35ccb75824f1b5332ba41f3934",
               "base_backend_tree": "ae03d4fd14a59c83cef6d62bd0c0d8cc1851a4f7",
@@ -5400,7 +5115,6 @@ jobs:
           ):
               changed = copy.deepcopy(production_identity); changed[key] = value
               rejected(label, verify_production_identity, changed)
-
           lifecycle = {
               "certification_databases": 0,
               "certification_connections": 0,
@@ -5425,37 +5139,30 @@ jobs:
               rejected(label, verify_lifecycle, changed)
           print("Batch 2 negative admission controls: PASS")
           PY
-
       - name: Scan Python source
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
         run: >-
           uv run --locked bandit -c pyproject.toml -r
           BACKEND ayo.py database/certify_restore.py
-
       - name: Verify remediated pip audit-toolchain version
-        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && contains(fromJSON('["pip-audit-toolchain-remediation","ap-decision-registry-main-landing","ap-registry-active-state-correction","ap-registry-active-state-main-ci-correction","ci-governance-evidence-extraction","ap-decision-registry-reconciliation-enablement"]'), steps.evidence_contract.outputs.mode)
+        if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && contains(fromJSON('["pip-audit-toolchain-remediation","ap-decision-registry-main-landing","ap-registry-active-state-correction","ap-registry-active-state-main-ci-correction","ci-governance-evidence-extraction","ap-decision-registry-reconciliation-enablement","ap-decision-registry-forward-reservation-enablement","ap-decision-registry-forward-reservation"]'), steps.evidence_contract.outputs.mode)
         run: |
           uv run --locked python - <<'PY'
           from importlib.metadata import version
-
           from packaging.version import Version
-
           installed = Version(version("pip"))
           if not Version("26.2") <= installed < Version("27"):
               raise SystemExit(f"pip audit-toolchain version is outside [26.2, 27): {installed}")
           print("Remediated pip audit-toolchain version:", installed)
           PY
-
       - name: Audit installed dependencies
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode != 'booking-consent-approval-pack-architecture'
         run: uv run --locked pip-audit
-
       - name: Final PostgreSQL lifecycle cleanup
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true'
         run: |
           uv run --locked python - <<'PY'
           import psycopg
-
           connection_args = dict(
               host="127.0.0.1", user="ayo_test", password="ayo_test_password",
               autocommit=True,
@@ -5506,7 +5213,6 @@ jobs:
           print("Final ayo_runtime connection count: 0")
           print("Final ayo_runtime role count: 0")
           PY
-
       - name: Verify certified candidate tree cleanliness
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true'
         run: |
@@ -5523,7 +5229,6 @@ jobs:
             exit 1
           fi
           echo "Certified candidate tracked tree cleanliness: PASS"
-
       - name: Verify Mobile Booking evidence structural negative controls
         if: success() && steps.evidence_contract.outputs.mode == 'mobile-booking-intent-foundation'
         run: |
@@ -5531,7 +5236,6 @@ jobs:
           python - <<'PY'
           import copy, re
           from pathlib import Path
-
           workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
           required = [
               "mobile-booking-intent-foundation",
@@ -5633,7 +5337,6 @@ jobs:
               reject(label, verify_lint, changed)
           print("Mobile Booking evidence structural negative controls: PASS")
           PY
-
       - name: Assemble Mobile Booking intent foundation capture evidence
         if: success() && steps.evidence_contract.outputs.mode == 'mobile-booking-intent-foundation'
         env:
@@ -5648,7 +5351,6 @@ jobs:
           import hashlib, os, re
           from pathlib import Path
           from subprocess import run
-
           candidate = os.environ["CANDIDATE_SHA"]
           if not re.fullmatch(r"[0-9a-f]{40}", candidate) or candidate == "0" * 40:
               raise SystemExit("malformed Mobile evidence candidate")
@@ -5759,7 +5461,6 @@ jobs:
           import os
           import re
           from pathlib import Path
-
           CAPTURE_STATE = "CAPTURE_ONLY_PENDING_CTO_REVIEW"
           ACTIVE_STATE = "ADMITTED_PREPRODUCTION_EVIDENCE"
           ADMISSION_STATE = ACTIVE_STATE
@@ -5875,7 +5576,6 @@ jobs:
           DECIMAL = re.compile(r"0|[1-9][0-9]*")
           HEX40 = re.compile(r"[0-9a-f]{40}")
           HEX64 = re.compile(r"[0-9a-f]{64}")
-
           def fields(lines, label):
               result = {}
               for line in lines:
@@ -5886,7 +5586,6 @@ jobs:
                       raise ValueError(f"duplicate {label} field")
                   result[name] = value
               return result
-
           def parse(data):
               if not data or b"\r" in data or not data.endswith(b"\n"):
                   raise ValueError("evidence encoding or newline drift")
@@ -5923,12 +5622,10 @@ jobs:
                       if name.endswith("_blob") and not HEX40.fullmatch(value):
                           raise ValueError("evidence blob format drift")
               return envelope, sections
-
           def number(value):
               if not DECIMAL.fullmatch(value):
                   raise ValueError("noncanonical evidence count")
               return int(value)
-
           def validate(envelope, sections, candidate, policy=POLICY):
               if tuple(policy.items()) != REQUIRED_POLICY:
                   raise ValueError("Mobile admission policy drift")
@@ -5993,14 +5690,12 @@ jobs:
               cleanup = sections["MIGRATION_SECURITY_CLEANUP_V1"]
               if any(cleanup[name] != "PASS" for name in set(cleanup) - {"canonical_migration_head"}) or cleanup["canonical_migration_head"] != "20260812_0060":
                   raise ValueError("migration security cleanup drift")
-
           def canonical_commitment(data, candidate):
               text = data.decode("utf-8")
               expected = f"candidate_sha={candidate}\n"
               if text.count(expected) != 1:
                   raise ValueError("candidate normalization drift")
               return hashlib.sha256(text.replace(expected, "candidate_sha=" + "0" * 40 + "\n", 1).encode()).digest()
-
           def admission_gate(state, commitment, payload_digest):
               if len(commitment) != 32:
                   raise ValueError("admission commitment width drift")
@@ -6013,7 +5708,6 @@ jobs:
                       raise ValueError("admitted Mobile evidence commitment drift")
                   return "ADMITTED"
               raise ValueError("unknown Mobile admission state")
-
           def sentinel_contract(workflow):
               state_assignments = re.findall(
                   r"(?m)^          ADMISSION_STATE = (?:CAPTURE_STATE|ACTIVE_STATE)$",
@@ -6021,7 +5715,6 @@ jobs:
               )
               if workflow.count(CAPTURE_STATE) != 1 or len(state_assignments) != 1:
                   raise ValueError("Mobile admission sentinel cardinality drift")
-
           path = Path(os.environ["EVIDENCE_PATH"])
           workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
           try:
@@ -6042,14 +5735,12 @@ jobs:
           expected_result = "CAPTURE_ONLY" if ADMISSION_STATE == CAPTURE_STATE else "ADMITTED"
           if result != expected_result:
               raise SystemExit("Mobile admission state/result mismatch")
-
           def reject(label, action):
               try:
                   action()
               except ValueError:
                   return
               raise SystemExit(f"Mobile admission negative control accepted: {label}")
-
           reject("unknown admission state", lambda: admission_gate("UNKNOWN", CAPTURE_COMMITMENT, payload_digest))
           reject("active admission with neutral commitment", lambda: admission_gate(ACTIVE_STATE, CAPTURE_COMMITMENT, payload_digest))
           reject("active admission with wrong commitment", lambda: admission_gate(ACTIVE_STATE, bytes([1]) * 32, payload_digest))
@@ -6087,13 +5778,11 @@ jobs:
           if-no-files-found: error
           retention-days: 1
           compression-level: 0
-
       - name: Stop Mobile Booking intent foundation pending CTO admission
         if: success() && steps.evidence_contract.outputs.mode == 'mobile-booking-intent-foundation' && steps.mobile_booking_admission.outputs.state == 'CAPTURE_ONLY'
         run: |
           echo "mobile booking intent foundation evidence awaiting CTO admission" >&2
           exit 1
-
       - name: Validate consent document architecture and assemble capture evidence
         if: success() && steps.evidence_contract.outputs.mode == 'booking-consent-document-delivery-architecture'
         env:
@@ -6109,7 +5798,6 @@ jobs:
           import re
           import subprocess
           from pathlib import Path
-
           BASE = "cadaa30c47ccbb849bf428c14576298b26ee6323"
           CANDIDATE = os.environ["CANDIDATE_SHA"]
           if not re.fullmatch(r"[0-9a-f]{40}", CANDIDATE):
@@ -6133,10 +5821,8 @@ jobs:
               "lockfile_blob": "ace7192e4a749f61a011f8e4293ccd1e053d648a",
               "baseline_blob": "71770a9e529e9af0c9ed5c72549b3a2f7ddcfb02",
           }
-
           def git(*args):
               return subprocess.run(["git", *args], check=True, capture_output=True, text=True).stdout.strip()
-
           changed = git("diff", "--name-only", BASE, CANDIDATE).splitlines()
           if changed != EXPECTED_PATHS:
               raise SystemExit("Consent architecture evidence manifest drift")
@@ -6158,11 +5844,9 @@ jobs:
           }
           if actual != EXPECTED:
               raise SystemExit("Consent architecture evidence immutable identity drift")
-
           architecture_path = "docs/AYO_BOOKING_CONSENT_DOCUMENT_DELIVERY_CONTRACT_ARCHITECTURE.md"
           decision_path = "docs/AYO_DECISION_LOG.md"
           roadmap_path = "docs/AYO_ROADMAP.md"
-
           def committed_blob(commit, path, expected_blob):
               if not re.fullmatch(r"[0-9a-f]{40}", commit):
                   raise ValueError("Consent architecture committed candidate identity is malformed")
@@ -6178,7 +5862,6 @@ jobs:
                   check=True, capture_output=True,
               )
               return result.stdout
-
           def decode_document(path, data):
               if data.startswith(b"\xef\xbb\xbf") or b"\x00" in data or b"\r" in data:
                   raise ValueError(f"Consent architecture document byte drift: {path}")
@@ -6189,7 +5872,6 @@ jobs:
                   return data.decode("utf-8")
               except UnicodeError as error:
                   raise ValueError(f"Consent architecture UTF-8 drift: {path}") from error
-
           committed = {
               architecture_path: committed_blob(CANDIDATE, architecture_path, EXPECTED["architecture_blob"]),
               decision_path: committed_blob(CANDIDATE, decision_path, EXPECTED["decision_log_blob"]),
@@ -6239,7 +5921,6 @@ jobs:
           )
           if any(item.casefold() in (architecture + decision + roadmap).casefold() for item in forbidden_claims):
               raise SystemExit("Consent architecture prohibited claim entered documentation")
-
           def validate_document_contract(architecture, decision, roadmap):
               if architecture.count("## Problem statement") != 1: raise ValueError("heading")
               ap076 = [line for line in decision.splitlines() if line.startswith("### AP-076 ") and "Proposed server-owned Booking consent document delivery contract" in line]
@@ -6249,7 +5930,6 @@ jobs:
               if any(value < 0 for value in positions) or positions != sorted(positions) or len(set(positions)) != 8: raise ValueError("roadmap")
               if "consent_contract_version" not in architecture or "immutable closed `policy_scope`" not in architecture: raise ValueError("reviewed control")
               if "\nProduction activation is authorized" in architecture + decision + roadmap: raise ValueError("production claim")
-
           validate_document_contract(architecture, decision, roadmap)
           content_mutations = {
               "missing-heading": (architecture.replace("## Problem statement", "", 1), decision, roadmap),
@@ -6265,7 +5945,6 @@ jobs:
               except ValueError:
                   continue
               raise SystemExit(f"Consent architecture real-document mutation accepted: {label}")
-
           document_mutations = {
               "bom": b"\xef\xbb\xbf" + committed[architecture_path],
               "malformed-utf8": b"\xff" + committed[architecture_path],
@@ -6293,7 +5972,6 @@ jobs:
           checkout_bytes = Path(architecture_path).read_bytes()
           if committed[architecture_path] != checkout_bytes:
               raise SystemExit("Consent architecture checkout differs from committed candidate bytes")
-
           secret_lines = Path(os.environ["SECRET_PATH"]).read_text(encoding="utf-8").splitlines()
           if secret_lines[0] != "SECRET_INVENTORY_V1" or secret_lines[-1] != "END_SECRET_INVENTORY_V1":
               raise SystemExit("Consent architecture secret evidence boundary drift")
@@ -6303,7 +5981,6 @@ jobs:
           cleanup_lines = Path(os.environ["SECRET_CLEANUP_PATH"]).read_text(encoding="utf-8").splitlines()
           if cleanup_lines != ["raw_scanner_cleanup=PASS"]:
               raise SystemExit("Consent architecture scanner cleanup evidence drift")
-
           sections = [
               "ARCHITECTURE_IDENTITY_V1\n" + "\n".join(f"{k}={actual[k]}" for k in actual) + "\nEND_ARCHITECTURE_IDENTITY_V1",
               "ARCHITECTURE_STRUCTURE_V1\nutf8=PASS\nnewline_convention=PASS\nrequired_headings=PASS\nap076_unique=PASS\nroadmap_eight_stage_order=PASS\nEND_ARCHITECTURE_STRUCTURE_V1",
@@ -6336,7 +6013,6 @@ jobs:
               raise SystemExit("Consent architecture evidence retention drift")
           PY
           rm -f "$SECRET_PATH" "$SECRET_CLEANUP_PATH"
-
       - name: Verify consent document architecture capture structure and admission state
         if: success() && steps.evidence_contract.outputs.mode == 'booking-consent-document-delivery-architecture'
         id: consent_architecture_admission
@@ -6351,7 +6027,6 @@ jobs:
           import os
           import re
           from pathlib import Path
-
           CAPTURE_STATE = os.environ["ARCHITECTURE_CAPTURE_STATE"]
           ACTIVE_STATE = "ADMITTED_PREPRODUCTION_ARCHITECTURE_EVIDENCE"
           ADMISSION_STATE = os.environ["ADMISSION_STATE"]
@@ -6399,7 +6074,6 @@ jobs:
               ("SECRET_INVENTORY_V1", ["scanner_version", "base_item_count", "candidate_item_count", "base_inventory_digest", "candidate_inventory_digest", "base_only_item_count", "candidate_only_item_count", "defensive_boundary_check", "normalized_comparison"]),
               ("WORKFLOW_STRUCTURE_AND_CLEANUP_V1", ["selector_precedence", "fixed_base_events", "manifest_boundary", "historical_modes_preserved", "raw_scanner_cleanup", "candidate_tree_cleanliness"]),
           ]
-
           def validate_evidence(payload, expected_candidate):
               if not HEX40.fullmatch(expected_candidate): raise ValueError("candidate format")
               if not 1 <= len(payload) <= 65536 or payload.count(b"\n") > 256:
@@ -6440,13 +6114,11 @@ jobs:
               if int(parsed["base_only_item_count"]) > int(parsed["base_item_count"]) or int(parsed["candidate_only_item_count"]) > int(parsed["candidate_item_count"]): raise ValueError("inventory reconciliation")
               if any(not HEX64.fullmatch(parsed[name]) for name in ("base_inventory_digest", "candidate_inventory_digest")): raise ValueError("digest")
               return text, parsed
-
           text, parsed = validate_evidence(data, candidate)
           normalized = text.replace(f"candidate_sha={candidate}\n", "candidate_sha=" + "0" * 40 + "\n", 1).encode()
           if normalized == data or text.count(f"candidate_sha={candidate}\n") != 1:
               raise SystemExit("Consent architecture candidate normalization drift")
           digest = hashlib.sha256(normalized).digest()
-
           def gate(state, commitment, actual):
               if len(commitment) != 32: raise ValueError("commitment width")
               if state == CAPTURE_STATE:
@@ -6456,7 +6128,6 @@ jobs:
                   if commitment == bytes(32) or commitment != actual: raise ValueError("active commitment")
                   return "ADMITTED"
               raise ValueError("unknown state")
-
           result = gate(ADMISSION_STATE, REVIEWED_COMMITMENT, digest)
           negatives = (
               ("active-zero", lambda: gate(ACTIVE_STATE, bytes(32), digest)),
@@ -6491,7 +6162,6 @@ jobs:
               try: validate_evidence(mutation, candidate)
               except ValueError: continue
               raise SystemExit(f"Consent architecture real-schema mutation accepted: {label}")
-
           def step_block(name):
               match = re.search(r"(?ms)^      - name: " + re.escape(name) + r"\n(.*?)(?=^      - name: |\Z)", workflow)
               if not match: raise SystemExit(f"Consent architecture workflow step missing: {name}")
@@ -6540,7 +6210,6 @@ jobs:
               output.write(f"state={result}\n")
           print("Consent document architecture admission verifier:", result)
           PY
-
       - name: Upload consent document architecture capture evidence
         if: success() && steps.evidence_contract.outputs.mode == 'booking-consent-document-delivery-architecture' && steps.consent_architecture_admission.outputs.state == 'CAPTURE_ONLY'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -6550,13 +6219,11 @@ jobs:
           if-no-files-found: error
           retention-days: 1
           compression-level: 0
-
       - name: Stop consent document architecture pending CTO admission
         if: success() && steps.evidence_contract.outputs.mode == 'booking-consent-document-delivery-architecture' && steps.consent_architecture_admission.outputs.state == 'CAPTURE_ONLY'
         run: |
           echo "booking consent document delivery architecture evidence awaiting CTO admission" >&2
           exit 1
-
       - name: Assemble Booking consent approval-pack architecture evidence
         if: success() && steps.evidence_contract.outputs.mode == 'booking-consent-approval-pack-architecture'
         env:
@@ -6572,7 +6239,6 @@ jobs:
           import re
           import subprocess
           from pathlib import Path
-
           FIXED = "6aa98a78953531b637413e54b3afa93c721ae863"
           MANIFEST = [
               ".github/workflows/ci.yml",
@@ -6601,7 +6267,6 @@ jobs:
           commit = subprocess.run(["git", "cat-file", "-e", f"{sha}^{{commit}}"], capture_output=True)
           if commit.returncode:
               raise SystemExit("approval-pack document candidate missing")
-
           def object_bytes(path, expected, terminal_lf):
               tree = subprocess.run(
                   ["git", "ls-tree", sha, "--", path], capture_output=True, text=True,
@@ -6628,15 +6293,12 @@ jobs:
               if raw.endswith(b"\n") != terminal_lf:
                   raise SystemExit(f"approval-pack object terminal newline drift: {path}")
               return text
-
           texts = {path: object_bytes(path, *contract) for path, contract in DOCS.items()}
           architecture, template, decision, roadmap = (texts[path] for path in MANIFEST[1:])
-
           def require(text, tokens, label):
               missing = [token for token in tokens if token not in text]
               if missing:
                   raise ValueError(f"{label} missing governed structure: {missing[0]}")
-
           def validate_documents(documents):
               arch, form, log, road = documents
               headings = [
@@ -6726,7 +6388,6 @@ jobs:
               if any(item in combined for item in forbidden):
                   raise ValueError("prohibited approval or authority claim")
               return True
-
           try:
               validate_documents((architecture, template, decision, roadmap))
           except ValueError as error:
@@ -6773,7 +6434,6 @@ jobs:
               raise SystemExit(f"approval-pack template negative unexpectedly passed: {case}")
           if hashlib.sha256(EMPTY_CONDITION).hexdigest() != EMPTY_CONDITION_SHA:
               raise SystemExit("governed empty condition fingerprint drift")
-
           manifest = subprocess.check_output(
               ["git", "diff", "--name-only", "-z", FIXED, sha]
           ).split(b"\0")[:-1]
@@ -6782,7 +6442,6 @@ jobs:
               raise SystemExit("approval-pack evidence manifest drift")
           if hashlib.sha256("\n".join(decoded_manifest).encode()).hexdigest() != MANIFEST_FINGERPRINT:
               raise SystemExit("approval-pack evidence manifest fingerprint drift")
-
           def read_kv_block(path, start, end):
               raw = Path(path).read_bytes()
               if raw.startswith(b"\xef\xbb\xbf") or b"\r" in raw or not raw.endswith(b"\n"):
@@ -6796,7 +6455,6 @@ jobs:
                       raise SystemExit(f"approval-pack intermediate field drift: {start}")
                   fields.append(line)
               return fields
-
           secret_fields = read_kv_block(os.environ["SECRET_PATH"], "SECRET_INVENTORY_V1", "END_SECRET_INVENTORY_V1")
           cleanup_fields = Path(os.environ["SECRET_CLEANUP_PATH"]).read_text(encoding="utf-8").splitlines()
           if cleanup_fields != ["raw_scanner_cleanup=PASS"]:
@@ -6886,7 +6544,6 @@ jobs:
               raise SystemExit("approval-pack evidence retention drift")
           print("Booking consent approval-pack committed governance validation: PASS")
           PY
-
       - name: Verify Booking consent approval-pack architecture capture state
         id: approval_pack_admission
         if: success() && steps.evidence_contract.outputs.mode == 'booking-consent-approval-pack-architecture'
@@ -6901,7 +6558,6 @@ jobs:
           import os
           import re
           from pathlib import Path
-
           CAPTURE_STATE = os.environ["APPROVAL_PACK_CAPTURE_STATE"]
           ACTIVE_STATE = "ADMITTED_PREPRODUCTION_APPROVAL_PACK_ARCHITECTURE_EVIDENCE"
           ADMISSION_STATE = os.environ["APPROVAL_PACK_ADMISSION_STATE"]
@@ -6963,7 +6619,6 @@ jobs:
           HEX40_FIELDS = {name for _, names in SECTION_FIELDS for name in names if name.endswith(("_blob", "_tree"))}
           DECIMAL_FIELDS = {"manifest_count", "approval_domain_count", "lifecycle_state_count", "base_item_count", "candidate_item_count", "base_only_item_count", "candidate_only_item_count"}
           HEX64_FIELDS = {"manifest_fingerprint", "empty_condition_set_digest", "base_inventory_digest", "candidate_inventory_digest"}
-
           def verify(raw):
               if len(raw) not in range(1, 16385) or raw.startswith(b"\xef\xbb\xbf") or b"\r" in raw or b"\x00" in raw or not raw.endswith(b"\n"):
                   raise ValueError("evidence byte contract")
@@ -7016,7 +6671,6 @@ jobs:
               if normalized == raw or len(re.findall(rb"(?m)^candidate_sha=[0-9a-f]{40}$", raw)) != 1:
                   raise ValueError("candidate normalization")
               return hashlib.sha256(normalized).digest()
-
           path = Path(os.environ["EVIDENCE_PATH"]); raw = path.read_bytes()
           if path.is_symlink() or not path.is_file() or path.stat().st_nlink != 1 or path.stat().st_size != len(raw):
               raise SystemExit("approval-pack evidence file is unsafe")
@@ -7032,7 +6686,6 @@ jobs:
               result = "CAPTURE_ONLY"
           else:
               raise SystemExit("approval-pack admission state unknown")
-
           mutation_lines = raw.decode().splitlines()
           governed_indices = [1, 2, 4, 6]
           for marker, _ in SECTION_FIELDS:
@@ -7052,7 +6705,6 @@ jobs:
               try: verify(("\n".join(altered) + "\n").encode())
               except (ValueError, UnicodeError): continue
               raise SystemExit(f"approval-pack schema mutation accepted: {case}")
-
           workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
           if workflow.count("APPROVAL_PACK_CAPTURE_STATE: " + CAPTURE_STATE) != 1 or len(re.findall(r"(?m)^          APPROVAL_PACK_CAPTURE_STATE: \S+$", workflow)) != 1 or len(re.findall(r'(?m)^          APPROVAL_PACK_ADMISSION_STATE="' + re.escape(ADMISSION_STATE) + r'" uv run --locked python', workflow)) != 1 or workflow.count("REVIEWED_COMMITMENT = " + ("bytes(32)" if REVIEWED_COMMITMENT == bytes(32) else "bytes((" + ", ".join(map(str, REVIEWED_COMMITMENT)) + "))")) != 1:
               raise SystemExit("approval-pack capture sentinel authority drift")
@@ -7145,7 +6797,6 @@ jobs:
               output.write(f"state={result}\n")
           print("Booking consent approval-pack architecture verifier:", result)
           PY
-
       - name: Upload Booking consent approval-pack architecture capture evidence
         if: success() && steps.evidence_contract.outputs.mode == 'booking-consent-approval-pack-architecture' && steps.approval_pack_admission.outputs.state == 'CAPTURE_ONLY'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -7155,13 +6806,11 @@ jobs:
           if-no-files-found: error
           retention-days: 1
           compression-level: 0
-
       - name: Stop Booking consent approval-pack architecture pending CTO admission
         if: success() && steps.evidence_contract.outputs.mode == 'booking-consent-approval-pack-architecture' && steps.approval_pack_admission.outputs.state == 'CAPTURE_ONLY'
         run: |
           echo "booking consent approval pack architecture evidence awaiting CTO admission" >&2
           exit 1
-
       - name: Assemble Booking consent authority evidence
         if: success() && steps.evidence_contract.outputs.mode == 'booking-consent-policy-authority'
         env:
@@ -7284,7 +6933,6 @@ jobs:
           if path.is_symlink() or path.read_text(encoding="utf-8") != block or path.stat().st_size > 262144:
               raise SystemExit("combined evidence verification failed")
           PY
-
       - name: Verify admitted Booking consent authority evidence
         if: success() && steps.evidence_contract.outputs.mode == 'booking-consent-policy-authority'
         env:
@@ -7295,7 +6943,6 @@ jobs:
           uv run --locked python - <<'PY'
           import os, re
           from pathlib import Path
-
           path = Path(os.environ["EVIDENCE_PATH"])
           if not path.is_file() or path.is_symlink() or path.stat().st_size not in range(1, 65537):
               raise SystemExit("admitted evidence file is missing or unsafe")
@@ -7313,7 +6960,6 @@ jobs:
           ]
           if lines[1:5] != expected_identity or any(line.startswith("event=") for line in lines):
               raise SystemExit("admitted evidence identity drift")
-
           def section(start, end):
               if lines.count(start) != 1 or lines.count(end) != 1:
                   raise SystemExit(f"admitted section marker drift: {start}")
@@ -7329,7 +6975,6 @@ jobs:
                       raise SystemExit(f"duplicate admitted field: {start}")
                   pairs[key] = value
               return pairs
-
           broad = section("BOOKING_CONSENT_BROAD_EVIDENCE_V1", "END_BOOKING_CONSENT_BROAD_EVIDENCE_V1")
           expected_broad = {
               "collected": "1035", "selected": "1033", "passed": "1032",
@@ -7351,7 +6996,6 @@ jobs:
           }
           if broad != expected_broad:
               raise SystemExit("admitted broad evidence drift")
-
           postgresql = section("BOOKING_CONSENT_POSTGRESQL_EVIDENCE_V1", "END_BOOKING_CONSENT_POSTGRESQL_EVIDENCE_V1")
           expected_postgresql = {
               "collected": "229", "selected": "229", "passed": "229",
@@ -7362,7 +7006,6 @@ jobs:
           }
           if postgresql != expected_postgresql:
               raise SystemExit("admitted PostgreSQL evidence drift")
-
           mypy = section("BOOKING_CONSENT_MYPY_EVIDENCE_V1", "END_BOOKING_CONSENT_MYPY_EVIDENCE_V1")
           strict_codes = '{"no-any-return":198,"no-untyped-call":115,"no-untyped-def":63,"redundant-cast":4,"type-arg":3}'
           configured_codes = '{"arg-type":12}'
@@ -7382,7 +7025,6 @@ jobs:
           }
           if mypy != expected_mypy:
               raise SystemExit("admitted MyPy evidence drift")
-
           inventory = section("BOOKING_CONSENT_INVENTORY_EVIDENCE_V1", "END_BOOKING_CONSENT_INVENTORY_EVIDENCE_V1")
           expected_inventory = {
               "scanner_version": "1.5.0",
@@ -7395,7 +7037,6 @@ jobs:
           }
           if inventory != expected_inventory:
               raise SystemExit("admitted inventory evidence drift")
-
           expected_tail = [
               "canonical_migration_head=20260812_0060",
               "backup_restore=PASS", "migration_round_trip=PASS",
