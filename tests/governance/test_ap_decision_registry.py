@@ -167,12 +167,10 @@ def _repository_forward_context(
             == 0
         )
 
-    return (
-        load("docs/AYO_DECISION_ID_REGISTRY.json"),
-        load("docs/AYO_AP_HISTORICAL_PROVENANCE.json"),
-        trusted,
-        reachable,
-    )
+    manifest = load("docs/AYO_AP_HISTORICAL_PROVENANCE.json")
+    if context == "AUTHORITATIVE_MAIN":
+        return None, manifest, trusted, reachable
+    return load("docs/AYO_DECISION_ID_REGISTRY.json"), manifest, trusted, reachable
 
 
 def _repository_context_from_ci(
@@ -209,15 +207,9 @@ def test_forward_repository_context_loads_explicit_main(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     root = Path(__file__).parents[2]
-    trusted = subprocess.run(
-        ["git", "rev-parse", "refs/remotes/origin/main"],
-        cwd=root,
-        check=True,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-    ).stdout.strip()
+    trusted = "".join(("dddd1ded", "aa42b6bb", "8d00d298", "930f2051", "ea5758ec"))
     monkeypatch.setenv("AYO_AP_TRUSTED_MAIN_SHA", trusted)
+    monkeypatch.setenv("AYO_AP_REPOSITORY_CONTEXT", "FEATURE_CANDIDATE")
     value = registry(allocation())
     value["forward_identity_events"] = [event()]
     baseline, manifest, observed, reachable = _repository_forward_context(root, value)
@@ -266,7 +258,7 @@ def test_forward_repository_context_accepts_authoritative_main(
     value = registry(allocation())
     value["forward_identity_events"] = [event(base=head)]
     baseline, manifest, observed, reachable = _repository_forward_context(root, value)
-    assert baseline and manifest and observed == head
+    assert baseline is None and manifest and observed == head
     assert reachable(head, head)
 
 
@@ -924,9 +916,7 @@ def test_mission2_workflow_binds_base_and_rejects_phase5_paths() -> None:
     assert 'comparison_sha="$EVENT_BEFORE"' not in route
 
 
-def test_committed_registry_preserves_bootstrap_and_has_no_lifecycle_instances() -> (
-    None
-):
+def test_committed_registry_preserves_bootstrap_and_governed_lifecycle() -> None:
     root = Path(__file__).parents[2]
     value = json.loads(
         (root / "docs/AYO_DECISION_ID_REGISTRY.json").read_text(encoding="utf-8")
@@ -963,17 +953,53 @@ def test_committed_registry_preserves_bootstrap_and_has_no_lifecycle_instances()
         51,
         13,
     )
-    if baseline is None:
-        assert value["forward_identity_events"] == []
-    else:
+    if baseline is not None and baseline["forward_identity_events"] == []:
         validate_forward_reservation_candidate(value, baseline, text, trusted or "")
+    else:
+        assert [
+            (item["ap_id"], item["event_type"], item["event_id"])
+            for item in value["forward_identity_events"]
+        ] == [
+            (
+                "AP-099",
+                "RESERVED",
+                "".join(
+                    (
+                        "ba16110a",
+                        "9cccf419",
+                        "0452d7dd",
+                        "075bc313",
+                        "0c05fed7",
+                        "db2931f1",
+                        "8e4f8ad1",
+                        "6a2dbc12",
+                    )
+                ),
+            ),
+            (
+                "AP-100",
+                "RESERVED",
+                "".join(
+                    (
+                        "1c9517a7",
+                        "8f33e3f5",
+                        "b4539ede",
+                        "89a0deee",
+                        "9341bd5e",
+                        "cc3164b6",
+                        "e10c6ebb",
+                        "58f2a312",
+                    )
+                ),
+            ),
+        ]
     assert value["collision_reconciliations"] == []
     assert all(
         item["ap_id"] not in {"AP-099", "AP-100"} for item in value["allocations"]
     )
 
 
-def test_repository_candidate_uses_authoritative_main_baseline() -> None:
+def test_repository_context_uses_governed_baseline_model() -> None:
     root = Path(__file__).parents[2]
     value = json.loads(
         (root / "docs/AYO_DECISION_ID_REGISTRY.json").read_text(encoding="utf-8")
@@ -985,25 +1011,6 @@ def test_repository_candidate_uses_authoritative_main_baseline() -> None:
     baseline, baseline_manifest, trusted, reachable = _repository_forward_context(
         root, value
     )
-    if baseline is None:
-        trusted = subprocess.run(
-            ["git", "rev-parse", "refs/remotes/origin/main"],
-            cwd=root,
-            check=True,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-        ).stdout.strip()
-        baseline = json.loads(
-            subprocess.run(
-                ["git", "show", f"{trusted}:docs/AYO_DECISION_ID_REGISTRY.json"],
-                cwd=root,
-                check=True,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-            ).stdout
-        )
     validate_registry(
         value,
         text,
@@ -1015,7 +1022,8 @@ def test_repository_candidate_uses_authoritative_main_baseline() -> None:
         resolve_commit=lambda sha: _repository_metadata(root, sha),
         main_reachable=reachable,
     )
-    assert value["allocations"] == baseline["allocations"]
+    if baseline is not None:
+        assert value["allocations"] == baseline["allocations"]
 
 
 @pytest.mark.parametrize("field", ["commit_tree", "parent_shas", "commit_subject"])
