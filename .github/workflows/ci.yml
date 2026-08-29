@@ -254,7 +254,7 @@ jobs:
         run: |
           set -euo pipefail
           expected_helper_blob=34c82f0c7dba1778db5158cd922ce0d378f5e424
-          expected_ci_normalized_sha256="43d8383fd4ecfdc021dbae652e1aa5b2""e41fe9ca8e903b0a34c9cd3d87bebf29"
+          expected_ci_normalized_sha256="3bdc5f98708c0ba10031fb8764ef0db9""4e0a0e7cb0a2dc96877ce63f7a655f23"
           p="$expected_ci_normalized_sha256"
           helper_blob="$(git rev-parse "$TESTED_COMMIT_SHA:tools/validate_ci_governance_evidence.py" 2>/dev/null || true)"
           [[ "$helper_blob" == "$expected_helper_blob" ]] || {
@@ -288,9 +288,9 @@ jobs:
               registry_test_blob="$(git rev-parse "$registry_candidate:tests/governance/test_ap_decision_registry.py")"
               registry_trusted_base_test_blob="$(git rev-parse "$registry_candidate:tests/governance/test_ci_trusted_comparison_base.py" 2>/dev/null || true)"
               registry_validator_blob="$(git rev-parse "$registry_candidate:tools/validate_ap_decision_registry.py")"
-          expected_ap_registry_ci_normalized_sha256="225dc6e7852352ec""1bc035fd6027ba01""62008cfa5a6853bf""d4b7ac8ce012f49d"
-          expected_ap_registry_active_state_ci_normalized_sha256="225dc6e7852352ec""1bc035fd6027ba01""62008cfa5a6853bf""d4b7ac8ce012f49d"
-          expected_ap_main_ci_sha256="225dc6e7852352ec1bc035fd6027ba01""62008cfa5a6853bfd4b7ac8ce012f49d"
+          expected_ap_registry_ci_normalized_sha256="5167cc84e3f60b44""4e6b77d00959cec1""846f3eb75dc41335""091fb58224d3049a"
+          expected_ap_registry_active_state_ci_normalized_sha256="5167cc84e3f60b44""4e6b77d00959cec1""846f3eb75dc41335""091fb58224d3049a"
+          expected_ap_main_ci_sha256="5167cc84e3f60b444e6b77d00959cec1""846f3eb75dc41335091fb58224d3049a"
               ap_registry_ci_normalized_sha256="$(python tools/validate_ci_governance_evidence.py workflow-commitment --scope ap --workflow .github/workflows/ci.yml)"
               if [[ "$registry_blob" == d0d84754a49e9f87f370ed0e7d49de026d8fc5bc \
                 && "$registry_decision_blob" == 8533182c326e3d625f96bdac1410dbdb2f774158 \
@@ -410,11 +410,11 @@ jobs:
               ;;
             *)
               candidate="$TESTED_COMMIT_SHA";fixed=fee08725153496edb2020d543c8cf24c317b48f6
-              expected_ci_governance_extraction_sha256="225dc6e7852352ec1bc035fd6027ba01""62008cfa5a6853bfd4b7ac8ce012f49d"
-              expected_registry_reconciliation_enablement_sha256="225dc6e7852352ec1bc035fd6027ba01""62008cfa5a6853bfd4b7ac8ce012f49d"
+              expected_ci_governance_extraction_sha256="5167cc84e3f60b444e6b77d00959cec1""846f3eb75dc41335091fb58224d3049a"
+              expected_registry_reconciliation_enablement_sha256="5167cc84e3f60b444e6b77d00959cec1""846f3eb75dc41335091fb58224d3049a"
               normalized="$(python tools/validate_ci_governance_evidence.py workflow-commitment --scope ap --workflow .github/workflows/ci.yml)";[[ "$(python tools/validate_ci_governance_evidence.py workflow-commitment --scope pip --workflow .github/workflows/ci.yml)" == "$p" ]]||exit 1
               mapfile -t governed_paths < <(git diff --name-only "$fixed" "$candidate");eb=$(git merge-base $candidate refs/remotes/origin/main);v=$candidate;[[ $(git show -s --format=%P $candidate|wc -w) == 2 ]]&&{ eb=$(git rev-parse $candidate^1);v=$(git rev-parse $candidate^2);};mapfile -t enablement_paths < <(git diff --name-only "$eb" "$candidate")
-              helper_test="$(git rev-parse "$candidate:tests/governance/test_ci_governance_evidence.py" 2>/dev/null || true)"; rc="$(git rev-parse "$candidate":{tests/governance/test_ap_decision_registry.py,tests/governance/test_ci_trusted_comparison_base.py,tools/validate_ap_decision_registry.py} | tr '\n' ' ')";d="$(git rev-parse "$candidate":{docs/AYO_AP_HISTORICAL_PROVENANCE.json,docs/AYO_DECISION_ID_REGISTRY.json,docs/AYO_DECISION_LOG.md}|tr '\n' ' ')"
+              helper_test="$(git rev-parse "$candidate:tests/governance/test_ci_governance_evidence.py" 2>/dev/null || true)"; rc="$(git rev-parse "$candidate":{tests/governance/test_ap_decision_registry.py,tests/governance/test_ci_trusted_comparison_base.py,tools/validate_ap_decision_registry.py} | tr '\n' ' ')";d="$(git rev-parse "$candidate":{docs/AYO_AP_HISTORICAL_PROVENANCE.json,docs/AYO_DECISION_ID_REGISTRY.json,docs/AYO_DECISION_LOG.md}|tr '\n' ' ')";read -r dm dr dl _<<<"$d"
               re='ce0272440c3c2c526519ec0f6bd54fd6d90f9e70 b0c411867b96b59dce0b214a3d19763588d58141 ba728c665a39aa916892bd5b087fe89ae6a17f21 '
               if [[ "${governed_paths[*]}" == '.github/workflows/ci.yml tests/governance/test_ci_governance_evidence.py tools/validate_ci_governance_evidence.py' \
                 && "$helper_test" == 39a019a6ceb79f08c3c532003c64104fbdb7fa89 \
@@ -432,6 +432,16 @@ jobs:
                 mode=ap-registry-git-provenance-secret-classification
               elif [[ "${enablement_paths[*]} $(git log -1 --format='%P %s' $v)$d" == '.github/workflows/ci.yml bb2f68c975c4905bdb3924cb58ccc8b5307cd98c ci: bind reservation selector to current governance blobs2220b1feb90469c980e7661d366f5fd1fb1b616c a8a9797f6b63612496f83f841cc089ca3bd37af4 9becdd2034a1c42b39557ce34cd5d02874bfacae ' && "$rc" == "$re" ]];then
                 mode=ap-forward-reservation-selector-binding-correction
+              elif [[ "${enablement_paths[*]}" == '.github/workflows/ci.yml tests/governance/test_ci_trusted_comparison_base.py' \
+                && "$(git show -s --format=%P $candidate)" == 4d27fa554ae93561bc41daea8c5615f7fdca6a5f \
+                && "$(git rev-list --count $eb..$candidate)" == 1 \
+                && "$(git show -s --format=%s $candidate)" == 'ci: fix reservation PR resolver self-admission' \
+                && "$dm" == 2220b1feb90469c980e7661d366f5fd1fb1b616c \
+                && "$dr" == a8a9797f6b63612496f83f841cc089ca3bd37af4 \
+                && "$dl" == 9becdd2034a1c42b39557ce34cd5d02874bfacae \
+                && "$(git rev-parse $candidate:tests/governance/test_ci_trusted_comparison_base.py)" == e2c11d3f3be1f1ee4beb23f879c3161fae59eca6 \
+                && "$normalized" == "$expected_ci_governance_extraction_sha256" ]];then
+                mode=ap-reservation-pr-resolver-self-admission-fix
               elif [[ "${enablement_paths[*]}" == docs/AYO_DECISION_ID_REGISTRY.json && "$rc" == "$re" ]]; then
                 mode=ap-decision-registry-forward-reservation
               else
@@ -1585,6 +1595,7 @@ jobs:
           EVENT_HEAD_SHA: ${{ github.sha }}
           DISPATCH_BASE_SHA: ${{ inputs.expected_base_sha || '' }}
           EVIDENCE_MODE: ${{ steps.evidence_contract.outputs.mode }}
+          AP_VALIDATED: ${{ steps.apr.outputs.validated }}
         run: |
           set -euo pipefail
           zero=0000000000000000000000000000000000000000
@@ -1595,10 +1606,12 @@ jobs:
           }
           case "$EVENT_NAME" in
             pull_request)
+              [[ "$EVENT_REF" =~ ^refs/pull/[1-9][0-9]*/merge$ ]]||exit 1
               require_commit "$PR_BASE_SHA" "pull-request base SHA"
               require_commit "$PR_HEAD_SHA" "pull-request head SHA"
               git merge-base --is-ancestor "$PR_BASE_SHA" "$checked_out_head" && git merge-base --is-ancestor "$PR_HEAD_SHA" "$checked_out_head" || exit 1
               comparison_sha="$PR_BASE_SHA"; mode=pull-request-base
+              if [[ $EVIDENCE_MODE == ap-decision-registry-forward-reservation ]];then [[ $AP_VALIDATED == true && $PR_HEAD_SHA != $PR_BASE_SHA ]]||exit 1;mode=verified-ap-registry-forward-reservation-base;fi
               ;;
             push)
               require_commit "$EVENT_HEAD_SHA" "pushed head SHA"
@@ -1662,29 +1675,15 @@ jobs:
                 comparison_sha="$expected_base"; mode="$first_push_mode"
               else
                 mapfile -t parents < <(git show -s --format='%P' "$EVENT_HEAD_SHA" | tr ' ' '\n')
-                if [[ "${#parents[@]}" -ne 1 ]]; then
-                  echo "first branch push must contain one unambiguous parent" >&2
-                  exit 1
-                fi
+                [[ "${#parents[@]}" == 1 ]]||{ echo FIRST_PUSH_PARENT_COUNT >&2;exit 1; }
                 first_parent="${parents[0]}"
                 require_commit "$first_parent" "first-push parent SHA"
-                git merge-base --is-ancestor "$first_parent" "$EVENT_HEAD_SHA" || {
-                  echo "first-push parent is not an ancestor of the pushed head" >&2
-                  exit 1
-                }
-                git fetch --no-tags origin \
-                  refs/heads/main:refs/remotes/origin/coverage-main
+                git merge-base --is-ancestor "$first_parent" "$EVENT_HEAD_SHA"||{ echo FIRST_PUSH_ANCESTRY >&2;exit 1; }
+                git fetch --no-tags origin refs/heads/main:refs/remotes/origin/coverage-main
                 authoritative_main="$(git rev-parse refs/remotes/origin/coverage-main)"
                 require_commit "$authoritative_main" "authoritative remote main SHA"
                 merge_base="$(git merge-base "$EVENT_HEAD_SHA" "$authoritative_main")"
-                if [[ "$first_parent" != "$merge_base" ]]; then
-                  echo "first-push parent differs from merge-base with authoritative main" >&2
-                  exit 1
-                fi
-                if [[ "$first_parent" != "$authoritative_main" ]]; then
-                  echo "first-push parent is not the authoritative main SHA" >&2
-                  exit 1
-                fi
+                [[ "$first_parent $first_parent" == "$merge_base $authoritative_main" ]]||{ echo FIRST_PUSH_SOURCE_DRIFT >&2;exit 1; }
                 comparison_sha="$first_parent"
                 mode=verified-first-push-parent
               fi
@@ -1692,32 +1691,20 @@ jobs:
             workflow_dispatch)
               require_commit "$DISPATCH_BASE_SHA" "dispatch base SHA"
               require_commit "$EVENT_HEAD_SHA" "dispatch workflow source SHA"
-              if [[ "$DISPATCH_BASE_SHA" != "$EVENT_HEAD_SHA" ]]; then
-                echo "dispatch base differs from the trusted workflow source SHA" >&2
-                exit 1
-              fi
+              [[ "$DISPATCH_BASE_SHA" == "$EVENT_HEAD_SHA" ]]||{ echo DISPATCH_SOURCE_DRIFT >&2;exit 1; }
               mapfile -t parents < <(git show -s --format='%P' "$checked_out_head" | tr ' ' '\n')
-              if [[ "${#parents[@]}" -ne 2 || "${parents[0]}" != "$DISPATCH_BASE_SHA" ]]; then
-                echo "dispatch target first parent differs from the verified dispatch base" >&2
-                exit 1
-              fi
+              [[ "${#parents[@]} ${parents[0]}" == "2 $DISPATCH_BASE_SHA" ]]||{ echo DISPATCH_TOPOLOGY_DRIFT >&2;exit 1; }
               comparison_sha="$DISPATCH_BASE_SHA"
               mode=certified-dispatch-base
               ;;
             *)
-              echo "unsupported event for coverage comparison: $EVENT_NAME" >&2
-              exit 1
+              echo UNSUPPORTED_COMPARISON_EVENT >&2;exit 1
               ;;
           esac
           require_commit "$comparison_sha" "resolved trusted comparison base"
-          git merge-base --is-ancestor "$comparison_sha" "$checked_out_head" || {
-            echo "resolved trusted comparison base is not an ancestor of the tested tree" >&2
-            exit 1
-          }
+          git merge-base --is-ancestor "$comparison_sha" "$checked_out_head"||{ echo COMPARISON_ANCESTRY_DRIFT >&2;exit 1; }
           echo "sha=$comparison_sha" >> "$GITHUB_OUTPUT"
           echo "mode=$mode" >> "$GITHUB_OUTPUT"
-          echo "Trusted comparison mode: $mode"
-          echo "Trusted comparison base SHA: $comparison_sha"
       - name: Bind exact Booking replay-equivalence candidate identity
         if: (success() || failure()) && steps.postgis.outputs.ready == 'true' && steps.evidence_contract.outputs.mode == 'booking-complete-replay-equivalence'
         env:
@@ -3840,7 +3827,7 @@ jobs:
             source_sha=a765a3e6c4a4e9202fb4f1a770e5a5daf2dec0b1
           elif [[ "$EVIDENCE_MODE" == "ci-governance-evidence-extraction" ]]; then
             source_sha=fee08725153496edb2020d543c8cf24c317b48f6
-          elif [[ "$EVIDENCE_MODE" == "ap-decision-registry-reconciliation-enablement" || "$EVIDENCE_MODE" == ap-decision-registry-forward-reservation* || "$EVIDENCE_MODE" == "ap-registry-git-provenance-secret-classification" || "$EVIDENCE_MODE" == ap-forward-reservation-selector-binding-correction ]]; then
+          elif [[ "$EVIDENCE_MODE" == "ap-decision-registry-reconciliation-enablement" || "$EVIDENCE_MODE" == ap-decision-registry-forward-reservation* || "$EVIDENCE_MODE" == "ap-registry-git-provenance-secret-classification" || "$EVIDENCE_MODE" == ap-forward-reservation-selector-binding-correction || "$EVIDENCE_MODE" == ap-reservation-pr-resolver-self-admission-fix ]]; then
             source_sha="$(git merge-base "$TESTED_COMMIT_SHA" refs/remotes/origin/main)"
             [[ "$(git show -s --format=%P "$TESTED_COMMIT_SHA" | wc -w)" == 2 ]] && source_sha="$(git rev-parse "$TESTED_COMMIT_SHA^1")"
           fi
@@ -3885,7 +3872,7 @@ jobs:
                   for item in difference["candidate_only"]: print("CANDIDATE_ONLY|" + item.render())
                   raise SystemExit(label + " MyPy diagnostic population changed")
           mode = os.environ["EVIDENCE_MODE"]
-          active = {"ap-registry-active-state-correction", "ap-registry-active-state-main-ci-correction", "ci-governance-evidence-extraction", "ap-decision-registry-reconciliation-enablement", "ap-registry-git-provenance-secret-classification", "ap-forward-reservation-selector-binding-correction"}
+          active = {"ap-registry-active-state-correction", "ap-registry-active-state-main-ci-correction", "ci-governance-evidence-extraction", "ap-decision-registry-reconciliation-enablement", "ap-registry-git-provenance-secret-classification", "ap-forward-reservation-selector-binding-correction", "ap-reservation-pr-resolver-self-admission-fix"}
           if mode.startswith("ap-decision-registry-forward-reservation"): active.add(mode)
           current = {"immediate-standard-public-contract", "booking-complete-replay-equivalence", "pip-audit-toolchain-remediation", "ap-decision-registry-main-landing", *active}
           capture = {"booking-consent-policy-authority", "mobile-booking-intent-foundation"}
@@ -3967,7 +3954,7 @@ jobs:
           set -euo pipefail
           evidence_mode="$EVIDENCE_MODE"
           g=false
-          [[ "$evidence_mode" == "ci-governance-evidence-extraction" || "$evidence_mode" == "ap-decision-registry-reconciliation-enablement" || "$evidence_mode" == ap-decision-registry-forward-reservation* || "$evidence_mode" == ap-registry-git-provenance-secret-classification || "$evidence_mode" == ap-forward-reservation-selector-binding-correction ]] && g=true
+          [[ "$evidence_mode" == "ci-governance-evidence-extraction" || "$evidence_mode" == "ap-decision-registry-reconciliation-enablement" || "$evidence_mode" == ap-decision-registry-forward-reservation* || "$evidence_mode" == ap-registry-git-provenance-secret-classification || "$evidence_mode" == ap-forward-reservation-selector-binding-correction || "$evidence_mode" == ap-reservation-pr-resolver-self-admission-fix ]] && g=true
           candidate_json=candidate-secrets.json
           base_json=base-secrets.json
           baseline_json=reviewed-secrets-baseline.json
@@ -4292,7 +4279,7 @@ jobs:
                       "AP_SECRET_DRIFT"
                   )
               selected = "AP"
-          elif mode in {"ap-registry-active-state-correction", "ap-registry-active-state-main-ci-correction", "ci-governance-evidence-extraction", "ap-decision-registry-reconciliation-enablement", "ap-registry-git-provenance-secret-classification", "ap-forward-reservation-selector-binding-correction"} or mode.startswith("ap-decision-registry-forward-reservation"):
+          elif mode in {"ap-registry-active-state-correction", "ap-registry-active-state-main-ci-correction", "ci-governance-evidence-extraction", "ap-decision-registry-reconciliation-enablement", "ap-registry-git-provenance-secret-classification", "ap-forward-reservation-selector-binding-correction", "ap-reservation-pr-resolver-self-admission-fix"} or mode.startswith("ap-decision-registry-forward-reservation"):
               source = load(os.environ["BASE_JSON"]); base = scan_inventory(source.get("results"))
               candidate_only = candidate_only_secret_semantics(base, actual)
               if mode == "ap-decision-registry-forward-reservation":
