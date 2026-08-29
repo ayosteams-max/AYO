@@ -105,6 +105,24 @@ class ResolverAdmissionArgs(TypedDict):
     lifecycle_empty: bool
 
 
+class ResolverMergeAdmissionArgs(TypedDict):
+    candidate: str
+    parents: tuple[str, ...]
+    before: str
+    reviewed: str
+    merge_tree: str
+    reviewed_tree: str
+    landed_paths: tuple[str, ...]
+    reviewed_parent: str
+    reviewed_count: int
+    reviewed_subject: str
+    trusted_test_blob: str
+    manifest_blob: str
+    registry_blob: str
+    decision_blob: str
+    workflow_commitment: str
+
+
 ACTIVE_MODE = "ap-registry-active-state-correction"
 ACTIVE_BASE = "6b94c451" + "87af70f1" + "76d6a98d" + "40742187" + "ceaf43c8"
 ACTIVE_STATE = "32775104" + "60b5af71" + "773dda62" + "a4db69cd" + "739433f3"
@@ -158,6 +176,10 @@ RESOLVER_FIX_REGISTRY = "a8a9797f" + "6b636124" + "96f83f84" + "1cc089ca" + "3bd
 RESOLVER_FIX_DECISION = "9becdd20" + "34a1c42b" + "39557ce3" + "4cd5d028" + "74bfacae"
 RESOLVER_FIX_TEST = "1" * 40
 RESOLVER_FIX_COMMITMENT = "2" * 64
+RESOLVER_MERGE = "1051de3a" + "bb903447" + "18ea4b3e" + "94149910" + "91e32517"
+RESOLVER_REVIEWED = "79856753" + "80837a0a" + "7401f13e" + "a0b96459" + "dc814e94"
+RESOLVER_TREE = "fb28c0a3" + "b879fbe2" + "daf8ce0d" + "13ac2727" + "23788ceb"
+RESOLVER_TEST_BLOB = "e2c11d3f" + "3be1f1ee" + "4beb23f8" + "79c3161f" + "ae59eca6"
 
 
 def _validate_reservation_paths(paths: tuple[str, ...]) -> None:
@@ -227,6 +249,27 @@ def _admits_resolver_fix(**values: Unpack[ResolverAdmissionArgs]) -> bool:
         and values["trusted_test_blob"] == RESOLVER_FIX_TEST
         and values["workflow_commitment"] == RESOLVER_FIX_COMMITMENT
         and values["lifecycle_empty"]
+    )
+
+
+def _admits_resolver_main_merge(
+    **values: Unpack[ResolverMergeAdmissionArgs],
+) -> bool:
+    return (
+        values["candidate"] == RESOLVER_MERGE
+        and values["parents"] == (RESOLVER_FIX_BASE, RESOLVER_REVIEWED)
+        and values["before"] == RESOLVER_FIX_BASE
+        and values["reviewed"] == RESOLVER_REVIEWED
+        and values["merge_tree"] == values["reviewed_tree"] == RESOLVER_TREE
+        and values["landed_paths"] == RESOLVER_FIX_PATHS
+        and values["reviewed_parent"] == RESOLVER_FIX_BASE
+        and values["reviewed_count"] == 1
+        and values["reviewed_subject"] == RESOLVER_FIX_SUBJECT
+        and values["trusted_test_blob"] == RESOLVER_TEST_BLOB
+        and values["manifest_blob"] == RESOLVER_FIX_MANIFEST
+        and values["registry_blob"] == RESOLVER_FIX_REGISTRY
+        and values["decision_blob"] == RESOLVER_FIX_DECISION
+        and values["workflow_commitment"] == RESOLVER_FIX_COMMITMENT
     )
 
 
@@ -733,9 +776,9 @@ def test_resolver_self_admission_uses_independent_exact_predicates() -> None:
     assert 'read -r dm dr dl _<<<"$d"' in workflow
     for predicate in (
         '"${enablement_paths[*]}" ==',
-        "git show -s --format=%P $candidate",
-        "git rev-list --count $eb..$candidate",
-        "git show -s --format=%s $candidate",
+        '"$vp" ==',
+        '"$vc" == 1',
+        '"$vs" ==',
         '"$dm" ==',
         '"$dr" ==',
         '"$dl" ==',
@@ -743,6 +786,34 @@ def test_resolver_self_admission_uses_independent_exact_predicates() -> None:
         '"$normalized" == "$expected_ci_governance_extraction_sha256"',
     ):
         assert predicate in route
+    assert '"$vt" ==' in route
+    assert "git show -s --format=%P $candidate" not in route
+
+
+def test_selector_keeps_merge_authority_separate_from_reviewed_identity() -> None:
+    workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
+    assert 'candidate="$TESTED_COMMIT_SHA"' in workflow
+    assert (
+        "eb=$(git rev-parse $candidate^1);v=$(git rev-parse $candidate^2)" in workflow
+    )
+    assert 'git diff --name-only "$eb" "$candidate"' in workflow
+    for feature_source in (
+        "vp=$(git show -s --format=%P $v)",
+        "vc=$(git rev-list --count $eb..$v)",
+        "vs=$(git show -s --format=%s $v)",
+        "vt=$(git rev-parse $v:tests/governance/test_ci_trusted_comparison_base.py)",
+    ):
+        assert feature_source in workflow
+    route = workflow.split(
+        "mode=ap-reservation-pr-resolver-self-admission-fix", maxsplit=1
+    )[0].rsplit("elif [[", maxsplit=1)[1]
+    for feature_predicate in (
+        '"$vp" ==',
+        '"$vc" == 1',
+        '"$vs" ==',
+        '"$vt" ==',
+    ):
+        assert feature_predicate in route
 
 
 def test_space_terminated_identity_rejects_an_added_separator() -> None:
@@ -795,6 +866,66 @@ def test_resolver_fix_self_admission_fails_closed(
     values = _resolver_admission_arguments()
     values.update(cast(ResolverAdmissionArgs, change))
     assert not _admits_resolver_fix(**values)
+
+
+def _resolver_main_merge_arguments() -> ResolverMergeAdmissionArgs:
+    return {
+        "candidate": RESOLVER_MERGE,
+        "parents": (RESOLVER_FIX_BASE, RESOLVER_REVIEWED),
+        "before": RESOLVER_FIX_BASE,
+        "reviewed": RESOLVER_REVIEWED,
+        "merge_tree": RESOLVER_TREE,
+        "reviewed_tree": RESOLVER_TREE,
+        "landed_paths": RESOLVER_FIX_PATHS,
+        "reviewed_parent": RESOLVER_FIX_BASE,
+        "reviewed_count": 1,
+        "reviewed_subject": RESOLVER_FIX_SUBJECT,
+        "trusted_test_blob": RESOLVER_TEST_BLOB,
+        "manifest_blob": RESOLVER_FIX_MANIFEST,
+        "registry_blob": RESOLVER_FIX_REGISTRY,
+        "decision_blob": RESOLVER_FIX_DECISION,
+        "workflow_commitment": RESOLVER_FIX_COMMITMENT,
+    }
+
+
+def test_resolver_fix_main_merge_uses_reviewed_second_parent() -> None:
+    assert _admits_resolver_main_merge(**_resolver_main_merge_arguments())
+    swapped = cast(
+        ResolverMergeAdmissionArgs,
+        {
+            **_resolver_main_merge_arguments(),
+            "candidate": RESOLVER_REVIEWED,
+            "reviewed": RESOLVER_MERGE,
+        },
+    )
+    assert not _admits_resolver_main_merge(**swapped)
+
+
+@pytest.mark.parametrize(
+    "change",
+    (
+        {"parents": ("3" * 40, RESOLVER_REVIEWED)},
+        {"parents": (RESOLVER_FIX_BASE, "3" * 40)},
+        {"parents": (RESOLVER_FIX_BASE, RESOLVER_REVIEWED, "3" * 40)},
+        {"before": "3" * 40},
+        {"merge_tree": "3" * 40},
+        {"landed_paths": RESOLVER_FIX_PATHS + ("docs/EXTRA.md",)},
+        {"landed_paths": tuple(reversed(RESOLVER_FIX_PATHS))},
+        {"reviewed_parent": "3" * 40},
+        {"reviewed_count": 2},
+        {"reviewed_subject": "ci: wrong subject"},
+        {"trusted_test_blob": "3" * 40},
+        {"manifest_blob": "3" * 40},
+        {"registry_blob": "3" * 40},
+        {"decision_blob": "3" * 40},
+        {"workflow_commitment": "3" * 64},
+        {"reviewed": "3" * 40},
+    ),
+)
+def test_resolver_fix_main_merge_fails_closed(change: dict[str, object]) -> None:
+    values = _resolver_main_merge_arguments()
+    values.update(cast(ResolverMergeAdmissionArgs, change))
+    assert not _admits_resolver_main_merge(**values)
 
 
 def test_forward_reservation_path_positive_control() -> None:
